@@ -13,6 +13,11 @@ import { createMeDashboardRouter } from "./routes/meDashboard.js";
 import { createMeExpensesRouter } from "./routes/meExpenses.js";
 import { createMeGeoRouter } from "./routes/meGeo.js";
 import { createMeStudentsRouter } from "./routes/meStudents.js";
+import { createMeFinanceDashboardRouter } from "./routes/meFinanceDashboard.js";
+import { createMeFinanceLedgerRouter } from "./routes/meFinanceLedger.js";
+import { createMeFinancePaymentsRouter } from "./routes/meFinancePayments.js";
+import { createMeFinanceReportsRouter } from "./routes/meFinanceReports.js";
+import { createMeFinanceStatementsRouter } from "./routes/meFinanceStatements.js";
 
 export function buildApp(config: Config) {
   const app = express();
@@ -74,6 +79,11 @@ export function buildApp(config: Config) {
   meRouter.use(createMeExpensesRouter());
   meRouter.use(createMeGeoRouter());
   meRouter.use(createMeStudentsRouter());
+  meRouter.use(createMeFinanceDashboardRouter());
+  meRouter.use(createMeFinanceLedgerRouter());
+  meRouter.use(createMeFinancePaymentsRouter());
+  meRouter.use(createMeFinanceReportsRouter());
+  meRouter.use(createMeFinanceStatementsRouter());
   meRouter.use(createMeDashboardRouter(config));
   meRouter.use(createMeAccountRouter(config));
   app.use("/api/me", requireAuth(config), meRouter);

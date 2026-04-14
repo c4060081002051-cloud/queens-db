@@ -11,7 +11,14 @@ import {
 } from "../data/geoReference.js";
 import { parseQueryToIsoDate } from "../formatting/localeDate.js";
 import { studentToApiRow } from "../formatting/studentRow.js";
-import { ClassCategory, ClassRoom, ClassSection, StaffMember, Student } from "../models/index.js";
+import {
+  ClassCategory,
+  ClassRoom,
+  ClassSection,
+  StaffMember,
+  Student,
+  StudentFeeReceipt,
+} from "../models/index.js";
 
 function studentUploadDir(): string {
   return path.join(process.cwd(), "uploads", "students");
@@ -141,6 +148,13 @@ function parseRegistrationType(v: unknown): "first" | "continuing" | undefined {
     return "first";
   }
   return undefined;
+}
+
+function parseMoneyUgx(v: unknown): number | null {
+  if (typeof v !== "number" && typeof v !== "string") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n);
 }
 
 async function unlinkStudentPhoto(
@@ -1051,6 +1065,80 @@ export function createMeStudentsRouter() {
       });
       if (!row) return res.status(404).json({ error: "Not found" });
       return res.json({ item: studentToApiRow(row) });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/students/:id(\\d+)/fee-receipts", async (req, res) => {
+    try {
+      const studentId = paramId(req);
+      if (!Number.isFinite(studentId) || studentId < 1) {
+        return res.status(400).json({ error: "Invalid student id" });
+      }
+      const student = await Student.findByPk(studentId, {
+        include: [{ model: ClassRoom, as: "classRoom", required: false }],
+      });
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const body = req.body as Record<string, unknown>;
+      const term = trimStr(body.term, 20);
+      const paymentMethod = trimStr(body.paymentMethod, 40);
+      const paidBy = trimStr(body.paidBy, 120);
+      const amountPaidUgx = parseMoneyUgx(body.amountPaid);
+
+      if (!term) return res.status(400).json({ error: "term is required" });
+      if (!paymentMethod) {
+        return res.status(400).json({ error: "paymentMethod is required" });
+      }
+      if (!paidBy) return res.status(400).json({ error: "paidBy is required" });
+      if (amountPaidUgx == null || amountPaidUgx <= 0) {
+        return res.status(400).json({ error: "amountPaid must be greater than zero" });
+      }
+
+      const sumRaw = await StudentFeeReceipt.sum("amount_paid_ugx", {
+        where: { studentId, term },
+      });
+      const previousPaidUgx = Math.max(Number(sumRaw ?? 0) || 0, 0);
+      const totalFeesDueUgx = previousPaidUgx + amountPaidUgx;
+      const outstandingAfterUgx = 0;
+      const creditAmountUgx = 0;
+
+      const created = await StudentFeeReceipt.create({
+        studentId,
+        receiptNo: "PENDING",
+        term,
+        paymentMethod,
+        paidBy,
+        amountPaidUgx,
+        previousPaidUgx,
+        totalFeesDueUgx,
+        outstandingAfterUgx,
+        creditAmountUgx,
+      });
+      const receiptNo = `ST-${String(created.id).padStart(5, "0")}`;
+      await created.update({ receiptNo });
+
+      return res.status(201).json({
+        item: {
+          id: created.id,
+          receiptNo,
+          issuedAt:
+            created.createdAt ??
+            (created.get("created_at") as Date | string | undefined) ??
+            new Date().toISOString(),
+          term: created.term,
+          paymentMethod: created.paymentMethod,
+          paidBy: created.paidBy,
+          amountPaid: Number(created.amountPaidUgx),
+          previousPaid: Number(created.previousPaidUgx),
+          totalFeesDue: Number(created.totalFeesDueUgx),
+          outstandingAfter: Number(created.outstandingAfterUgx),
+          creditAmount: Number(created.creditAmountUgx),
+          student: studentToApiRow(student),
+        },
+      });
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });

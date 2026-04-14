@@ -94,6 +94,87 @@ export class Student extends Model {
   declare readonly updatedAt: Date;
 }
 
+export class StudentFeeReceipt extends Model {
+  declare id: number;
+  declare studentId: number;
+  declare receiptNo: string;
+  declare term: string;
+  declare paymentMethod: string;
+  declare paidBy: string;
+  declare amountPaidUgx: number;
+  declare previousPaidUgx: number;
+  declare totalFeesDueUgx: number;
+  declare outstandingAfterUgx: number;
+  declare creditAmountUgx: number;
+  declare readonly createdAt: Date;
+}
+
+export class StudentFeeAssignment extends Model {
+  declare id: number;
+  declare studentId: number;
+  declare term: string;
+  declare amountDueUgx: number;
+  declare notes: string | null;
+  declare readonly createdAt: Date;
+}
+
+export class StudentFeePayment extends Model {
+  declare id: number;
+  declare studentId: number;
+  declare term: string;
+  declare amountPaidUgx: number;
+  declare paymentMethod: string;
+  declare paidBy: string;
+  declare receiptId: number | null;
+  declare readonly createdAt: Date;
+}
+
+export class DailyExpenseEntry extends Model {
+  declare id: number;
+  declare expenseDate: string;
+  declare category: string;
+  declare description: string;
+  declare amountUgx: number;
+  declare paymentMethod: string;
+  declare recordedByUserId: number | null;
+  declare readonly createdAt: Date;
+}
+
+export class DailyFinanceReport extends Model {
+  declare id: number;
+  declare reportDate: string;
+  declare status: "not_submitted" | "submitted" | "admin_review" | "closed";
+  declare submittedByUserId: number | null;
+  declare submittedAt: Date | null;
+  declare reviewedByUserId: number | null;
+  declare reviewedAt: Date | null;
+  declare closedByUserId: number | null;
+  declare closedAt: Date | null;
+  declare reopenedReason: string | null;
+  declare isReopened: boolean;
+  declare adminNotes: string | null;
+}
+
+export class DailyFinanceReportAudit extends Model {
+  declare id: number;
+  declare reportId: number;
+  declare action: string;
+  declare actorUserId: number | null;
+  declare note: string | null;
+  declare readonly createdAt: Date;
+}
+
+export class StaffPayrollEntry extends Model {
+  declare id: number;
+  declare staffMemberId: number | null;
+  declare monthKey: string;
+  declare grossAmountUgx: number;
+  declare paidAmountUgx: number;
+  declare arrearsUgx: number;
+  declare status: string;
+  declare readonly createdAt: Date;
+}
+
 export class PasswordResetOtp extends Model {
   declare id: number;
   declare emailLower: string;
@@ -516,6 +597,387 @@ export function setupDatabase(config: Config): Sequelize {
       timestamps: true,
       createdAt: "created_at",
       updatedAt: "updated_at",
+    },
+  );
+
+  StudentFeeReceipt.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      studentId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "student_id",
+      },
+      receiptNo: {
+        type: DataTypes.STRING(32),
+        allowNull: false,
+        field: "receipt_no",
+      },
+      term: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+      },
+      paymentMethod: {
+        type: DataTypes.STRING(40),
+        allowNull: false,
+        field: "payment_method",
+      },
+      paidBy: {
+        type: DataTypes.STRING(120),
+        allowNull: false,
+        field: "paid_by",
+      },
+      amountPaidUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        field: "amount_paid_ugx",
+      },
+      previousPaidUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        defaultValue: 0,
+        field: "previous_paid_ugx",
+      },
+      totalFeesDueUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        defaultValue: 0,
+        field: "total_fees_due_ugx",
+      },
+      outstandingAfterUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        defaultValue: 0,
+        field: "outstanding_after_ugx",
+      },
+      creditAmountUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        defaultValue: 0,
+        field: "credit_amount_ugx",
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "student_fee_receipts",
+      modelName: "StudentFeeReceipt",
+      timestamps: false,
+    },
+  );
+
+  StudentFeeAssignment.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      studentId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "student_id",
+      },
+      term: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+      },
+      amountDueUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        field: "amount_due_ugx",
+      },
+      notes: { type: DataTypes.STRING(255), allowNull: true },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "student_fee_assignments",
+      modelName: "StudentFeeAssignment",
+      timestamps: false,
+    },
+  );
+
+  StudentFeePayment.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      studentId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "student_id",
+      },
+      term: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+      },
+      amountPaidUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        field: "amount_paid_ugx",
+      },
+      paymentMethod: {
+        type: DataTypes.STRING(40),
+        allowNull: false,
+        field: "payment_method",
+      },
+      paidBy: {
+        type: DataTypes.STRING(120),
+        allowNull: false,
+        field: "paid_by",
+      },
+      receiptId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+        field: "receipt_id",
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "student_fee_payments",
+      modelName: "StudentFeePayment",
+      timestamps: false,
+    },
+  );
+
+  DailyExpenseEntry.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      expenseDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: false,
+        field: "expense_date",
+      },
+      category: {
+        type: DataTypes.STRING(80),
+        allowNull: false,
+      },
+      description: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+      },
+      amountUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        field: "amount_ugx",
+      },
+      paymentMethod: {
+        type: DataTypes.STRING(40),
+        allowNull: false,
+        field: "payment_method",
+      },
+      recordedByUserId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+        field: "recorded_by_user_id",
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "daily_expense_entries",
+      modelName: "DailyExpenseEntry",
+      timestamps: false,
+    },
+  );
+
+  DailyFinanceReport.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      reportDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: false,
+        field: "report_date",
+      },
+      status: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "not_submitted",
+      },
+      submittedByUserId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+        field: "submitted_by_user_id",
+      },
+      submittedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "submitted_at",
+      },
+      reviewedByUserId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+        field: "reviewed_by_user_id",
+      },
+      reviewedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "reviewed_at",
+      },
+      closedByUserId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+        field: "closed_by_user_id",
+      },
+      closedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "closed_at",
+      },
+      reopenedReason: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: "reopened_reason",
+      },
+      isReopened: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "is_reopened",
+      },
+      adminNotes: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        field: "admin_notes",
+      },
+    },
+    {
+      sequelize,
+      tableName: "daily_finance_reports",
+      modelName: "DailyFinanceReport",
+      timestamps: false,
+      indexes: [{ unique: true, fields: ["report_date"] }],
+    },
+  );
+
+  DailyFinanceReportAudit.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      reportId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "report_id",
+      },
+      action: {
+        type: DataTypes.STRING(40),
+        allowNull: false,
+      },
+      actorUserId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+        field: "actor_user_id",
+      },
+      note: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "daily_finance_report_audits",
+      modelName: "DailyFinanceReportAudit",
+      timestamps: false,
+    },
+  );
+
+  StaffPayrollEntry.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      staffMemberId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+        field: "staff_member_id",
+      },
+      monthKey: {
+        type: DataTypes.STRING(7),
+        allowNull: false,
+        field: "month_key",
+      },
+      grossAmountUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        defaultValue: 0,
+        field: "gross_amount_ugx",
+      },
+      paidAmountUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        defaultValue: 0,
+        field: "paid_amount_ugx",
+      },
+      arrearsUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        defaultValue: 0,
+        field: "arrears_ugx",
+      },
+      status: {
+        type: DataTypes.STRING(24),
+        allowNull: false,
+        defaultValue: "pending",
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "staff_payroll_entries",
+      modelName: "StaffPayrollEntry",
+      timestamps: false,
     },
   );
 
@@ -1077,6 +1539,77 @@ export function setupDatabase(config: Config): Sequelize {
   Student.hasMany(AttendanceRecord, {
     foreignKey: "student_id",
     as: "attendanceRecords",
+    constraints: false,
+  });
+
+  StudentFeeReceipt.belongsTo(Student, {
+    foreignKey: "student_id",
+    as: "student",
+    constraints: false,
+  });
+  Student.hasMany(StudentFeeReceipt, {
+    foreignKey: "student_id",
+    as: "feeReceipts",
+    constraints: false,
+  });
+  StudentFeeAssignment.belongsTo(Student, {
+    foreignKey: "student_id",
+    as: "student",
+    constraints: false,
+  });
+  Student.hasMany(StudentFeeAssignment, {
+    foreignKey: "student_id",
+    as: "feeAssignments",
+    constraints: false,
+  });
+  StudentFeePayment.belongsTo(Student, {
+    foreignKey: "student_id",
+    as: "student",
+    constraints: false,
+  });
+  Student.hasMany(StudentFeePayment, {
+    foreignKey: "student_id",
+    as: "feePayments",
+    constraints: false,
+  });
+  StudentFeePayment.belongsTo(StudentFeeReceipt, {
+    foreignKey: "receipt_id",
+    as: "receipt",
+    constraints: false,
+  });
+  StudentFeeReceipt.hasMany(StudentFeePayment, {
+    foreignKey: "receipt_id",
+    as: "payments",
+    constraints: false,
+  });
+  DailyFinanceReportAudit.belongsTo(DailyFinanceReport, {
+    foreignKey: "report_id",
+    as: "report",
+    constraints: false,
+  });
+  DailyFinanceReport.hasMany(DailyFinanceReportAudit, {
+    foreignKey: "report_id",
+    as: "auditTrail",
+    constraints: false,
+  });
+  DailyExpenseEntry.belongsTo(User, {
+    foreignKey: "recorded_by_user_id",
+    as: "recordedBy",
+    constraints: false,
+  });
+  User.hasMany(DailyExpenseEntry, {
+    foreignKey: "recorded_by_user_id",
+    as: "expenseEntries",
+    constraints: false,
+  });
+  StaffPayrollEntry.belongsTo(StaffMember, {
+    foreignKey: "staff_member_id",
+    as: "staffMember",
+    constraints: false,
+  });
+  StaffMember.hasMany(StaffPayrollEntry, {
+    foreignKey: "staff_member_id",
+    as: "payrollEntries",
     constraints: false,
   });
 
