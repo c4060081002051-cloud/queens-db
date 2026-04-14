@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFinancePayment } from "../../../api/financePayments";
 import { fetchStudentStatement } from "../../../api/financeStatements";
+import { fetchFinanceDashboard } from "../../../api/financeDashboard";
 import { fetchStudents, type StudentApiRow } from "../../../api/students";
 import { StudentStatementPage } from "../statements/StudentStatementPage";
 import { StudentReceiptPage } from "./StudentReceiptPage";
@@ -12,6 +13,12 @@ function studentLabel(student: StudentApiRow): string {
 
 type ViewMode = "form" | "receipt" | "statement";
 
+type ReportStatus = {
+  status: string;
+  isReopened: boolean;
+  isLocked: boolean;
+};
+
 export function RecordStudentPaymentPage() {
   const [mode, setMode] = useState<ViewMode>("form");
   const [studentSearch, setStudentSearch] = useState("");
@@ -19,14 +26,33 @@ export function RecordStudentPaymentPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<StudentApiRow | null>(null);
   const [term, setTerm] = useState("Term 1");
-  const [method, setMethod] = useState("Cash payment");
+  const [method, setMethod] = useState("Cash");
   const [paidBy, setPaidBy] = useState("");
   const [amount, setAmount] = useState("");
   const [termDue, setTermDue] = useState("");
+  const [changeReason, setChangeReason] = useState("");
   const [receipt, setReceipt] = useState<StudentPaymentReceipt | null>(null);
   const [statement, setStatement] = useState<StudentStatementPayload | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [reportStatus, setReportStatus] = useState<ReportStatus | null>(null);
 
+  // Fetch today's report status to determine locking
+  useEffect(() => {
+    void fetchFinanceDashboard()
+      .then((dash) => {
+        const st = dash.today.reportStatus;
+        const isReopened = dash.today.isReopened;
+        const isLocked =
+          st === "submitted" || st === "admin_review" || st === "closed";
+        setReportStatus({ status: st, isReopened, isLocked: isLocked && !isReopened });
+      })
+      .catch(() => {
+        setReportStatus(null);
+      });
+  }, []);
+
+  // Student search effect
   useEffect(() => {
     if (studentSearch.trim().length < 2) {
       setStudentMatches([]);
@@ -62,6 +88,11 @@ export function RecordStudentPaymentPage() {
       setFormError("Amount paid must be greater than zero.");
       return;
     }
+    if (reportStatus?.isReopened && !changeReason.trim()) {
+      setFormError("Please provide a reason for this change since the report was previously submitted.");
+      return;
+    }
+    setSubmitting(true);
     try {
       const saved = await createFinancePayment({
         studentId: selectedStudent.id,
@@ -70,12 +101,15 @@ export function RecordStudentPaymentPage() {
         paidBy: paidBy.trim() || selectedStudent.parentFullName || "Parent / Guardian",
         amountPaid: parsedAmount,
         amountDueUgx: parsedDue > 0 ? parsedDue : undefined,
+        changeReason: reportStatus?.isReopened ? changeReason.trim() : null,
       });
       setReceipt(saved);
       setMode("receipt");
       if (printAfterCreate) window.setTimeout(() => window.print(), 150);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Failed to save payment.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -90,6 +124,7 @@ export function RecordStudentPaymentPage() {
     }
   };
 
+  /* ── Receipt View ── */
   if (mode === "receipt" && receipt) {
     return (
       <div className="space-y-4">
@@ -97,23 +132,50 @@ export function RecordStudentPaymentPage() {
           <button
             type="button"
             onClick={() => setMode("form")}
-            className="rounded-xl bg-[#eef2f7] px-4 py-2 text-sm font-semibold text-[#3f4f67]"
+            style={{
+              background: "rgba(15,23,42,0.06)",
+              color: "#1e293b",
+              borderRadius: "12px",
+              padding: "10px 20px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              border: "none",
+              cursor: "pointer",
+            }}
           >
-            Back to Record Payment
+            ← Back to Record Payment
           </button>
           <button
             type="button"
             onClick={() => window.print()}
-            className="rounded-xl bg-gradient-to-r from-[#5758ea] to-[#4c46df] px-4 py-2 text-sm font-bold text-white"
+            style={{
+              background: "linear-gradient(135deg, #0c2340, #1a3a5c)",
+              color: "#fff",
+              borderRadius: "12px",
+              padding: "10px 20px",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+              border: "none",
+              cursor: "pointer",
+            }}
           >
-            Print Receipt
+            🖨️ Print Receipt
           </button>
           <button
             type="button"
             onClick={() => void openStatement()}
-            className="rounded-xl bg-[#1f8f59] px-4 py-2 text-sm font-bold text-white"
+            style={{
+              background: "linear-gradient(135deg, #059669, #047857)",
+              color: "#fff",
+              borderRadius: "12px",
+              padding: "10px 20px",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+              border: "none",
+              cursor: "pointer",
+            }}
           >
-            View Term Statement
+            📄 View Term Statement
           </button>
         </div>
         <StudentReceiptPage receipt={receipt} />
@@ -121,6 +183,7 @@ export function RecordStudentPaymentPage() {
     );
   }
 
+  /* ── Statement View ── */
   if (mode === "statement" && statement) {
     return (
       <div className="space-y-4">
@@ -128,16 +191,34 @@ export function RecordStudentPaymentPage() {
           <button
             type="button"
             onClick={() => setMode("form")}
-            className="rounded-xl bg-[#eef2f7] px-4 py-2 text-sm font-semibold text-[#3f4f67]"
+            style={{
+              background: "rgba(15,23,42,0.06)",
+              color: "#1e293b",
+              borderRadius: "12px",
+              padding: "10px 20px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              border: "none",
+              cursor: "pointer",
+            }}
           >
-            Back to Payment Form
+            ← Back to Payment Form
           </button>
           <button
             type="button"
             onClick={() => window.print()}
-            className="rounded-xl bg-gradient-to-r from-[#5758ea] to-[#4c46df] px-4 py-2 text-sm font-bold text-white"
+            style={{
+              background: "linear-gradient(135deg, #0c2340, #1a3a5c)",
+              color: "#fff",
+              borderRadius: "12px",
+              padding: "10px 20px",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+              border: "none",
+              cursor: "pointer",
+            }}
           >
-            Print Statement
+            🖨️ Print Statement
           </button>
         </div>
         <StudentStatementPage statement={statement} />
@@ -145,126 +226,813 @@ export function RecordStudentPaymentPage() {
     );
   }
 
+  /* ── Locked state ── */
+  const isLocked = reportStatus?.isLocked === true;
+  const isReopened = reportStatus?.isReopened === true;
+
+  /* ── Payment Form ── */
   return (
-    <section className="neo-card mx-auto max-w-5xl p-6 sm:p-8">
-      <div className="mx-auto max-w-3xl text-center">
-        <h2 className="text-[2rem] font-bold tracking-tight text-[#243043]">Record Student Payment</h2>
-        <p className="mt-2 text-[1.1rem] text-[#5f728b]">
-          Create durable payment transactions, receipts, and term statements.
-        </p>
-      </div>
-      <form className="mt-8 grid gap-6 sm:grid-cols-2">
-        <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#3e4b5f]">
-            Student Search *
-          </label>
-          <input
-            value={studentSearch}
-            onChange={(e) => setStudentSearch(e.target.value)}
-            placeholder="Start typing name or admission number"
-            className="neo-inset-field w-full rounded-xl px-4 py-3 text-sm text-[#2d3436]"
-          />
-          {searchLoading ? <p className="mt-1 text-xs text-[#8a99ad]">Searching students...</p> : null}
-          {studentMatches.length > 0 ? (
-            <div className="mt-2 overflow-hidden rounded-xl border border-[#d9e1ec] bg-white">
-              {studentMatches.map((student) => (
-                <button
-                  key={student.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedStudent(student);
-                    setStudentSearch(studentLabel(student));
-                    setStudentMatches([]);
-                    setPaidBy(student.parentFullName ?? "");
-                  }}
-                  className="block w-full border-b border-[#eef2f7] px-3 py-2 text-left text-xs text-[#2d3436] last:border-b-0 hover:bg-[#f7f9fd]"
-                >
-                  {studentLabel(student)}
-                </button>
-              ))}
+    <div style={{ maxWidth: 860, margin: "0 auto" }}>
+      {/* Status Banners */}
+      {isLocked && (
+        <div
+          style={{
+            background: "rgba(239,68,68,0.08)",
+            borderLeft: "5px solid #ef4444",
+            padding: "16px 24px",
+            borderRadius: "12px",
+            marginBottom: 24,
+            display: "flex",
+            alignItems: "center",
+            gap: 15,
+          }}
+        >
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              background: "#fee2e2",
+              color: "#dc2626",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "1.3rem",
+              flexShrink: 0,
+            }}
+          >
+            🔒
+          </div>
+          <div>
+            <h4 style={{ margin: 0, color: "#7f1d1d", fontSize: "0.95rem", fontWeight: 800 }}>
+              DATA ENTRY LOCKED
+            </h4>
+            <p style={{ margin: "3px 0 0", color: "#991b1b", fontSize: "0.8rem" }}>
+              Today's financial report has been submitted. No further payments can be recorded until
+              reopened by an Admin.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isReopened && (
+        <div
+          style={{
+            background: "rgba(139,92,246,0.08)",
+            borderLeft: "5px solid #8b5cf6",
+            padding: "16px 24px",
+            borderRadius: "12px",
+            marginBottom: 24,
+            display: "flex",
+            alignItems: "center",
+            gap: 15,
+          }}
+        >
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              background: "#ede9fe",
+              color: "#7c3aed",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "1.3rem",
+              flexShrink: 0,
+            }}
+          >
+            🔓
+          </div>
+          <div>
+            <h4 style={{ margin: 0, color: "#5b21b6", fontSize: "0.95rem", fontWeight: 800 }}>
+              DATA ENTRY REOPENED
+            </h4>
+            <p style={{ margin: "3px 0 0", color: "#6d28d9", fontSize: "0.8rem" }}>
+              An Administrator has unlocked today's entries for corrections. You must provide a
+              reason for each entry.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Main Card */}
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: 28,
+          padding: "40px",
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {/* Locked Overlay */}
+        {isLocked && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(255,255,255,0.75)",
+              backdropFilter: "blur(3px)",
+              zIndex: 50,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+              padding: 30,
+            }}
+          >
+            <div
+              style={{
+                width: 80,
+                height: 80,
+                background: "#fee2e2",
+                color: "#dc2626",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "2.5rem",
+                marginBottom: 20,
+                boxShadow: "0 10px 15px -3px rgba(220,38,38,0.2)",
+              }}
+            >
+              🔒
             </div>
-          ) : null}
+            <h3 style={{ color: "#991b1b", fontWeight: 800, marginBottom: 8 }}>Section Locked</h3>
+            <p
+              style={{
+                color: "#b91c1c",
+                maxWidth: 400,
+                fontWeight: 500,
+                fontSize: "0.9rem",
+              }}
+            >
+              Today's financial report has been submitted or closed. Data entry is disabled to
+              maintain record integrity.
+            </p>
+          </div>
+        )}
+
+        {/* Header Section */}
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div
+            style={{
+              width: 70,
+              height: 70,
+              background: "linear-gradient(135deg, rgba(12,35,64,0.08), rgba(234,160,62,0.15))",
+              color: "#0c2340",
+              borderRadius: 24,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 15px",
+              fontSize: "1.8rem",
+              boxShadow: "inset 0 2px 4px 0 rgba(0,0,0,0.06)",
+            }}
+          >
+            💰
+          </div>
+          <h2
+            style={{
+              color: "#0c2340",
+              margin: 0,
+              fontWeight: 800,
+              fontSize: "1.75rem",
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Record Student Payment
+          </h2>
+          <p style={{ color: "#64748b", fontSize: "1rem", marginTop: 8 }}>
+            Securely record student fee collection and generate receipts.
+          </p>
         </div>
 
-        <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#3e4b5f]">Term *</label>
-          <select
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-            className="neo-inset-field w-full rounded-xl px-4 py-3 text-sm text-[#2d3436]"
+        {/* Form */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginBottom: 32 }}>
+          {/* Student Search */}
+          <div style={{ position: "relative" }}>
+            <label
+              style={{
+                fontWeight: 700,
+                color: "#334155",
+                marginBottom: 10,
+                display: "block",
+                fontSize: "0.9rem",
+                letterSpacing: "0.03em",
+              }}
+            >
+              STUDENT SEARCH *
+            </label>
+            <div style={{ position: "relative" }}>
+              <span
+                style={{
+                  position: "absolute",
+                  left: 16,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#94a3b8",
+                  fontSize: "1rem",
+                }}
+              >
+                🔍
+              </span>
+              <input
+                value={studentSearch}
+                onChange={(e) => {
+                  setStudentSearch(e.target.value);
+                  if (selectedStudent) setSelectedStudent(null);
+                }}
+                placeholder="Start typing name or admission #"
+                style={{
+                  height: 56,
+                  borderRadius: 12,
+                  border: "2px solid #e2e8f0",
+                  padding: "0 16px 0 44px",
+                  fontSize: "1rem",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
+                  outline: "none",
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "#0c2340";
+                  e.target.style.boxShadow = "0 0 0 4px rgba(12,35,64,0.08)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "#e2e8f0";
+                  e.target.style.boxShadow = "none";
+                }}
+              />
+            </div>
+            {searchLoading && (
+              <p style={{ marginTop: 4, fontSize: "0.75rem", color: "#94a3b8" }}>
+                Searching students...
+              </p>
+            )}
+            {selectedStudent && (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "10px 14px",
+                  background: "rgba(5,150,105,0.06)",
+                  border: "1px solid rgba(5,150,105,0.2)",
+                  borderRadius: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <span style={{ color: "#059669", fontSize: "1.1rem" }}>✅</span>
+                <div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.85rem",
+                      fontWeight: 700,
+                      color: "#065f46",
+                    }}
+                  >
+                    {selectedStudent.fullName}
+                  </p>
+                  <p style={{ margin: 0, fontSize: "0.75rem", color: "#6b7280" }}>
+                    {selectedStudent.admissionNumber} • {selectedStudent.className}
+                  </p>
+                </div>
+              </div>
+            )}
+            {studentMatches.length > 0 && !selectedStudent && (
+              <div
+                style={{
+                  marginTop: 4,
+                  background: "#fff",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 12,
+                  boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+                  maxHeight: 250,
+                  overflowY: "auto",
+                  zIndex: 100,
+                  position: "relative",
+                }}
+              >
+                {studentMatches.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedStudent(s);
+                      setStudentSearch(studentLabel(s));
+                      setStudentMatches([]);
+                      setPaidBy(s.parentFullName ?? "");
+                    }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      padding: "12px 16px",
+                      border: "none",
+                      borderBottom: "1px solid #f1f5f9",
+                      background: "transparent",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      transition: "background 0.15s",
+                      fontSize: "0.9rem",
+                    }}
+                    onMouseOver={(e) =>
+                      (e.currentTarget.style.background = "rgba(12,35,64,0.04)")
+                    }
+                    onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <strong style={{ color: "#1e293b" }}>{s.fullName}</strong>
+                    <span
+                      style={{
+                        display: "block",
+                        fontSize: "0.75rem",
+                        color: "#94a3b8",
+                        marginTop: 2,
+                      }}
+                    >
+                      {s.admissionNumber} • {s.className}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Academic Term */}
+          <div>
+            <label
+              style={{
+                fontWeight: 700,
+                color: "#334155",
+                marginBottom: 10,
+                display: "block",
+                fontSize: "0.9rem",
+                letterSpacing: "0.03em",
+              }}
+            >
+              ACADEMIC TERM *
+            </label>
+            <div style={{ position: "relative" }}>
+              <span
+                style={{
+                  position: "absolute",
+                  left: 16,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#94a3b8",
+                  fontSize: "1rem",
+                }}
+              >
+                📅
+              </span>
+              <select
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
+                style={{
+                  height: 56,
+                  borderRadius: 12,
+                  border: "2px solid #e2e8f0",
+                  padding: "0 16px 0 44px",
+                  fontSize: "1rem",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  background: "#fff",
+                  cursor: "pointer",
+                  appearance: "none",
+                  outline: "none",
+                  transition: "border-color 0.2s",
+                }}
+                onFocus={(e) => (e.target.style.borderColor = "#0c2340")}
+                onBlur={(e) => (e.target.style.borderColor = "#e2e8f0")}
+              >
+                <option value="Term 1">Term 1</option>
+                <option value="Term 2">Term 2</option>
+                <option value="Term 3">Term 3</option>
+              </select>
+              <span
+                style={{
+                  position: "absolute",
+                  right: 16,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                  color: "#94a3b8",
+                }}
+              >
+                ▾
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginBottom: 32 }}>
+          {/* Payment Method */}
+          <div>
+            <label
+              style={{
+                fontWeight: 700,
+                color: "#334155",
+                marginBottom: 10,
+                display: "block",
+                fontSize: "0.9rem",
+                letterSpacing: "0.03em",
+              }}
+            >
+              PAYMENT METHOD *
+            </label>
+            <div style={{ position: "relative" }}>
+              <span
+                style={{
+                  position: "absolute",
+                  left: 16,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#94a3b8",
+                  fontSize: "1rem",
+                }}
+              >
+                💳
+              </span>
+              <select
+                value={method}
+                onChange={(e) => setMethod(e.target.value)}
+                style={{
+                  height: 56,
+                  borderRadius: 12,
+                  border: "2px solid #e2e8f0",
+                  padding: "0 16px 0 44px",
+                  fontSize: "1rem",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  background: "#fff",
+                  cursor: "pointer",
+                  appearance: "none",
+                  outline: "none",
+                  transition: "border-color 0.2s",
+                }}
+                onFocus={(e) => (e.target.style.borderColor = "#0c2340")}
+                onBlur={(e) => (e.target.style.borderColor = "#e2e8f0")}
+              >
+                <option value="Cash">Cash Payment</option>
+                <option value="Bank Deposit">Bank Deposit / Slip</option>
+                <option value="Mobile Money">Mobile Money (MoMo)</option>
+                <option value="Other">Other</option>
+                <option value="School Pay">School Pay</option>
+              </select>
+              <span
+                style={{
+                  position: "absolute",
+                  right: 16,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                  color: "#94a3b8",
+                }}
+              >
+                ▾
+              </span>
+            </div>
+          </div>
+
+          {/* Paid By */}
+          <div>
+            <label
+              style={{
+                fontWeight: 700,
+                color: "#334155",
+                marginBottom: 10,
+                display: "block",
+                fontSize: "0.9rem",
+                letterSpacing: "0.03em",
+              }}
+            >
+              PAID BY (Depositor's Name)
+            </label>
+            <div style={{ position: "relative" }}>
+              <span
+                style={{
+                  position: "absolute",
+                  left: 16,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#94a3b8",
+                  fontSize: "1rem",
+                }}
+              >
+                👤
+              </span>
+              <input
+                value={paidBy}
+                onChange={(e) => setPaidBy(e.target.value)}
+                placeholder="Parent / Guardian / Agent name"
+                style={{
+                  height: 56,
+                  borderRadius: 12,
+                  border: "2px solid #e2e8f0",
+                  padding: "0 16px 0 44px",
+                  fontSize: "1rem",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  outline: "none",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "#0c2340";
+                  e.target.style.boxShadow = "0 0 0 4px rgba(12,35,64,0.08)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "#e2e8f0";
+                  e.target.style.boxShadow = "none";
+                }}
+              />
+            </div>
+            <span style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4, display: "block" }}>
+              Who physically handed in this payment?
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginBottom: 24 }}>
+          {/* Amount Paid */}
+          <div>
+            <label
+              style={{
+                fontWeight: 700,
+                color: "#334155",
+                marginBottom: 10,
+                display: "block",
+                fontSize: "0.9rem",
+                letterSpacing: "0.03em",
+              }}
+            >
+              AMOUNT PAID (UGX) *
+            </label>
+            <div style={{ position: "relative" }}>
+              <span
+                style={{
+                  position: "absolute",
+                  left: 16,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  fontWeight: 800,
+                  color: "#94a3b8",
+                  fontSize: "0.85rem",
+                }}
+              >
+                UGX
+              </span>
+              <input
+                type="number"
+                min="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0"
+                style={{
+                  height: 56,
+                  borderRadius: 12,
+                  border: "2px solid #e2e8f0",
+                  padding: "0 16px 0 56px",
+                  fontSize: "1.25rem",
+                  fontWeight: 800,
+                  color: "#10b981",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  outline: "none",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "#10b981";
+                  e.target.style.boxShadow = "0 0 0 4px rgba(16,185,129,0.1)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "#e2e8f0";
+                  e.target.style.boxShadow = "none";
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Term Fees Due (optional) */}
+          <div>
+            <label
+              style={{
+                fontWeight: 700,
+                color: "#334155",
+                marginBottom: 10,
+                display: "block",
+                fontSize: "0.9rem",
+                letterSpacing: "0.03em",
+              }}
+            >
+              TERM FEES DUE (UGX)
+              <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 6 }}>optional</span>
+            </label>
+            <div style={{ position: "relative" }}>
+              <span
+                style={{
+                  position: "absolute",
+                  left: 16,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  fontWeight: 800,
+                  color: "#94a3b8",
+                  fontSize: "0.85rem",
+                }}
+              >
+                UGX
+              </span>
+              <input
+                type="number"
+                min="0"
+                value={termDue}
+                onChange={(e) => setTermDue(e.target.value)}
+                placeholder="Auto-calculated"
+                style={{
+                  height: 56,
+                  borderRadius: 12,
+                  border: "2px solid #e2e8f0",
+                  padding: "0 16px 0 56px",
+                  fontSize: "1rem",
+                  width: "100%",
+                  boxSizing: "border-box",
+                  outline: "none",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
+                  color: "#64748b",
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "#0c2340";
+                  e.target.style.boxShadow = "0 0 0 4px rgba(12,35,64,0.08)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "#e2e8f0";
+                  e.target.style.boxShadow = "none";
+                }}
+              />
+            </div>
+            <span style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4, display: "block" }}>
+              Override the fee structure amount for this term (leave blank to auto-detect).
+            </span>
+          </div>
+        </div>
+
+        {/* Reason for Change (visible only when reopened) */}
+        {isReopened && (
+          <div style={{ marginBottom: 24 }}>
+            <label
+              style={{
+                fontWeight: 700,
+                color: "#7c3aed",
+                marginBottom: 10,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: "0.9rem",
+              }}
+            >
+              💬 REASON FOR ADDITIONAL CHANGE *
+            </label>
+            <textarea
+              value={changeReason}
+              onChange={(e) => setChangeReason(e.target.value)}
+              placeholder="e.g., Correcting amount, forgotten entry, etc."
+              style={{
+                height: 80,
+                borderRadius: 12,
+                border: "2px solid #8b5cf6",
+                padding: "12px 16px",
+                fontSize: "0.95rem",
+                width: "100%",
+                boxSizing: "border-box",
+                outline: "none",
+                resize: "vertical",
+                transition: "box-shadow 0.2s",
+                fontFamily: "inherit",
+              }}
+              onFocus={(e) => (e.target.style.boxShadow = "0 0 0 4px rgba(139,92,246,0.15)")}
+              onBlur={(e) => (e.target.style.boxShadow = "none")}
+            />
+            <span
+              style={{
+                fontSize: "0.75rem",
+                color: "#6d28d9",
+                marginTop: 4,
+                display: "block",
+                fontWeight: 500,
+              }}
+            >
+              Please provide a valid reason for this modification as the report was previously
+              submitted.
+            </span>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {formError && (
+          <div
+            style={{
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: 12,
+              padding: "12px 16px",
+              marginBottom: 20,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
           >
-            <option>Term 1</option>
-            <option>Term 2</option>
-            <option>Term 3</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#3e4b5f]">
-            Payment Method *
-          </label>
-          <select
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-            className="neo-inset-field w-full rounded-xl px-4 py-3 text-sm text-[#2d3436]"
-          >
-            <option>Cash payment</option>
-            <option>Mobile money</option>
-            <option>Bank transfer</option>
-            <option>Cheque</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#3e4b5f]">
-            Paid By (Depositor Name)
-          </label>
-          <input
-            value={paidBy}
-            onChange={(e) => setPaidBy(e.target.value)}
-            className="neo-inset-field w-full rounded-xl px-4 py-3 text-sm text-[#2d3436]"
-          />
-        </div>
-        <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#3e4b5f]">
-            Amount Paid (UGX) *
-          </label>
-          <input
-            type="number"
-            min="0"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="neo-inset-field w-full rounded-xl px-4 py-3 text-sm text-[#2d3436]"
-          />
-        </div>
-        <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#3e4b5f]">
-            Term Fees Due (optional)
-          </label>
-          <input
-            type="number"
-            min="0"
-            value={termDue}
-            onChange={(e) => setTermDue(e.target.value)}
-            className="neo-inset-field w-full rounded-xl px-4 py-3 text-sm text-[#2d3436]"
-          />
-        </div>
-        <div className="sm:col-span-2 grid gap-4 pt-2 sm:grid-cols-2">
+            <span style={{ fontSize: "1.1rem" }}>⚠️</span>
+            <p
+              style={{
+                margin: 0,
+                color: "#991b1b",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+              }}
+            >
+              {formError}
+            </p>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
           <button
             type="button"
             onClick={() => void createReceipt(false)}
-            className="rounded-2xl bg-[#eef2f7] px-5 py-3 text-base font-semibold text-[#3f4f67]"
+            disabled={submitting || isLocked}
+            style={{
+              height: 56,
+              borderRadius: 14,
+              fontWeight: 700,
+              border: "2px solid #e2e8f0",
+              background: "#fff",
+              color: "#475569",
+              fontSize: "0.95rem",
+              cursor: submitting || isLocked ? "not-allowed" : "pointer",
+              opacity: submitting || isLocked ? 0.5 : 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              transition: "all 0.2s",
+            }}
+            onMouseOver={(e) => {
+              if (!submitting && !isLocked) {
+                e.currentTarget.style.background = "#f8fafc";
+                e.currentTarget.style.borderColor = "#cbd5e1";
+              }
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = "#fff";
+              e.currentTarget.style.borderColor = "#e2e8f0";
+            }}
           >
-            Save Record
+            💾 {submitting ? "Saving..." : "Save Record"}
           </button>
           <button
             type="button"
             onClick={() => void createReceipt(true)}
-            className="rounded-2xl bg-gradient-to-r from-[#5758ea] to-[#4c46df] px-5 py-3 text-base font-bold text-white"
+            disabled={submitting || isLocked}
+            style={{
+              height: 56,
+              borderRadius: 14,
+              fontWeight: 700,
+              border: "none",
+              background: "linear-gradient(135deg, #0c2340, #1a3a5c)",
+              color: "#fff",
+              fontSize: "0.95rem",
+              cursor: submitting || isLocked ? "not-allowed" : "pointer",
+              opacity: submitting || isLocked ? 0.5 : 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              boxShadow: "0 4px 6px -1px rgba(12,35,64,0.3)",
+              transition: "all 0.2s",
+            }}
+            onMouseOver={(e) => {
+              if (!submitting && !isLocked) {
+                e.currentTarget.style.boxShadow = "0 8px 12px -2px rgba(12,35,64,0.4)";
+                e.currentTarget.style.transform = "translateY(-1px)";
+              }
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.boxShadow = "0 4px 6px -1px rgba(12,35,64,0.3)";
+              e.currentTarget.style.transform = "translateY(0)";
+            }}
           >
-            Save &amp; Print Receipt
+            🖨️ {submitting ? "Saving..." : "Save & Print Receipt"}
           </button>
         </div>
-        {formError ? <p className="sm:col-span-2 text-sm font-semibold text-[#b84040]">{formError}</p> : null}
-      </form>
-    </section>
+      </div>
+    </div>
   );
 }

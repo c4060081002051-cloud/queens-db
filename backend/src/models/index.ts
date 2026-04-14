@@ -53,6 +53,13 @@ export class ClassSection extends Model {
   declare readonly createdAt: Date;
 }
 
+export class UserClassAuthorization extends Model {
+  declare id: number;
+  declare userId: number;
+  declare classRoomId: number;
+  declare readonly createdAt: Date;
+}
+
 export class Student extends Model {
   declare id: number;
   declare admissionNumber: string;
@@ -94,6 +101,21 @@ export class Student extends Model {
   declare readonly updatedAt: Date;
 }
 
+export class StudentAssessmentResult extends Model {
+  declare id: number;
+  declare studentId: number;
+  declare classRoomId: number;
+  declare sectionName: string | null;
+  declare term: string;
+  declare examType: "BOT" | "MID" | "EOT" | "ASSESSMENT";
+  declare subject: string;
+  declare score: number;
+  declare remarks: string | null;
+  declare enteredByUserId: number | null;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
+}
+
 export class StudentFeeReceipt extends Model {
   declare id: number;
   declare studentId: number;
@@ -113,6 +135,15 @@ export class StudentFeeAssignment extends Model {
   declare id: number;
   declare studentId: number;
   declare term: string;
+  declare amountDueUgx: number;
+  declare notes: string | null;
+  declare readonly createdAt: Date;
+}
+
+export class StudentFeeStructure extends Model {
+  declare id: number;
+  declare term: string;
+  declare boardingStatus: "day_half" | "day_full" | "day_full_p7" | "boarding";
   declare amountDueUgx: number;
   declare notes: string | null;
   declare readonly createdAt: Date;
@@ -151,6 +182,7 @@ export class DailyFinanceReport extends Model {
   declare closedByUserId: number | null;
   declare closedAt: Date | null;
   declare reopenedReason: string | null;
+  declare reopenedForUserId: number | null;
   declare isReopened: boolean;
   declare adminNotes: string | null;
 }
@@ -435,6 +467,45 @@ export function setupDatabase(config: Config): Sequelize {
     },
   );
 
+  UserClassAuthorization.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      userId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "user_id",
+      },
+      classRoomId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "class_room_id",
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "user_class_authorizations",
+      modelName: "UserClassAuthorization",
+      timestamps: false,
+      indexes: [
+        {
+          name: "uq_user_class_authorizations_user_class",
+          unique: true,
+          fields: ["user_id", "class_room_id"],
+        },
+      ],
+    },
+  );
+
   Student.init(
     {
       id: {
@@ -600,6 +671,84 @@ export function setupDatabase(config: Config): Sequelize {
     },
   );
 
+  StudentAssessmentResult.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      studentId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "student_id",
+      },
+      classRoomId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "class_room_id",
+      },
+      sectionName: {
+        type: DataTypes.STRING(80),
+        allowNull: true,
+        field: "section_name",
+      },
+      term: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+      },
+      examType: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        field: "exam_type",
+      },
+      subject: {
+        type: DataTypes.STRING(120),
+        allowNull: false,
+      },
+      score: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: false,
+      },
+      remarks: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      enteredByUserId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+        field: "entered_by_user_id",
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "updated_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "student_assessment_results",
+      modelName: "StudentAssessmentResult",
+      timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+      indexes: [
+        {
+          name: "uq_student_assessment_results_student_term_exam_subject",
+          unique: true,
+          fields: ["student_id", "term", "exam_type", "subject"],
+        },
+      ],
+    },
+  );
+
   StudentFeeReceipt.init(
     {
       id: {
@@ -712,6 +861,50 @@ export function setupDatabase(config: Config): Sequelize {
     },
   );
 
+  StudentFeeStructure.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      term: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+      },
+      boardingStatus: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        field: "boarding_status",
+      },
+      amountDueUgx: {
+        type: DataTypes.BIGINT,
+        allowNull: false,
+        field: "amount_due_ugx",
+      },
+      notes: { type: DataTypes.STRING(255), allowNull: true },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "student_fee_structures",
+      modelName: "StudentFeeStructure",
+      timestamps: false,
+      indexes: [
+        {
+          name: "uq_student_fee_structures_term_status",
+          unique: true,
+          fields: ["term", "boarding_status"],
+        },
+      ],
+    },
+  );
+
   StudentFeePayment.init(
     {
       id: {
@@ -754,6 +947,12 @@ export function setupDatabase(config: Config): Sequelize {
         field: "created_at",
         defaultValue: DataTypes.NOW,
       },
+      changeReason: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: "change_reason",
+      },
+
     },
     {
       sequelize,
@@ -804,6 +1003,12 @@ export function setupDatabase(config: Config): Sequelize {
         field: "created_at",
         defaultValue: DataTypes.NOW,
       },
+      changeReason: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: "change_reason",
+      },
+
     },
     {
       sequelize,
@@ -864,6 +1069,11 @@ export function setupDatabase(config: Config): Sequelize {
         type: DataTypes.STRING(255),
         allowNull: true,
         field: "reopened_reason",
+      },
+      reopenedForUserId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true,
+        field: "reopened_for_user_id",
       },
       isReopened: {
         type: DataTypes.BOOLEAN,
@@ -1012,6 +1222,26 @@ export function setupDatabase(config: Config): Sequelize {
   ClassRoom.hasMany(ClassSection, {
     foreignKey: "class_room_id",
     as: "sections",
+    constraints: false,
+  });
+  UserClassAuthorization.belongsTo(User, {
+    foreignKey: "user_id",
+    as: "user",
+    constraints: false,
+  });
+  User.hasMany(UserClassAuthorization, {
+    foreignKey: "user_id",
+    as: "classAuthorizations",
+    constraints: false,
+  });
+  UserClassAuthorization.belongsTo(ClassRoom, {
+    foreignKey: "class_room_id",
+    as: "classRoom",
+    constraints: false,
+  });
+  ClassRoom.hasMany(UserClassAuthorization, {
+    foreignKey: "class_room_id",
+    as: "userAuthorizations",
     constraints: false,
   });
 
@@ -1582,6 +1812,36 @@ export function setupDatabase(config: Config): Sequelize {
     as: "payments",
     constraints: false,
   });
+  StudentAssessmentResult.belongsTo(Student, {
+    foreignKey: "student_id",
+    as: "student",
+    constraints: false,
+  });
+  Student.hasMany(StudentAssessmentResult, {
+    foreignKey: "student_id",
+    as: "assessmentResults",
+    constraints: false,
+  });
+  StudentAssessmentResult.belongsTo(ClassRoom, {
+    foreignKey: "class_room_id",
+    as: "classRoom",
+    constraints: false,
+  });
+  ClassRoom.hasMany(StudentAssessmentResult, {
+    foreignKey: "class_room_id",
+    as: "assessmentResults",
+    constraints: false,
+  });
+  StudentAssessmentResult.belongsTo(User, {
+    foreignKey: "entered_by_user_id",
+    as: "enteredBy",
+    constraints: false,
+  });
+  User.hasMany(StudentAssessmentResult, {
+    foreignKey: "entered_by_user_id",
+    as: "enteredAssessmentResults",
+    constraints: false,
+  });
   DailyFinanceReportAudit.belongsTo(DailyFinanceReport, {
     foreignKey: "report_id",
     as: "report",
@@ -1590,6 +1850,26 @@ export function setupDatabase(config: Config): Sequelize {
   DailyFinanceReport.hasMany(DailyFinanceReportAudit, {
     foreignKey: "report_id",
     as: "auditTrail",
+    constraints: false,
+  });
+  DailyFinanceReport.belongsTo(User, {
+    foreignKey: "submittedByUserId",
+    as: "submittedBy",
+    constraints: false,
+  });
+  DailyFinanceReport.belongsTo(User, {
+    foreignKey: "reviewedByUserId",
+    as: "reviewedBy",
+    constraints: false,
+  });
+  DailyFinanceReport.belongsTo(User, {
+    foreignKey: "closedByUserId",
+    as: "closedBy",
+    constraints: false,
+  });
+  DailyFinanceReport.belongsTo(User, {
+    foreignKey: "reopenedForUserId",
+    as: "reopenedFor",
     constraints: false,
   });
   DailyExpenseEntry.belongsTo(User, {

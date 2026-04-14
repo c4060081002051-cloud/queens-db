@@ -18,11 +18,41 @@ import { createMeFinanceLedgerRouter } from "./routes/meFinanceLedger.js";
 import { createMeFinancePaymentsRouter } from "./routes/meFinancePayments.js";
 import { createMeFinanceReportsRouter } from "./routes/meFinanceReports.js";
 import { createMeFinanceStatementsRouter } from "./routes/meFinanceStatements.js";
+import { createMeAcademicsRouter } from "./routes/meAcademics.js";
 
 export function buildApp(config: Config) {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json());
+
+  app.use((req, res, next) => {
+    const startMs = Date.now();
+    res.on("finish", () => {
+      if (!req.path.startsWith("/api/")) return;
+      // #region agent log
+      fetch("http://127.0.0.1:7892/ingest/16abbfe8-e461-4655-b535-5e0791d093a7", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6885fa" },
+        body: JSON.stringify({
+          sessionId: "6885fa",
+          runId: "initial",
+          hypothesisId: "H1",
+          location: "backend/src/app.ts:29",
+          message: "api_request_finished",
+          data: {
+            method: req.method,
+            path: req.path,
+            statusCode: res.statusCode,
+            durationMs: Date.now() - startMs,
+            userId: typeof req.userId === "number" ? req.userId : null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+    });
+    next();
+  });
 
   app.use(
     helmet({
@@ -84,6 +114,7 @@ export function buildApp(config: Config) {
   meRouter.use(createMeFinancePaymentsRouter());
   meRouter.use(createMeFinanceReportsRouter());
   meRouter.use(createMeFinanceStatementsRouter());
+  meRouter.use(createMeAcademicsRouter());
   meRouter.use(createMeDashboardRouter(config));
   meRouter.use(createMeAccountRouter(config));
   app.use("/api/me", requireAuth(config), meRouter);

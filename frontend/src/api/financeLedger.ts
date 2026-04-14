@@ -25,7 +25,9 @@ export async function createDailyExpense(body: {
   description: string;
   paymentMethod: string;
   amountUgx: number;
+  changeReason?: string | null;
 }) {
+
   const res = await fetch(apiUrl("/api/me/finance/ledger/expenses"), {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -37,4 +39,23 @@ export async function createDailyExpense(body: {
     throw new Error(err?.error ?? "Request failed");
   }
   return readJson<{ item: { id: number } }>(res);
+}
+
+export async function submitDailyReport(reportDate: string) {
+  const res = await fetch(apiUrl("/api/me/finance/reports/daily/submit"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ reportDate }),
+  });
+  if (!res.ok) throw new Error("Failed to submit report");
+  return readJson<{ ok: boolean; status: string }>(res);
+}
+
+export async function takeReportForReview(reportId: number) {
+  const res = await fetch(apiUrl(`/api/me/finance/reports/daily/${reportId}/take-review`), {
+    method: "POST",
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) throw new Error("Failed to take report for review");
+  return readJson<{ ok: boolean; status: string }>(res);
 }

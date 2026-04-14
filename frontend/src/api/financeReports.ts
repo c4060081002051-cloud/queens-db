@@ -42,10 +42,33 @@ export function takeReportForReview(id: number) {
   return postAction(`/api/me/finance/reports/daily/${id}/take-review`);
 }
 
-export function closeDailyReport(id: number, adminNotes: string) {
-  return postAction(`/api/me/finance/reports/daily/${id}/close`, { adminNotes });
+export function sealDailyReport(id: number, adminNotes: string) {
+  return postAction(`/api/me/finance/reports/daily/${id}/seal`, { adminNotes });
 }
 
-export function reopenDailyReport(id: number, reason: string) {
-  return postAction(`/api/me/finance/reports/daily/${id}/reopen`, { reason });
+export function closeDailyReport(id: number, adminNotes: string) {
+  return sealDailyReport(id, adminNotes);
+}
+
+export function reopenDailyReport(id: number, reason: string, reopenForUserId: number) {
+  return postAction(`/api/me/finance/reports/daily/${id}/reopen`, { reason, reopenForUserId });
+}
+
+export type AuthorizedReportUser = {
+  id: number;
+  email: string;
+  role: string;
+};
+
+export async function fetchAuthorizedReportUsers(): Promise<AuthorizedReportUser[]> {
+  const res = await fetch(apiUrl("/api/me/finance/reports/authorized-users"), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ items: AuthorizedReportUser[] }>(res);
+  return data.items;
 }

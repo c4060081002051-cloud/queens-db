@@ -1,0 +1,64 @@
+{
+  "hash": "5cbed66a",
+  "configHash": "a3325786",
+  "lockfileHash": "af4dd1db",
+  "browserHash": "4431b34f",
+  "optimized": {
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "74b0754d",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "2062a249",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "c85c4595",
+      "needsInterop": true
+    },
+    "xlsx": {
+      "src": "../../node_modules/xlsx/xlsx.mjs",
+      "file": "xlsx.js",
+      "fileHash": "f81ecfef",
+      "needsInterop": false
+    },
+    "jspdf": {
+      "src": "../../node_modules/jspdf/dist/jspdf.es.min.js",
+      "file": "jspdf.js",
+      "fileHash": "18ef9c7e",
+      "needsInterop": false
+    },
+    "jspdf-autotable": {
+      "src": "../../node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.mjs",
+      "file": "jspdf-autotable.js",
+      "fileHash": "cbbab15c",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "index.es-Q2C2K7UV": {
+      "file": "index__es-Q2C2K7UV.js"
+    },
+    "chunk-SITVF2AJ": {
+      "file": "chunk-SITVF2AJ.js"
+    },
+    "chunk-BHRJYGXG": {
+      "file": "chunk-BHRJYGXG.js"
+    },
+    "html2canvas.esm-KMSY4RNP": {
+      "file": "html2canvas__esm-KMSY4RNP.js"
+    },
+    "purify.es-CIY7VBOH": {
+      "file": "purify__es-CIY7VBOH.js"
+    },
+    "chunk-EQCVQC35": {
+      "file": "chunk-EQCVQC35.js"
+    }
+  }
+}

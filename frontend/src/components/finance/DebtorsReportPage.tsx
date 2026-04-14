@@ -1,25 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchStudents, type StudentApiRow } from "../../api/students";
+import { fetchDebtorsReport } from "../../api/financeDebtors";
+import { formatCurrencyUGX } from "./shared/financeFormat";
+import type { DebtorsPayload } from "./shared/financeTypes";
 
 export function DebtorsReportPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [students, setStudents] = useState<StudentApiRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [data, setData] = useState<DebtorsPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setLoadError(null);
-    void fetchStudents({ sortBy: "name", sortDir: "asc", limit: 500 })
-      .then((rows) => {
-        if (!cancelled) setStudents(rows);
+    setError(null);
+    void fetchDebtorsReport()
+      .then((res) => {
+        if (!cancelled) setData(res);
       })
       .catch((e) => {
-        if (!cancelled) {
-          setLoadError(e instanceof Error ? e.message : "Failed to load students");
-          setStudents([]);
-        }
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load report");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -30,94 +29,121 @@ export function DebtorsReportPage() {
   }, []);
 
   const filtered = useMemo(() => {
+    if (!data) return [];
     const q = searchTerm.trim().toLowerCase();
-    if (!q) return students;
-    return students.filter(
+    if (!q) return data.items;
+    return data.items.filter(
       (s) =>
         s.fullName.toLowerCase().includes(q) ||
         s.admissionNumber.toLowerCase().includes(q) ||
-        (s.className ?? "").toLowerCase().includes(q),
+        s.className.toLowerCase().includes(q),
     );
-  }, [students, searchTerm]);
+  }, [data, searchTerm]);
+
+  if (loading && !data) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#5a8faf] border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="rounded-xl border border-[#b9d9eb] bg-[#eef6fc] px-4 py-3 text-sm text-[#5a8faf]">
-        <p className="font-semibold">Fee balances are not in the database yet</p>
-        <p className="mt-1 text-[#3f4f67]">
-          This list shows <strong>real students</strong> from <code className="rounded bg-white/80 px-1">/api/me/students</code>.
-          Term totals, paid amounts, and balances will appear here once a fee ledger is implemented server-side.
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="neo-card-elevated flex flex-col justify-center border border-[#b9d9eb] bg-gradient-to-br from-[#eef6fc] to-[#e0f0f8] p-6">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-[#5a8faf]">Students loaded</h2>
-          <p className="mt-2 text-3xl font-black text-[#5a8faf]">{loading ? "…" : filtered.length}</p>
-          <p className="mt-1 text-sm font-medium text-[#4a6f8a]">
-            {loadError ? <span className="text-[#b84040]">{loadError}</span> : "Matching your search filter"}
+    <div className="space-y-6 animate-in fade-in duration-500 pb-12">
+      {/* Header Summary Card */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-xs font-bold uppercase tracking-widest text-[#636e72] opacity-70">Accounting Period</p>
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-black text-[#2d3436]">{data?.term || "Current Term"}</span>
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">ACTIVE</span>
+          </div>
+        </div>
+        
+        <div className="neo-card-elevated border-l-4 border-[#dc2626] bg-gradient-to-br from-[#fef2f2] to-[#fee2e2] px-6 py-4 text-right shadow-sm">
+          <p className="text-[10px] font-black uppercase tracking-wider text-[#991b1b]">Total Outstanding Debt</p>
+          <p className="mt-1 text-2xl font-black text-[#dc2626]">
+            {formatCurrencyUGX(data?.totalOutstanding ?? 0)}
           </p>
         </div>
-        <div className="neo-card-elevated flex flex-col justify-center p-6">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-[#636e72]">Outstanding fees</h2>
-          <p className="mt-3 text-lg font-semibold text-[#2d3436]">—</p>
-          <p className="mt-2 text-xs text-[#636e72]">Requires stored fee schedules and payments per student.</p>
-        </div>
       </div>
 
-      <div className="neo-card overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#ebe4d9]/80 bg-[#faf7f0]/50 px-6 py-4">
-          <h2 className="text-lg font-bold text-[#2d3436]">Learners (fee columns pending)</h2>
-          <div className="w-full sm:w-72">
+      {error ? (
+        <div className="rounded-xl bg-red-50 p-4 border border-red-100">
+          <p className="text-sm font-semibold text-[#b84040]">{error}</p>
+        </div>
+      ) : null}
+
+      <div className="neo-card overflow-hidden p-0 shadow-xl">
+        {/* Search Bar Header */}
+        <div className="flex flex-col gap-4 border-b border-[#ebe4d9]/80 bg-white px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-sm font-black uppercase tracking-widest text-[#2d3436]">Debtors List</h2>
+          <div className="relative w-full sm:w-80">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
             <input
               type="text"
-              placeholder="Search by name, admission no., or class…"
+              placeholder="Filter by name, admission no, or class..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="neo-inset-field w-full rounded-lg px-3 py-2 text-sm text-[#2d3436] placeholder:text-[#636e72]/70"
+              className="neo-inset-field w-full rounded-xl pl-10 pr-4 py-2 text-sm text-[#2d3436] focus:ring-2 focus:ring-[#5a8faf]/50"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-[#3f4f67]">
-            <thead className="bg-[#f5f8f5] text-xs font-bold uppercase text-[#6a9570]">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-[#fcfbf9] text-[10px] font-bold uppercase tracking-wider text-[#636e72]">
               <tr>
-                <th className="px-6 py-3">Student</th>
-                <th className="px-6 py-3">Class</th>
-                <th className="px-6 py-3">Term</th>
-                <th className="px-6 py-3 text-right">Total due</th>
-                <th className="px-6 py-3 text-right">Paid</th>
-                <th className="px-6 py-3 text-right">Balance</th>
-                <th className="px-6 py-3 text-center">Status</th>
+                <th className="px-6 py-4">ADMISSION NO.</th>
+                <th className="px-6 py-4">STUDENT NAME</th>
+                <th className="px-6 py-3 text-center">CLASS</th>
+                <th className="px-6 py-3 text-right">TOTAL FEES</th>
+                <th className="px-6 py-3 text-right">AMOUNT PAID</th>
+                <th className="px-6 py-3 text-right">BALANCE DUE</th>
+                <th className="px-6 py-3 text-center">ACTION</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#ebe4d9]">
-              {filtered.map((s) => (
-                <tr key={s.id} className="transition hover:bg-[#faf7f0]/80">
-                  <td className="whitespace-nowrap px-6 py-4">
-                    <p className="font-bold text-[#2d3436]">{s.fullName}</p>
-                    <p className="text-xs text-[#636e72]">{s.admissionNumber}</p>
+            <tbody className="divide-y divide-[#ebe4d9]/50">
+              {filtered.map((d) => (
+                <tr key={d.id} className="hover:bg-[#f8fbff] transition-colors group">
+                  <td className="px-6 py-4 text-xs font-bold text-[#5a8faf]">
+                    {d.admissionNumber}
                   </td>
-                  <td className="px-6 py-4">{s.className ?? "—"}</td>
-                  <td className="px-6 py-4 text-[#636e72]">—</td>
-                  <td className="px-6 py-4 text-right font-medium text-[#636e72]">—</td>
-                  <td className="px-6 py-4 text-right font-medium text-[#636e72]">—</td>
-                  <td className="px-6 py-4 text-right font-bold text-[#636e72]">—</td>
+                  <td className="px-6 py-4">
+                    <p className="text-sm font-black text-[#2d3436] tracking-tight">{d.fullName}</p>
+                  </td>
                   <td className="px-6 py-4 text-center">
-                    <span className="inline-flex items-center justify-center rounded-full bg-[#f1f5f9] px-2.5 py-0.5 text-xs font-bold text-[#64748b]">
-                      Pending
+                    <span className="rounded-lg bg-gray-50 px-2 py-1 text-[11px] font-bold text-[#636e72] border border-gray-100">
+                      {d.className}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 text-right text-xs font-semibold text-[#636e72]">
+                    {formatCurrencyUGX(d.totalFees)}
+                  </td>
+                  <td className="px-6 py-4 text-right text-xs font-bold text-[#27ae60]">
+                    {formatCurrencyUGX(d.totalPaid)}
+                  </td>
+                  <td className="px-6 py-4 text-right text-sm font-black text-[#dc2626]">
+                    {formatCurrencyUGX(d.balance)}
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <button className="rounded-xl border border-[#ebe4d9] bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#5a8faf] transition hover:bg-[#5a8faf] hover:text-white">
+                      Profile
+                    </button>
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && !loading ? (
+              {filtered.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-sm text-[#636e72]">
-                    No students match your search.
+                  <td colSpan={7} className="px-6 py-24 text-center">
+                    <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[#f0fdf4] text-4xl shadow-sm mb-4">
+                      ✅
+                    </div>
+                    <h3 className="text-lg font-black text-[#166534]">All Clear!</h3>
+                    <p className="mt-1 text-sm text-[#3f4f67] opacity-70">No students have outstanding balances for this term.</p>
                   </td>
                 </tr>
-              ) : null}
+              )}
             </tbody>
           </table>
         </div>

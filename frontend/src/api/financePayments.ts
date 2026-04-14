@@ -14,6 +14,7 @@ type ReceiptApiRow = {
   outstandingAfter: number;
   creditAmount: number;
   student: StudentPaymentReceipt["student"];
+  changeReason?: string | null;
 };
 
 async function readJson<T>(res: Response): Promise<T> {
@@ -36,6 +37,7 @@ function mapReceipt(x: ReceiptApiRow): StudentPaymentReceipt {
     outstandingAfter: x.outstandingAfter,
     creditAmount: x.creditAmount,
     student: x.student,
+    changeReason: x.changeReason,
   };
 }
 
@@ -46,8 +48,10 @@ export async function createFinancePayment(body: {
   paidBy: string;
   amountPaid: number;
   amountDueUgx?: number;
+  changeReason?: string | null;
 }): Promise<StudentPaymentReceipt> {
   const res = await fetch(apiUrl("/api/me/finance/payments"), {
+
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),

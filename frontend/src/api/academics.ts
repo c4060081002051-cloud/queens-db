@@ -1,0 +1,174 @@
+import { apiUrl, authHeaders } from "./baseUrl";
+
+async function readJson<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text.trim()) throw new Error("Empty response");
+  return JSON.parse(text) as T;
+}
+
+export type ResultEntryOptions = {
+  authority: "full" | "restricted";
+  terms: string[];
+  examTypes: string[];
+  classes: Array<{ id: number; name: string }>;
+  sections: Array<{ id: number; classRoomId: number; name: string }>;
+};
+
+export async function fetchResultEntryOptions(): Promise<ResultEntryOptions> {
+  const res = await fetch(apiUrl("/api/me/academics/result-entry/options"), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  return readJson<ResultEntryOptions>(res);
+}
+
+export type PerformanceSummaryRow = {
+  className: string;
+  sectionName: string;
+  totalStudents: number;
+  resultsEntered: number;
+  avgScore: number | null;
+  passRate: number | null;
+};
+
+export async function fetchPerformanceSummary(term: string, examType: string): Promise<PerformanceSummaryRow[]> {
+  const q = new URLSearchParams({ term, examType });
+  const res = await fetch(apiUrl(`/api/me/academics/performance-summary?${q.toString()}`), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ rows: PerformanceSummaryRow[] }>(res);
+  return data.rows;
+}
+
+export type ResultEntryStudentRow = {
+  studentId: number;
+  admissionNumber: string;
+  fullName: string;
+  classRoomId: number | null;
+  sectionName: string | null;
+  hasResults: boolean;
+};
+
+export async function fetchResultEntryStudents(params: {
+  term: string;
+  examType: string;
+  classRoomId: number;
+  sectionName?: string;
+}): Promise<ResultEntryStudentRow[]> {
+  const q = new URLSearchParams({
+    term: params.term,
+    examType: params.examType,
+    classRoomId: String(params.classRoomId),
+  });
+  if (params.sectionName?.trim()) q.set("sectionName", params.sectionName.trim());
+  const res = await fetch(apiUrl(`/api/me/academics/result-entry/students?${q.toString()}`), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ items: ResultEntryStudentRow[] }>(res);
+  return data.items;
+}
+
+export type PendingResultEntryStudentRow = {
+  studentId: number;
+  admissionNumber: string;
+  fullName: string;
+  className: string;
+  sectionName: string;
+  classRoomId: number | null;
+};
+
+export async function fetchPendingResultEntryStudents(params: {
+  term: string;
+  examType: string;
+}): Promise<PendingResultEntryStudentRow[]> {
+  const q = new URLSearchParams({
+    term: params.term,
+    examType: params.examType,
+  });
+  const res = await fetch(apiUrl(`/api/me/academics/result-entry/pending-students?${q.toString()}`), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ items: PendingResultEntryStudentRow[] }>(res);
+  return data.items;
+}
+
+export type StudentSubjectMarkRow = {
+  subject: string;
+  score: number | null;
+};
+
+export type StudentMarkEntryPayload = {
+  studentId: number;
+  admissionNumber: string;
+  fullName: string;
+  classRoomId: number;
+  className: string;
+  sectionName: string | null;
+  term: string;
+  examType: string;
+  subjects: StudentSubjectMarkRow[];
+};
+
+export async function fetchStudentMarkEntry(params: {
+  studentId: number;
+  term: string;
+  examType: string;
+}): Promise<StudentMarkEntryPayload> {
+  const q = new URLSearchParams({
+    term: params.term,
+    examType: params.examType,
+  });
+  const res = await fetch(
+    apiUrl(`/api/me/academics/result-entry/student/${params.studentId}?${q.toString()}`),
+    { headers: { ...authHeaders() } },
+  );
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: StudentMarkEntryPayload }>(res);
+  return data.item;
+}
+
+export async function saveStudentMarkEntry(body: {
+  studentId: number;
+  term: string;
+  examType: string;
+  marks: Array<{ subject: string; score: number }>;
+}): Promise<{ ok: boolean; saved: number }> {
+  const res = await fetch(apiUrl(`/api/me/academics/result-entry/student/${body.studentId}/marks`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({
+      term: body.term,
+      examType: body.examType,
+      marks: body.marks,
+    }),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  return readJson<{ ok: boolean; saved: number }>(res);
+}

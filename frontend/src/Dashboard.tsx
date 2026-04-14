@@ -16,6 +16,7 @@ import { InboxDetailView } from "./components/inbox/InboxDetailView";
 import { InboxListView } from "./components/inbox/InboxListView";
 import type { InboxItem } from "./components/admin/headerInboxDemo";
 import { SettingsModesPanel } from "./components/settings/SettingsModesPanel";
+import { SettingsFeesStructurePanel } from "./components/settings/SettingsFeesStructurePanel";
 import { ExpensesAllPage } from "./components/expenses/ExpensesAllPage";
 import { SchoolExpensesPanel } from "./components/expenses/SchoolExpensesPanel";
 import {
@@ -36,6 +37,10 @@ import {
   ClassesSectionPage,
   type ClassesSection,
 } from "./components/classes/ClassesSectionPage";
+import {
+  CurriculumSectionPage,
+  type CurriculumSection,
+} from "./components/curriculum/CurriculumSectionPage";
 import { useI18n } from "./i18n/I18nProvider";
 import { formatShortAgo } from "./utils/formatShortAgo";
 
@@ -437,13 +442,21 @@ type InboxScreen =
 type PersistedViewState = {
   settingsPanel: string | null;
   inboxScreen: InboxScreen;
-  mainView: "dashboard" | "expenses" | "students" | "staff" | "finance" | "classes";
+  mainView:
+    | "dashboard"
+    | "expenses"
+    | "students"
+    | "staff"
+    | "finance"
+    | "classes"
+    | "curriculum";
   studentSection: StudentNavSection;
   staffSection: StaffNavSection;
   teachingSection: TeachingSection;
   nonTeachingCategory: NonTeachingCategory;
   financeSection: FinanceSection;
   classesSection: ClassesSection;
+  curriculumSection: CurriculumSection;
   selectedClassName: string | null;
 };
 
@@ -457,7 +470,8 @@ function readPersistedViewState(): PersistedViewState | null {
       parsed.mainView === "students" ||
       parsed.mainView === "staff" ||
       parsed.mainView === "finance" ||
-      parsed.mainView === "classes"
+      parsed.mainView === "classes" ||
+      parsed.mainView === "curriculum"
         ? parsed.mainView
         : "dashboard";
     const studentSection =
@@ -504,6 +518,15 @@ function readPersistedViewState(): PersistedViewState | null {
       parsed.classesSection === "class_reports"
         ? parsed.classesSection
         : "all_classes";
+    const curriculumSection: CurriculumSection =
+      parsed.curriculumSection === "exam_bot" ||
+      parsed.curriculumSection === "exam_mid" ||
+      parsed.curriculumSection === "exam_eot" ||
+      parsed.curriculumSection === "assessment_tests" ||
+      parsed.curriculumSection === "result_entry" ||
+      parsed.curriculumSection === "blank_page"
+        ? parsed.curriculumSection
+        : "exam_bot";
     const inboxScreen: InboxScreen =
       parsed.inboxScreen?.screen === "list" &&
       (parsed.inboxScreen.kind === "notifications" || parsed.inboxScreen.kind === "messages")
@@ -524,6 +547,7 @@ function readPersistedViewState(): PersistedViewState | null {
       nonTeachingCategory,
       financeSection,
       classesSection,
+      curriculumSection,
       selectedClassName:
         typeof parsed.selectedClassName === "string" ? parsed.selectedClassName : null,
     };
@@ -564,7 +588,7 @@ export function Dashboard({
   const [dashLoading, setDashLoading] = useState(false);
   const [dashError, setDashError] = useState<string | null>(null);
   const [mainView, setMainView] = useState<
-    "dashboard" | "expenses" | "students" | "staff" | "finance" | "classes"
+    "dashboard" | "expenses" | "students" | "staff" | "finance" | "classes" | "curriculum"
   >(
     initialView?.mainView ?? "dashboard",
   );
@@ -585,6 +609,9 @@ export function Dashboard({
   );
   const [classesSection, setClassesSection] = useState<ClassesSection>(
     initialView?.classesSection ?? "all_classes",
+  );
+  const [curriculumSection, setCurriculumSection] = useState<CurriculumSection>(
+    initialView?.curriculumSection ?? "exam_bot",
   );
   const [selectedClassName, setSelectedClassName] = useState<string | null>(
     initialView?.selectedClassName ?? null,
@@ -643,13 +670,14 @@ export function Dashboard({
         nonTeachingCategory,
         financeSection,
         classesSection,
+        curriculumSection,
         selectedClassName,
       };
       sessionStorage.setItem(DASHBOARD_VIEW_STATE_KEY, JSON.stringify(value));
     } catch {
       // Ignore storage failures (e.g. privacy mode/storage disabled).
     }
-  }, [settingsPanel, inboxScreen, mainView, studentSection, staffSection, teachingSection, nonTeachingCategory, financeSection, classesSection, selectedClassName]);
+  }, [settingsPanel, inboxScreen, mainView, studentSection, staffSection, teachingSection, nonTeachingCategory, financeSection, classesSection, curriculumSection, selectedClassName]);
 
   const directoryCards = buildDirectoryStatCards(dash?.stats ?? null, dashLoading);
   const learners = dash?.learners ?? [];
@@ -756,11 +784,18 @@ export function Dashboard({
         setMainView("finance");
         setFinanceSection(section);
       }}
+      onSelectCurriculumSection={(section) => {
+        setSettingsPanel(null);
+        setInboxScreen({ screen: "home" });
+        setMainView("curriculum");
+        setCurriculumSection(section);
+      }}
       onAccountUpdated={onAccountUpdated}
     >
       <main className="dashboard-main-padding">
         {settingsPanel === "modes" ? <SettingsModesPanel /> : null}
-        {settingsPanel === "modes" ? null : inboxScreen.screen !== "home" ? (
+        {settingsPanel === "fees_structure" ? <SettingsFeesStructurePanel /> : null}
+        {settingsPanel === "modes" || settingsPanel === "fees_structure" ? null : inboxScreen.screen !== "home" ? (
           inboxScreen.screen === "list" ? (
             <InboxListView
               kind={inboxScreen.kind}
@@ -806,14 +841,18 @@ export function Dashboard({
           />
         ) : mainView === "classes" ? (
           <ClassesSectionPage section={classesSection} />
+        ) : mainView === "curriculum" ? (
+          <CurriculumSectionPage section={curriculumSection} />
         ) : null}
         {settingsPanel === "modes" ||
+        settingsPanel === "fees_structure" ||
         inboxScreen.screen !== "home" ||
         mainView === "expenses" ||
         mainView === "students" ||
         mainView === "staff" ||
         mainView === "finance" ||
-        mainView === "classes" ? null : (
+        mainView === "classes" ||
+        mainView === "curriculum" ? null : (
           <>
         {profileError ? (
           <div

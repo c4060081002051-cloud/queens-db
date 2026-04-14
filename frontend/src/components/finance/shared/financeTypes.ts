@@ -13,6 +13,7 @@ export type StudentPaymentReceipt = {
   student: StudentApiRow;
   totalFeesDue: number;
   previousPaid: number;
+  changeReason?: string | null;
 };
 
 export type FinanceDashboardPayload = {
@@ -30,6 +31,7 @@ export type FinanceDashboardPayload = {
     totalIncome: number;
     totalExpenses: number;
     net: number;
+    methodBreakdown: Array<{ method: string; amount: number }>;
   };
   payroll: {
     monthKey: string;
@@ -37,6 +39,14 @@ export type FinanceDashboardPayload = {
     paidToDate: number;
     arrears: number;
   };
+  recentTransactions: Array<{
+    id: string;
+    type: "income" | "expense";
+    label: string;
+    amount: number;
+    method: string;
+    date: string;
+  }>;
 };
 
 export type FinanceLedgerItem = {
@@ -49,6 +59,9 @@ export type FinanceLedgerItem = {
   status: string;
   receiptNo: string | null;
   at: string;
+  term?: string;
+  paidBy?: string;
+  changeReason?: string | null;
 };
 
 export type FinanceLedgerPayload = {
@@ -72,8 +85,11 @@ export type FinanceReportRow = {
   id: number;
   reportDate: string;
   status: string;
+  submittedBy: string | null;
   isReopened: boolean;
   reopenedReason: string | null;
+  reopenedForUserId?: number | null;
+  reopenedForUserEmail?: string | null;
   adminNotes: string | null;
   totalEarnings: number;
   totalExpenditure: number;
@@ -96,4 +112,20 @@ export type StudentStatementPayload = {
     amountPaid: number;
     runningBalance: number;
   }>;
+};
+
+export type DebtorRow = {
+  id: number;
+  admissionNumber: string;
+  fullName: string;
+  className: string;
+  totalFees: number;
+  totalPaid: number;
+  balance: number;
+};
+
+export type DebtorsPayload = {
+  term: string;
+  totalOutstanding: number;
+  items: DebtorRow[];
 };

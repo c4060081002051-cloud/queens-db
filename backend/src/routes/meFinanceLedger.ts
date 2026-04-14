@@ -70,6 +70,8 @@ export function createMeFinanceLedgerRouter() {
             p.createdAt ??
             (p.get("created_at") as Date | string | undefined) ??
             new Date().toISOString(),
+          term: p.term,
+          paidBy: p.paidBy,
         };
       });
 
@@ -129,6 +131,8 @@ export function createMeFinanceLedgerRouter() {
       const description = trimStr(body.description, 255);
       const paymentMethod = trimStr(body.paymentMethod, 40) ?? "Cash";
       const amount = Number(body.amountUgx);
+      const changeReason = trimStr(body.changeReason, 255);
+
       if (!category) return res.status(400).json({ error: "category is required" });
       if (!description) return res.status(400).json({ error: "description is required" });
       if (!Number.isFinite(amount) || amount <= 0) {
@@ -141,7 +145,9 @@ export function createMeFinanceLedgerRouter() {
         amountUgx: Math.round(amount),
         paymentMethod,
         recordedByUserId: req.userId ?? null,
+        changeReason,
       });
+
       return res.status(201).json({
         item: {
           id: row.id,

@@ -11,6 +11,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import type { InboxItem } from "./headerInboxDemo";
 import { HeaderInboxDropdown } from "./HeaderInboxDropdown";
 import type { ClassesSection } from "../classes/ClassesSectionPage";
+import type { CurriculumSection } from "../curriculum/CurriculumSectionPage";
 
 export type AdminUser = {
   sub: string;
@@ -66,6 +67,8 @@ type AdminLayoutProps = {
       | "staff_payment"
       | "finance_summary",
   ) => void;
+  /** Curriculum hub: open exam/test stats and result pages. */
+  onSelectCurriculumSection?: (section: CurriculumSection) => void;
   /** Refresh `/api/auth/me` after password or 2FA changes. */
   onAccountUpdated?: () => void;
 };
@@ -153,19 +156,6 @@ function IconSearch({ className }: { className?: string }) {
     <svg className={className} width="18" height="18" fill="none" viewBox="0 0 24 24" aria-hidden>
       <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="2" />
       <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M15 15l6 6" />
-    </svg>
-  );
-}
-
-function IconCalendar({ className }: { className?: string }) {
-  return (
-    <svg className={className} width="20" height="20" fill="none" viewBox="0 0 24 24" aria-hidden>
-      <path
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-        d="M8 6V4m8 2V4M4 10h16M6 6h12a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2z"
-      />
     </svg>
   );
 }
@@ -361,6 +351,7 @@ type NavLeaf = {
     | "bursery"
     | "staff_payment"
     | "finance_summary";
+  curriculumSection?: CurriculumSection;
   classSection?: ClassesSection;
 };
 
@@ -407,13 +398,20 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
       title: t("nav.curriculum"),
       icon: IconBook,
       items: [
-        { icon: IconBook, label: t("nav.curriculum.syllabus") },
-        { icon: IconLayers, label: t("nav.curriculum.subjects") },
-        { icon: IconCalendar, label: t("nav.curriculum.routine") },
-        { icon: IconClipboard, label: t("nav.curriculum.attendance") },
-        { icon: IconGradCap, label: t("nav.curriculum.exams") },
-        { icon: IconClipboard, label: t("nav.curriculum.results") },
-        { icon: IconPromotion, label: t("nav.curriculum.promotion") },
+        { icon: IconGradCap, label: t("nav.curriculum.exam.bot"), curriculumSection: "exam_bot" },
+        { icon: IconGradCap, label: t("nav.curriculum.exam.mid"), curriculumSection: "exam_mid" },
+        { icon: IconGradCap, label: t("nav.curriculum.exam.eot"), curriculumSection: "exam_eot" },
+        {
+          icon: IconClipboard,
+          label: t("nav.curriculum.tests.assessments"),
+          curriculumSection: "assessment_tests",
+        },
+        {
+          icon: IconClipboard,
+          label: t("nav.curriculum.resultsEntry"),
+          curriculumSection: "result_entry",
+        },
+        { icon: IconPromotion, label: t("nav.curriculum.blankPage"), curriculumSection: "blank_page" },
       ],
     },
     {
@@ -465,6 +463,11 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
       icon: IconSettings,
       items: [
         { icon: IconSunMoon, label: t("nav.settings.modes"), settingsPanel: "modes" },
+        {
+          icon: IconWallet,
+          label: t("nav.settings.feesStructure"),
+          settingsPanel: "fees_structure",
+        },
         { icon: IconGrid, label: t("nav.settings.general") },
         { icon: IconBell, label: t("nav.settings.notifications") },
         { icon: IconUsers, label: t("nav.settings.users") },
@@ -526,6 +529,7 @@ export function AdminLayout({
   onSelectClassList,
   onSelectClassSection,
   onSelectFinanceSection,
+  onSelectCurriculumSection,
   onAccountUpdated,
 }: AdminLayoutProps) {
   const { t, locale, setLocale } = useI18n();
@@ -539,6 +543,8 @@ export function AdminLayout({
     lower: boolean;
     upper: boolean;
   }>({ kg: false, lower: false, upper: false });
+  const [curriculumExamOpen, setCurriculumExamOpen] = useState(false);
+  const [curriculumTestsOpen, setCurriculumTestsOpen] = useState(false);
   const [teachingSectionOpen, setTeachingSectionOpen] = useState(false);
   const [nonTeachingSectionOpen, setNonTeachingSectionOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -900,6 +906,111 @@ export function AdminLayout({
                           </>
                         ) : null}
                       </ul>
+                    ) : group.id === "curriculum" ? (
+                      <ul className="neo-nav-sub mb-1 ml-3 mt-1 space-y-0.5 pb-0.5 pl-2.5">
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() => setCurriculumExamOpen((v) => !v)}
+                            className="neo-nav-item flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] font-semibold leading-snug text-[#636e72]"
+                          >
+                            <IconGradCap className="h-3.5 w-3.5 shrink-0 text-[#5a8faf] opacity-90" />
+                            <span className="min-w-0 flex-1 truncate">{t("nav.curriculum.exams")}</span>
+                            <ChevronDown open={curriculumExamOpen} className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                        {curriculumExamOpen ? (
+                          <>
+                            <li>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onSelectCurriculumSection?.("exam_bot");
+                                  setSidebarOpen(false);
+                                }}
+                                className="neo-nav-item ml-5 flex w-full rounded-md px-1.5 py-1 text-left text-[11px] text-[#636e72]"
+                              >
+                                {t("nav.curriculum.exam.bot")}
+                              </button>
+                            </li>
+                            <li>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onSelectCurriculumSection?.("exam_mid");
+                                  setSidebarOpen(false);
+                                }}
+                                className="neo-nav-item ml-5 flex w-full rounded-md px-1.5 py-1 text-left text-[11px] text-[#636e72]"
+                              >
+                                {t("nav.curriculum.exam.mid")}
+                              </button>
+                            </li>
+                            <li>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onSelectCurriculumSection?.("exam_eot");
+                                  setSidebarOpen(false);
+                                }}
+                                className="neo-nav-item ml-5 flex w-full rounded-md px-1.5 py-1 text-left text-[11px] text-[#636e72]"
+                              >
+                                {t("nav.curriculum.exam.eot")}
+                              </button>
+                            </li>
+                          </>
+                        ) : null}
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() => setCurriculumTestsOpen((v) => !v)}
+                            className="neo-nav-item flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] font-semibold leading-snug text-[#636e72]"
+                          >
+                            <IconClipboard className="h-3.5 w-3.5 shrink-0 text-[#5a8faf] opacity-90" />
+                            <span className="min-w-0 flex-1 truncate">{t("nav.curriculum.tests")}</span>
+                            <ChevronDown open={curriculumTestsOpen} className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                        {curriculumTestsOpen ? (
+                          <li>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onSelectCurriculumSection?.("assessment_tests");
+                                setSidebarOpen(false);
+                              }}
+                              className="neo-nav-item ml-5 flex w-full rounded-md px-1.5 py-1 text-left text-[11px] text-[#636e72]"
+                            >
+                              {t("nav.curriculum.tests.assessments")}
+                            </button>
+                          </li>
+                        ) : null}
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectCurriculumSection?.("result_entry");
+                              setSidebarOpen(false);
+                            }}
+                            className="neo-nav-item flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] font-medium leading-snug text-[#636e72]"
+                          >
+                            <IconClipboard className="h-3.5 w-3.5 shrink-0 text-[#5a8faf] opacity-90" />
+                            <span className="min-w-0 flex-1 truncate">{t("nav.curriculum.resultsEntry")}</span>
+                          </button>
+                        </li>
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectCurriculumSection?.("blank_page");
+                              setSidebarOpen(false);
+                            }}
+                            className="neo-nav-item flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] font-medium leading-snug text-[#636e72]"
+                          >
+                            <IconPromotion className="h-3.5 w-3.5 shrink-0 text-[#5a8faf] opacity-90" />
+                            <span className="min-w-0 flex-1 truncate">{t("nav.curriculum.blankPage")}</span>
+                          </button>
+                        </li>
+                      </ul>
                     ) : (
                       <ul className="neo-nav-sub mb-1 ml-3 mt-1 space-y-0 pb-0.5 pl-2.5">
                         {group.items.map((item) => {
@@ -926,6 +1037,9 @@ export function AdminLayout({
                                   }
                                   if (item.classSection) {
                                     onSelectClassSection?.(item.classSection);
+                                  }
+                                  if (item.curriculumSection) {
+                                    onSelectCurriculumSection?.(item.curriculumSection);
                                   }
                                   setSidebarOpen(false);
                                 }}

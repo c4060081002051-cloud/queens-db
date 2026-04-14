@@ -290,6 +290,20 @@ export async function ensureDashboardSchema(sequelize: Sequelize): Promise<void>
   `);
 
   await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS student_fee_structures (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      term VARCHAR(20) NOT NULL,
+      boarding_status VARCHAR(16) NOT NULL,
+      amount_due_ugx BIGINT NOT NULL,
+      notes VARCHAR(255) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_student_fee_structures_term_status (term, boarding_status),
+      KEY student_fee_structures_term_idx (term)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await sequelize.query(`
     CREATE TABLE IF NOT EXISTS class_sections (
       id INT UNSIGNED NOT NULL AUTO_INCREMENT,
       class_room_id INT UNSIGNED NOT NULL,
@@ -334,4 +348,47 @@ export async function ensureDashboardSchema(sequelize: Sequelize): Promise<void>
       UNIQUE KEY uq_class_categories_name (name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS user_class_authorizations (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id INT UNSIGNED NOT NULL,
+      class_room_id INT UNSIGNED NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_user_class_authorizations_user_class (user_id, class_room_id),
+      KEY user_class_authorizations_class_idx (class_room_id),
+      CONSTRAINT fk_user_class_authorizations_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT fk_user_class_authorizations_classroom FOREIGN KEY (class_room_id) REFERENCES classrooms (id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS student_assessment_results (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      student_id INT UNSIGNED NOT NULL,
+      class_room_id INT UNSIGNED NOT NULL,
+      section_name VARCHAR(80) NULL,
+      term VARCHAR(20) NOT NULL,
+      exam_type VARCHAR(20) NOT NULL,
+      subject VARCHAR(120) NOT NULL,
+      score DECIMAL(5,2) NOT NULL,
+      remarks VARCHAR(255) NULL,
+      entered_by_user_id INT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_student_assessment_results_student_term_exam_subject (student_id, term, exam_type, subject),
+      KEY student_assessment_results_class_idx (class_room_id),
+      KEY student_assessment_results_lookup_idx (term, exam_type, class_room_id),
+      CONSTRAINT fk_student_assessment_results_student FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT fk_student_assessment_results_classroom FOREIGN KEY (class_room_id) REFERENCES classrooms (id) ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT fk_student_assessment_results_entered_by FOREIGN KEY (entered_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE student_assessment_results ADD COLUMN subject VARCHAR(120) NOT NULL DEFAULT 'General'",
+    "student_assessment_results.subject",
+  );
 }

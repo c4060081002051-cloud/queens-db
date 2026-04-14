@@ -7,7 +7,9 @@ import {
   StudentFeeAssignment,
   StudentFeePayment,
   StudentFeeReceipt,
+  StudentFeeStructure,
 } from "../models/index.js";
+import { calculatePaymentSummary } from "../services/pythonCalc.js";
 
 function trimStr(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
@@ -30,6 +32,33 @@ function ymd(d = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+type FeeStructureStatus = "day_half" | "day_full" | "day_full_p7" | "boarding";
+
+function normalizeBoardingStatus(v: unknown): "day_half" | "day_full" | "boarding" | null {
+  if (v === "day_half" || v === "day_full" || v === "boarding") return v;
+  return null;
+}
+
+function isP7Class(className: string | null | undefined): boolean {
+  const v = (className ?? "").trim().toLowerCase();
+  return v.includes("p7") || v.includes("primary seven");
+}
+
+function toFeeStructureStatus(
+  boardingStatus: "day_half" | "day_full" | "boarding" | null,
+  className: string | null | undefined,
+): FeeStructureStatus | null {
+  if (boardingStatus === "day_full" && isP7Class(className)) return "day_full_p7";
+  return boardingStatus;
+}
+
+function studentClassName(student: Student): string | null {
+  const assoc = student.get("classRoom") as { name?: string } | null | undefined;
+  const fromAssoc = typeof assoc?.name === "string" ? assoc.name : null;
+  const fromFlat = student.get("class_name") as string | null | undefined;
+  return fromAssoc ?? fromFlat ?? null;
+}
+
 export function createMeFinancePaymentsRouter() {
   const r = Router();
 
@@ -42,6 +71,8 @@ export function createMeFinancePaymentsRouter() {
       const paidBy = trimStr(body.paidBy, 120);
       const amountPaidUgx = parseMoneyUgx(body.amountPaid);
       const requestedDue = parseMoneyUgx(body.amountDueUgx);
+      const changeReason = trimStr(body.changeReason, 255);
+
 
       if (!Number.isFinite(studentId) || studentId < 1) {
         return res.status(400).json({ error: "Invalid studentId" });
@@ -70,14 +101,37 @@ export function createMeFinancePaymentsRouter() {
         }
       }
       const assignment = await StudentFeeAssignment.findOne({ where: { studentId, term } });
+      const boardingStatus = normalizeBoardingStatus(student.boardingStatus);
+      const className = studentClassName(student);
+      const feeStatus = toFeeStructureStatus(boardingStatus, className);
+      const structure =
+        assignment == null && feeStatus != null
+          ? await StudentFeeStructure.findOne({ where: { term, boardingStatus: feeStatus } })
+          : null;
+      if (assignment == null && structure != null) {
+        await StudentFeeAssignment.create({
+          studentId,
+          term,
+          amountDueUgx: Number(structure.amountDueUgx),
+          notes: structure.notes ?? null,
+        });
+      }
       const sumRaw = await StudentFeePayment.sum("amount_paid_ugx", { where: { studentId, term } });
       const previousPaidUgx = Math.max(Number(sumRaw ?? 0) || 0, 0);
       const targetDue =
-        assignment != null ? Number(assignment.amountDueUgx) : previousPaidUgx + amountPaidUgx;
-      const totalAfter = previousPaidUgx + amountPaidUgx;
-      const totalFeesDueUgx = Math.max(targetDue, totalAfter);
-      const outstandingAfterUgx = Math.max(totalFeesDueUgx - totalAfter, 0);
-      const creditAmountUgx = Math.max(totalAfter - totalFeesDueUgx, 0);
+        assignment != null
+          ? Number(assignment.amountDueUgx)
+          : structure != null
+            ? Number(structure.amountDueUgx)
+            : previousPaidUgx + amountPaidUgx;
+      const summary = await calculatePaymentSummary({
+        previousPaidUgx,
+        amountPaidUgx,
+        targetDueUgx: targetDue,
+      });
+      const totalFeesDueUgx = summary.totalFeesDueUgx;
+      const outstandingAfterUgx = summary.outstandingAfterUgx;
+      const creditAmountUgx = summary.creditAmountUgx;
 
       const createdReceipt = await StudentFeeReceipt.create({
         studentId,
@@ -102,7 +156,9 @@ export function createMeFinancePaymentsRouter() {
         paymentMethod,
         paidBy,
         receiptId: createdReceipt.id,
+        changeReason,
       });
+
 
       return res.status(201).json({
         item: {

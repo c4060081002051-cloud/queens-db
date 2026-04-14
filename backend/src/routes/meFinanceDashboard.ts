@@ -4,8 +4,10 @@ import {
   DailyExpenseEntry,
   DailyFinanceReport,
   StaffPayrollEntry,
+  Student,
   StudentFeePayment,
 } from "../models/index.js";
+
 
 function ymd(d = new Date()): string {
   const y = d.getFullYear();
@@ -17,7 +19,7 @@ function ymd(d = new Date()): string {
 export function createMeFinanceDashboardRouter() {
   const r = Router();
 
-  r.get("/finance/dashboard", async (req, res) => {
+ r.get("/finance/dashboard", async (req, res) => {
     try {
       const today = ymd();
       const ymRaw = typeof req.query.month === "string" ? req.query.month.trim() : "";
@@ -26,7 +28,16 @@ export function createMeFinanceDashboardRouter() {
       const monthStart = `${monthKey}-01`;
       const monthEnd = `${monthKey}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
 
-      const [todayPaymentsRaw, todayExpensesRaw, report, payrollRows] = await Promise.all([
+      const [
+        todayPaymentsRaw,
+        todayExpensesRaw,
+        report,
+        payrollRows,
+        monthIncomeRaw,
+        monthExpensesRaw,
+        recentPayments,
+        recentExpenses,
+      ] = await Promise.all([
         StudentFeePayment.sum("amount_paid_ugx", {
           where: { createdAt: { [Op.between]: [`${today} 00:00:00`, `${today} 23:59:59`] } },
         }),
@@ -36,20 +47,54 @@ export function createMeFinanceDashboardRouter() {
           where: { monthKey },
           order: [["created_at", "DESC"]],
         }),
-      ]);
-
-      const [monthIncomeRaw, monthExpensesRaw] = await Promise.all([
         StudentFeePayment.sum("amount_paid_ugx", {
           where: { createdAt: { [Op.between]: [`${monthStart} 00:00:00`, `${monthEnd} 23:59:59`] } },
         }),
         DailyExpenseEntry.sum("amount_ugx", {
           where: { expenseDate: { [Op.between]: [monthStart, monthEnd] } },
         }),
+        StudentFeePayment.findAll({
+          include: [{ model: Student, as: "student", attributes: ["firstName", "lastName", "admissionNumber"] }],
+          order: [["id", "DESC"]],
+          limit: 5,
+        }),
+        DailyExpenseEntry.findAll({
+          order: [["id", "DESC"]],
+          limit: 5,
+        }),
       ]);
+
+      const methodBreakdownRaw = await StudentFeePayment.findAll({
+        attributes: [
+          "paymentMethod",
+          [fn("SUM", col("amount_paid_ugx")), "total"],
+        ],
+        where: { createdAt: { [Op.between]: [`${monthStart} 00:00:00`, `${monthEnd} 23:59:59`] } },
+        group: ["paymentMethod"],
+      });
 
       const totalPayroll = payrollRows.reduce((acc, r) => acc + (Number(r.grossAmountUgx) || 0), 0);
       const paidPayroll = payrollRows.reduce((acc, r) => acc + (Number(r.paidAmountUgx) || 0), 0);
       const payrollArrears = payrollRows.reduce((acc, r) => acc + (Number(r.arrearsUgx) || 0), 0);
+
+      const recentTransactions = [
+        ...recentPayments.map(p => ({
+          id: `p-${p.id}`,
+          type: "income" as const,
+          label: (p as any).student ? `${(p as any).student.firstName} ${(p as any).student.lastName}` : "Student Payment",
+          amount: Number(p.amountPaidUgx),
+          method: p.paymentMethod,
+          date: p.createdAt,
+        })),
+        ...recentExpenses.map(e => ({
+          id: `e-${e.id}`,
+          type: "expense" as const,
+          label: e.description || e.category,
+          amount: Number(e.amountUgx),
+          method: e.paymentMethod,
+          date: e.createdAt,
+        })),
+      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10);
 
       return res.json({
         today: {
@@ -66,6 +111,10 @@ export function createMeFinanceDashboardRouter() {
           totalIncome: Number(monthIncomeRaw ?? 0) || 0,
           totalExpenses: Number(monthExpensesRaw ?? 0) || 0,
           net: (Number(monthIncomeRaw ?? 0) || 0) - (Number(monthExpensesRaw ?? 0) || 0),
+          methodBreakdown: methodBreakdownRaw.map((mb: any) => ({
+            method: mb.paymentMethod,
+            amount: Number(mb.get("total")),
+          })),
         },
         payroll: {
           monthKey,
@@ -73,6 +122,7 @@ export function createMeFinanceDashboardRouter() {
           paidToDate: paidPayroll,
           arrears: payrollArrears,
         },
+        recentTransactions,
       });
     } catch (err) {
       console.error(err);

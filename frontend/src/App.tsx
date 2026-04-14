@@ -111,6 +111,49 @@ export default function App() {
     }
   }, [token, refreshProfile]);
 
+  useEffect(() => {
+    const onError = (event: ErrorEvent) => {
+      // #region agent log
+      fetch("http://127.0.0.1:7892/ingest/16abbfe8-e461-4655-b535-5e0791d093a7", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6885fa" },
+        body: JSON.stringify({
+          sessionId: "6885fa",
+          runId: "initial",
+          hypothesisId: "H1",
+          location: "frontend/src/App.tsx:117",
+          message: "frontend_runtime_error",
+          data: { message: event.message ?? "unknown", file: event.filename ?? null },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+    };
+    const onUnhandled = (event: PromiseRejectionEvent) => {
+      // #region agent log
+      fetch("http://127.0.0.1:7892/ingest/16abbfe8-e461-4655-b535-5e0791d093a7", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6885fa" },
+        body: JSON.stringify({
+          sessionId: "6885fa",
+          runId: "initial",
+          hypothesisId: "H1",
+          location: "frontend/src/App.tsx:134",
+          message: "frontend_unhandled_rejection",
+          data: { reasonType: typeof event.reason },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+    };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onUnhandled);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onUnhandled);
+    };
+  }, []);
+
   const login = useCallback(
     async (opts: { rememberEmail: boolean }) => {
       setError(null);
