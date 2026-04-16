@@ -63,88 +63,7 @@ async function main() {
     sectionName: string;
     classRoomId: number;
     parentEmail: string | null;
-  }> = [
-    {
-      admissionNumber: "QJS-2024-0142",
-      firstName: "Grace",
-      lastName: "Nakato A.",
-      gender: "Female",
-      rollNumber: "12",
-      sectionName: "East",
-      classRoomId: p4.id,
-      parentEmail: "nambi.parent@example.com",
-    },
-    {
-      admissionNumber: "QJS-2023-0098",
-      firstName: "Daniel",
-      lastName: "Mugisha K.",
-      gender: "Male",
-      rollNumber: "08",
-      sectionName: "West",
-      classRoomId: p6.id,
-      parentEmail: "mugisha.family@example.com",
-    },
-    {
-      admissionNumber: "QJS-2025-0201",
-      firstName: "Sarah",
-      lastName: "Achieng",
-      gender: "Female",
-      rollNumber: "03",
-      sectionName: "East",
-      classRoomId: p4.id,
-      parentEmail: "nambi.parent@example.com",
-    },
-    {
-      admissionNumber: "QJS-2022-0055",
-      firstName: "Peter",
-      lastName: "Okello",
-      gender: "Male",
-      rollNumber: "21",
-      sectionName: "North",
-      classRoomId: p6.id,
-      parentEmail: "okello.guardian@example.com",
-    },
-    {
-      admissionNumber: "QJS-2024-0188",
-      firstName: "Irene",
-      lastName: "Nalubega",
-      gender: "Female",
-      rollNumber: "15",
-      sectionName: "West",
-      classRoomId: p4.id,
-      parentEmail: "nalubega.contact@example.com",
-    },
-    {
-      admissionNumber: "QJS-2023-0112",
-      firstName: "James",
-      lastName: "Ssemwogerere",
-      gender: "Male",
-      rollNumber: "07",
-      sectionName: "East",
-      classRoomId: p6.id,
-      parentEmail: "mugisha.family@example.com",
-    },
-    {
-      admissionNumber: "QJS-2025-0220",
-      firstName: "Hope",
-      lastName: "Namukasa",
-      gender: "Female",
-      rollNumber: "19",
-      sectionName: "South",
-      classRoomId: p4.id,
-      parentEmail: null,
-    },
-    {
-      admissionNumber: "QJS-2024-0099",
-      firstName: "Brian",
-      lastName: "Kato",
-      gender: "Male",
-      rollNumber: "04",
-      sectionName: "North",
-      classRoomId: p6.id,
-      parentEmail: "okello.guardian@example.com",
-    },
-  ];
+  }> = [];
 
   for (const s of studentSeeds) {
     const [row, created] = await Student.findOrCreate({
@@ -174,38 +93,7 @@ async function main() {
     }
   }
 
-  await StaffMember.bulkCreate([
-    {
-      userId: null,
-      displayName: "Ms. Nakato",
-      email: "nakato.t@queens.school",
-      staffRole: "teaching",
-    },
-    {
-      userId: null,
-      displayName: "Mr. Okello",
-      email: "okello.t@queens.school",
-      staffRole: "teaching",
-    },
-    {
-      userId: null,
-      displayName: "Mrs. Birungi",
-      email: "library@queens.school",
-      staffRole: "librarian",
-    },
-    {
-      userId: null,
-      displayName: "Mr. Ssemakula",
-      email: "library2@queens.school",
-      staffRole: "librarian",
-    },
-    {
-      userId: null,
-      displayName: "Ms. Nambi",
-      email: "accounts@queens.school",
-      staffRole: "accountant",
-    },
-  ]);
+  await StaffMember.bulkCreate([]);
 
   await Enquiry.bulkCreate([
     {
@@ -222,26 +110,7 @@ async function main() {
     },
   ]);
 
-  await NoticeBoardEntry.bulkCreate([
-    {
-      authorUserId: null,
-      authorLabel: "Head Teacher",
-      body: "Staff meeting moved to Friday 3:00 PM — agenda: term reports and attendance policy.",
-      publishedAt: new Date("2026-04-05T09:00:00Z"),
-    },
-    {
-      authorUserId: null,
-      authorLabel: "Admin",
-      body: "Fee statements for Term 2 will be available next week. Parents notified via SMS.",
-      publishedAt: new Date("2026-04-03T14:30:00Z"),
-    },
-    {
-      authorUserId: null,
-      authorLabel: "Sports Dept.",
-      body: "Inter-house athletics — volunteers needed for scoring desk.",
-      publishedAt: new Date("2026-04-01T11:00:00Z"),
-    },
-  ]);
+  await NoticeBoardEntry.bulkCreate([]);
 
   await SchoolExpense.bulkCreate([
     {

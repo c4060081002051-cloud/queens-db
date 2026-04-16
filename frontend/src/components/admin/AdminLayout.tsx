@@ -18,6 +18,7 @@ export type AdminUser = {
   role: string;
   email: string;
   twoFactorEnabled?: boolean;
+  permissions?: string[];
 };
 
 type AdminLayoutProps = {
@@ -64,11 +65,14 @@ type AdminLayoutProps = {
       | "debtors_report"
       | "record_payment"
       | "bursery"
+      | "busery"
       | "staff_payment"
       | "finance_summary",
   ) => void;
   /** Curriculum hub: open exam/test stats and result pages. */
   onSelectCurriculumSection?: (section: CurriculumSection) => void;
+  /** Communication hub: open the notice board dashboard. */
+  onSelectCommunicationSection?: () => void;
   /** Refresh `/api/auth/me` after password or 2FA changes. */
   onAccountUpdated?: () => void;
 };
@@ -349,16 +353,19 @@ type NavLeaf = {
     | "debtors_report"
     | "record_payment"
     | "bursery"
+    | "busery"
     | "staff_payment"
     | "finance_summary";
   curriculumSection?: CurriculumSection;
   classSection?: ClassesSection;
+  communicationSection?: "notice";
 };
 
 type NavGroup = { id: string; title: string; icon: NavIcon; items: NavLeaf[] };
 
-function buildNavGroups(t: (key: string) => string): NavGroup[] {
-  return [
+function buildNavGroups(t: (key: string) => string, role: string, permissions: string[]): NavGroup[] {
+  const r = role.toLowerCase();
+  const allGroups: NavGroup[] = [
     { id: "dashboard", title: t("nav.dashboard"), icon: IconHome, items: [] },
     {
       id: "student_hub",
@@ -424,6 +431,7 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
         { icon: IconWallet, label: t("nav.operations.accounts"), financeSection: "record_payment" },
         { icon: IconBus, label: t("nav.operations.transport"), financeSection: "bursery" },
         { icon: IconUsers, label: t("nav.operations.hostel"), financeSection: "staff_payment" },
+        { icon: IconClipboard, label: t("nav.operations.busery"), financeSection: "busery" },
         { icon: IconChartBars, label: t("nav.operations.hostelManager"), financeSection: "finance_summary" },
       ],
     },
@@ -432,7 +440,7 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
       title: t("nav.communication"),
       icon: IconMail,
       items: [
-        { icon: IconBell, label: t("nav.communication.notice") },
+        { icon: IconBell, label: t("nav.communication.notice"), communicationSection: "notice" },
         {
           icon: IconBell,
           label: t("nav.communication.notificationsList"),
@@ -470,12 +478,32 @@ function buildNavGroups(t: (key: string) => string): NavGroup[] {
         },
         { icon: IconGrid, label: t("nav.settings.general") },
         { icon: IconBell, label: t("nav.settings.notifications") },
-        { icon: IconUsers, label: t("nav.settings.users") },
+        { icon: IconUsers, label: t("nav.settings.users"), settingsPanel: "users_roles" },
         { icon: IconBackup, label: t("nav.settings.backup") },
         { icon: IconRestore, label: t("nav.settings.restore") },
       ],
     },
   ];
+
+  if (r === "super_admin" || r === "admin") return allGroups;
+
+  const mapping: Record<string, string> = {
+    dashboard: "nav_dashboard",
+    student_hub: "nav_students",
+    classes: "nav_classes",
+    staff: "nav_staff",
+    curriculum: "nav_curriculum",
+    operations: "nav_operations",
+    communication: "nav_communication",
+    statistics: "view_stats",
+    insights: "view_insights",
+    settings: "nav_settings",
+  };
+
+  return allGroups.filter((g) => {
+    const requiredPerm = mapping[g.id];
+    return requiredPerm ? permissions.includes(requiredPerm) : true;
+  });
 }
 
 const defaultOpenGroups: Record<string, boolean> = {
@@ -530,11 +558,15 @@ export function AdminLayout({
   onSelectClassSection,
   onSelectFinanceSection,
   onSelectCurriculumSection,
+  onSelectCommunicationSection,
   onAccountUpdated,
 }: AdminLayoutProps) {
   const { t, locale, setLocale } = useI18n();
   const { resolvedTheme, density } = useTheme();
-  const navGroups = useMemo(() => buildNavGroups(t), [t]);
+  const navGroups = useMemo(
+    () => buildNavGroups(t, user?.role ?? "admin", user?.permissions ?? []),
+    [t, user?.role, user?.permissions],
+  );
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => ({ ...defaultOpenGroups }));
@@ -1040,6 +1072,9 @@ export function AdminLayout({
                                   }
                                   if (item.curriculumSection) {
                                     onSelectCurriculumSection?.(item.curriculumSection);
+                                  }
+                                  if (item.communicationSection === "notice") {
+                                    onSelectCommunicationSection?.();
                                   }
                                   setSidebarOpen(false);
                                 }}

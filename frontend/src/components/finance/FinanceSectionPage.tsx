@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BuseryPage, type BuseryRecord } from "./BuseryPage";
 import { DailyExpensesPage } from "./expenses/DailyExpensesPage";
 import { DailyLedgerPage } from "./ledger/DailyLedgerPage";
 import { FinanceOverviewPage } from "./overview/FinanceOverviewPage";
@@ -6,6 +7,7 @@ import { RecordStudentPaymentPage } from "./payments/RecordStudentPaymentPage";
 import { PayrollSummaryPage } from "./payroll/PayrollSummaryPage";
 import { AdminDailyReportsPage } from "./reports/AdminDailyReportsPage";
 import { DebtorsReportPage } from "./reports/DebtorsReportPage";
+import { AssignBurseryPage } from "./AssignBurseryPage";
 
 export type FinanceSection =
   | "overview"
@@ -13,6 +15,8 @@ export type FinanceSection =
   | "debtors_report"
   | "record_payment"
   | "bursery"
+  | "busery"
+  | "bursery_assignment"
   | "staff_payment"
   | "finance_summary";
 
@@ -21,7 +25,9 @@ const sectionTitle: Record<FinanceSection, string> = {
   daily_report: "Daily Ledger",
   debtors_report: "Debtors Report",
   record_payment: "Record Student Payment",
-  bursery: "Daily Expenses",
+  bursery: "Record expences",
+  busery: "Busery",
+  bursery_assignment: "Assign Student Bursary",
   staff_payment: "Payroll Summary",
   finance_summary: "Admin Daily Reports",
 };
@@ -29,11 +35,14 @@ const sectionTitle: Record<FinanceSection, string> = {
 export function FinanceSectionPage({
   section,
   onChangeSection,
+  user,
 }: {
   section: FinanceSection;
   onChangeSection: (value: FinanceSection) => void;
+  user: any;
 }) {
   const [ledgerDate, setLedgerDate] = useState<string | undefined>(undefined);
+  const [selectedBuseryRecord, setSelectedBuseryRecord] = useState<BuseryRecord | null>(null);
 
   const navigateToLedger = (date: string) => {
     setLedgerDate(date);
@@ -44,8 +53,9 @@ export function FinanceSectionPage({
     { key: "record_payment", desc: "Record payments and print DB-backed receipts.", icon: "💳", color: "from-[#eef2f7] to-[#e0e7f1]" },
     { key: "daily_report", desc: "Track ledger entries for the selected day.", icon: "📚", color: "from-[#fdfcfb] to-[#f4f1ee]" },
     { key: "finance_summary", desc: "Run daily report submission and review flow.", icon: "📑", color: "from-[#f5fbf8] to-[#e8f5ed]" },
-    { key: "bursery", desc: "Capture day expenses into the school ledger.", icon: "🛒", color: "from-[#fff9f4] to-[#ffeadb]" },
     { key: "staff_payment", desc: "View payroll totals and arrears by month.", icon: "👥", color: "from-[#f8f9ff] to-[#e8ebf9]" },
+    { key: "busery", desc: "Open the bursery expenses page.", icon: "🧾", color: "from-[#fff9f4] to-[#ffeadb]" },
+    { key: "bursery", desc: "Capture day expenses into the school ledger.", icon: "🛒", color: "from-[#fff9f4] to-[#ffeadb]" },
     { key: "debtors_report", desc: "Review student debtors and outstanding balances.", icon: "📉", color: "from-[#fff5f5] to-[#ffe8e8]" },
   ];
 
@@ -102,6 +112,38 @@ export function FinanceSectionPage({
       <div className="min-w-0 space-y-4">
         {renderHeader(sectionTitle.bursery, "Log operational expenses into the system.")}
         <DailyExpensesPage />
+      </div>
+    );
+  }
+
+  if (section === "busery") {
+    return (
+      <div className="min-w-0 space-y-4">
+        {renderHeader(sectionTitle.busery, "Track bursary awards and support records.")}
+        <BuseryPage 
+          isAdmin={user?.role === "admin"} 
+          onAssignClick={() => {
+            setSelectedBuseryRecord(null);
+            onChangeSection("bursery_assignment");
+          }}
+          onEditRow={(row) => {
+            setSelectedBuseryRecord(row);
+            onChangeSection("bursery_assignment");
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (section === "bursery_assignment") {
+    return (
+      <div className="min-w-0 space-y-4">
+        {renderHeader(sectionTitle.bursery_assignment, "Assign percentage-based discounts to students.")}
+        <AssignBurseryPage
+          initialStudentId={selectedBuseryRecord?.id}
+          initialTerm={selectedBuseryRecord?.term}
+          initialPercentage={selectedBuseryRecord?.coverageLabel.replace("%", "")}
+        />
       </div>
     );
   }

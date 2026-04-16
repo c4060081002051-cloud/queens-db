@@ -193,6 +193,7 @@ export function createAuthRouter(config: Config) {
           email: fields.email,
           role: fields.role,
           twoFactorEnabled: fields.twoFactorEnabled,
+          permissions: fields.permissions,
         },
       });
     } catch {

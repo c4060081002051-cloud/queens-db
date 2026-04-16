@@ -54,22 +54,9 @@ type NonTeachingStaffRecord = {
   nationalIdPhotoName?: string;
 };
 
-const TEACHERS: TeachingStaffRecord[] = [
-  { id: "T-001", name: "Sarah Namubiru", section: "kindergarten", subjects: "Literacy, Numeracy", assignedClass: "KG1" },
-  { id: "T-002", name: "Paul Kato", section: "kindergarten", subjects: "Creative Arts, Play Group", assignedClass: "KG2" },
-  { id: "T-003", name: "Diana Nakato", section: "lower_primary", subjects: "English, Social Studies", assignedClass: "P2" },
-  { id: "T-004", name: "James Ssenyonga", section: "lower_primary", subjects: "Mathematics, Science", assignedClass: "P3" },
-  { id: "T-005", name: "Ruth Nabirye", section: "upper_primary", subjects: "Science, Agriculture", assignedClass: "P6" },
-  { id: "T-006", name: "Moses Kagimu", section: "upper_primary", subjects: "Mathematics, ICT", assignedClass: "P7" },
-];
+const TEACHERS: TeachingStaffRecord[] = [];
 
-const NON_TEACHING_STAFF: NonTeachingStaffRecord[] = [
-  { id: "N-001", name: "Grace Nambassa", role: "School Administrator", category: "administration" },
-  { id: "N-002", name: "Robert Ssekandi", role: "School Bursar", category: "finance" },
-  { id: "N-003", name: "Samuel Ssemanda", role: "School Librarian", category: "library" },
-  { id: "N-004", name: "Irene Nakitto", role: "School Nurse", category: "health" },
-  { id: "N-005", name: "Peter Mugerwa", role: "Transport Coordinator", category: "operations" },
-];
+const NON_TEACHING_STAFF: NonTeachingStaffRecord[] = [];
 
 const teachingSectionLabels: Record<TeachingSection, string> = {
   all: "All Teaching Staff",

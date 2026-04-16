@@ -97,6 +97,7 @@ export class Student extends Model {
   declare emergencyContactPhone: string | null;
   declare guardianName: string | null;
   declare guardianPhone: string | null;
+  declare bursaryPercentage: number;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 }
@@ -260,9 +261,25 @@ export class NoticeBoardEntry extends Model {
   declare id: number;
   declare authorUserId: number | null;
   declare authorLabel: string;
+  declare title: string;
   declare body: string;
+  declare type: "function" | "assignment" | "general";
+  declare eventDate: string | null;
   declare publishedAt: Date;
   declare readonly createdAt: Date;
+
+  declare comments?: NoticeBoardComment[];
+}
+
+export class NoticeBoardComment extends Model {
+  declare id: number;
+  declare noticeId: number;
+  declare userId: number;
+  declare authorName: string;
+  declare body: string;
+  declare readonly createdAt: Date;
+
+  declare notice?: NoticeBoardEntry;
 }
 
 export class SchoolExpense extends Model {
@@ -310,6 +327,12 @@ export class AttendanceRecord extends Model {
 export class DashboardKpi extends Model {
   declare kpiKey: string;
   declare valueText: string;
+}
+
+export class RolePermission extends Model {
+  declare id: number;
+  declare role: string;
+  declare permissionKey: string;
 }
 
 export function setupDatabase(config: Config): Sequelize {
@@ -658,6 +681,12 @@ export function setupDatabase(config: Config): Sequelize {
         type: DataTypes.STRING(32),
         allowNull: true,
         field: "guardian_phone",
+      },
+      bursaryPercentage: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        field: "bursary_percentage",
       },
     },
     {
@@ -1522,7 +1551,18 @@ export function setupDatabase(config: Config): Sequelize {
         allowNull: false,
         field: "author_label",
       },
+      title: { type: DataTypes.STRING(255), allowNull: false },
       body: { type: DataTypes.TEXT, allowNull: false },
+      type: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+        defaultValue: "general",
+      },
+      eventDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        field: "event_date",
+      },
       publishedAt: {
         type: DataTypes.DATE,
         allowNull: false,
@@ -1539,6 +1579,44 @@ export function setupDatabase(config: Config): Sequelize {
       sequelize,
       tableName: "notice_board_entries",
       modelName: "NoticeBoardEntry",
+      timestamps: false,
+    },
+  );
+
+  NoticeBoardComment.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      noticeId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "notice_id",
+      },
+      userId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "user_id",
+      },
+      authorName: {
+        type: DataTypes.STRING(120),
+        allowNull: false,
+        field: "author_name",
+      },
+      body: { type: DataTypes.TEXT, allowNull: false },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "notice_board_comments",
+      modelName: "NoticeBoardComment",
       timestamps: false,
     },
   );
@@ -1739,6 +1817,28 @@ export function setupDatabase(config: Config): Sequelize {
     },
   );
 
+  RolePermission.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      role: { type: DataTypes.STRING(50), allowNull: false },
+      permissionKey: {
+        type: DataTypes.STRING(64),
+        allowNull: false,
+        field: "permission_key",
+      },
+    },
+    {
+      sequelize,
+      tableName: "role_permissions",
+      modelName: "RolePermission",
+      timestamps: false,
+    },
+  );
+
   StaffMember.belongsTo(User, {
     foreignKey: "user_id",
     as: "user",
@@ -1758,6 +1858,27 @@ export function setupDatabase(config: Config): Sequelize {
   User.hasMany(NoticeBoardEntry, {
     foreignKey: "author_user_id",
     as: "noticeAuthorships",
+    constraints: false,
+  });
+
+  NoticeBoardComment.belongsTo(NoticeBoardEntry, {
+    foreignKey: "notice_id",
+    as: "notice",
+    constraints: false,
+  });
+  NoticeBoardEntry.hasMany(NoticeBoardComment, {
+    foreignKey: "notice_id",
+    as: "comments",
+    constraints: false,
+  });
+  NoticeBoardComment.belongsTo(User, {
+    foreignKey: "user_id",
+    as: "user",
+    constraints: false,
+  });
+  User.hasMany(NoticeBoardComment, {
+    foreignKey: "user_id",
+    as: "noticeComments",
     constraints: false,
   });
 

@@ -109,11 +109,15 @@ export function createMeFinancePaymentsRouter() {
           ? await StudentFeeStructure.findOne({ where: { term, boardingStatus: feeStatus } })
           : null;
       if (assignment == null && structure != null) {
+        const percentage = Number(student.bursaryPercentage) || 0;
+        const baseAmount = Number(structure.amountDueUgx);
+        const discountedAmount = Math.round(baseAmount * (1 - percentage / 100));
+        
         await StudentFeeAssignment.create({
           studentId,
           term,
-          amountDueUgx: Number(structure.amountDueUgx),
-          notes: structure.notes ?? null,
+          amountDueUgx: discountedAmount,
+          notes: percentage > 0 ? `Bursery applied: ${percentage}%` : (structure.notes ?? null),
         });
       }
       const sumRaw = await StudentFeePayment.sum("amount_paid_ugx", { where: { studentId, term } });

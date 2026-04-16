@@ -2,8 +2,9 @@ import { Router } from "express";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import type { Config } from "../config.js";
-import { loadUserEmailAndTwoFactor } from "../db/loadUserSafe.js";
-import { User } from "../models/index.js";
+import { loadUserEmailAndTwoFactor, loadUserMeFields } from "../db/loadUserSafe.js";
+import { User, RolePermission } from "../models/index.js";
+import { PERMISSION_KEYS } from "../constants/permissions.js";
 import {
   issueSecurityOtpChallenge,
   verifyAndConsumeSecurityOtpChallenge,
@@ -24,6 +25,11 @@ const requestTwoFactorOtpSchema = z.object({
 const confirmTwoFactorSchema = z.object({
   enable: z.boolean(),
   otp: z.string().min(4),
+});
+
+const updateRolePermissionsSchema = z.object({
+  role: z.string().min(1),
+  permissions: z.array(z.string()),
 });
 
 export function createMeAccountRouter(config: Config) {
@@ -183,6 +189,57 @@ export function createMeAccountRouter(config: Config) {
           ? "Two-factor authentication is now on."
           : "Two-factor authentication is now off.",
       });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.get("/role-permissions", async (req, res) => {
+    const userId = req.userId!;
+    try {
+      const user = await User.findByPk(userId);
+      if (!user || (user.role !== "super_admin" && user.role !== "admin")) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const all = await RolePermission.findAll();
+      return res.json({
+        permissions: all,
+        availableKeys: PERMISSION_KEYS,
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/role-permissions", async (req, res) => {
+    const userId = req.userId!;
+    const parsed = updateRolePermissionsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid body" });
+    }
+
+    const { role, permissions } = parsed.data;
+
+    try {
+      const user = await User.findByPk(userId);
+      if (!user || (user.role !== "super_admin" && user.role !== "admin")) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      // Bulk update: delete all for this role and re-insert
+      await RolePermission.destroy({ where: { role } });
+      
+      const toCreate = permissions.map(pk => ({
+        role,
+        permissionKey: pk
+      }));
+
+      await RolePermission.bulkCreate(toCreate);
+
+      return res.json({ message: `Permissions updated for ${role}` });
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });

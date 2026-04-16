@@ -104,8 +104,15 @@ export function createMeFinanceStatementsRouter() {
       const receiptById = new Map<number, StudentFeeReceipt>();
       for (const rcp of receipts) receiptById.set(rcp.id, rcp);
 
-      const totalAssigned =
-        Number(assignment?.amountDueUgx ?? structure?.amountDueUgx ?? 0) || 0;
+      const percentage = Number(student.bursaryPercentage) || 0;
+      const baseAssigned = Number(assignment?.amountDueUgx ?? structure?.amountDueUgx ?? 0) || 0;
+      
+      // If we are using the structure (no assignment exists), apply the percentage.
+      // If assignment exists, we assume it already has the percentage applied (as per our update logic).
+      const totalAssigned = assignment 
+        ? baseAssigned 
+        : Math.round(baseAssigned * (1 - percentage / 100));
+
       const paymentAmounts = payments.map((p) => Number(p.amountPaidUgx) || 0);
       const summary = await calculateStatementSummary({
         totalAssignedUgx: totalAssigned,
