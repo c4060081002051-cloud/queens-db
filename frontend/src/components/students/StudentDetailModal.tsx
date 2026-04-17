@@ -735,9 +735,12 @@ export function StudentDetailModal({
                     Emergency Contact Phone *
                     <input
                       required
+                      type="tel"
+                      minLength={10}
+                      maxLength={13}
                       className={`${fieldClass} mt-1`}
                       value={emergencyContactPhone}
-                      onChange={(e) => setEmergencyContactPhone(e.target.value)}
+                      onChange={(e) => setEmergencyContactPhone(e.target.value.replace(/[^\d+]/g, ''))}
                     />
                   </label>
                   <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
@@ -751,9 +754,12 @@ export function StudentDetailModal({
                   <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
                     {t("students.form.guardianPhone")}
                     <input
+                      type="tel"
+                      minLength={10}
+                      maxLength={13}
                       className={`${fieldClass} mt-1`}
                       value={guardianPhone}
-                      onChange={(e) => setGuardianPhone(e.target.value)}
+                      onChange={(e) => setGuardianPhone(e.target.value.replace(/[^\d+]/g, ''))}
                     />
                   </label>
                   <label className="block text-xs font-semibold text-[#636e72]">

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiUrl, authHeaders } from "./api/baseUrl";
 import { LoginPage } from "./LoginPage";
 import { PasswordResetPage } from "./PasswordResetPage";
-import { Dashboard } from "./Dashboard";
+import { Dashboard } from "./dashboards/Dashboard";
 import "./App.css";
 
 const REMEMBER_KEY = "junior_school_remembered_email";
@@ -25,14 +25,61 @@ function maskEmailFor2fa(email: string): string {
   return `${vis}@${domain}`;
 }
 
-async function readJsonBody<T>(res: Response): Promise<T | null> {
+type ReadJsonOk<T> = { ok: true; data: T };
+type ReadJsonFail = { ok: false; emptyBody: boolean };
+
+async function readJsonBody<T>(
+  res: Response,
+): Promise<ReadJsonOk<T> | ReadJsonFail> {
   const text = await res.text();
-  if (!text.trim()) return null;
+  if (!text.trim()) return { ok: false, emptyBody: true };
   try {
-    return JSON.parse(text) as T;
+    return { ok: true, data: JSON.parse(text) as T };
   } catch {
-    return null;
+    return { ok: false, emptyBody: false };
   }
+}
+
+/** When the body is empty or not JSON (e.g. Vite 502 HTML while the API is down). */
+function describeUnparsedApiResponse(res: Response, emptyBody: boolean): string {
+  const s = res.status;
+  if (s === 502 || s === 504) {
+    return "Could not reach the API (bad gateway). Start the backend: npm run dev:backend from the repository root. If it stops immediately, start MySQL and check backend/.env (DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME).";
+  }
+  if (s === 503) {
+    return "The service is temporarily unavailable. Start MySQL and the backend, then try again.";
+  }
+  if (emptyBody) {
+    return "The server returned an empty response. Start the backend (npm run dev:backend) and ensure MySQL is running.";
+  }
+  return "The server returned a non-JSON response (often an HTML error page). Confirm the backend is running and that Vite proxies /api to it (see frontend/vite.config.ts).";
+}
+
+function debugLog(
+  runId: string,
+  hypothesisId: string,
+  location: string,
+  message: string,
+  data: Record<string, unknown>,
+) {
+  // #region agent log
+  fetch("http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "97f58a",
+    },
+    body: JSON.stringify({
+      sessionId: "97f58a",
+      runId,
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
 }
 
 export default function App() {
@@ -66,12 +113,15 @@ export default function App() {
       const res = await fetch(apiUrl("/api/auth/me"), {
         headers: authHeaders(),
       });
-      const data = await readJsonBody<MeResponse & { error?: string }>(res);
-      if (data === null) {
+      const parsed = await readJsonBody<MeResponse & { error?: string }>(res);
+      if (!parsed.ok) {
         setProfile(null);
-        setProfileError("Something went wrong. Please try again.");
+        setProfileError(
+          describeUnparsedApiResponse(res, parsed.emptyBody),
+        );
         return;
       }
+      const data = parsed.data;
       if (!res.ok) {
         setProfile(null);
         if (res.status === 401) {
@@ -111,53 +161,15 @@ export default function App() {
     }
   }, [token, refreshProfile]);
 
-  useEffect(() => {
-    const onError = (event: ErrorEvent) => {
-      // #region agent log
-      fetch("http://127.0.0.1:7892/ingest/16abbfe8-e461-4655-b535-5e0791d093a7", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6885fa" },
-        body: JSON.stringify({
-          sessionId: "6885fa",
-          runId: "initial",
-          hypothesisId: "H1",
-          location: "frontend/src/App.tsx:117",
-          message: "frontend_runtime_error",
-          data: { message: event.message ?? "unknown", file: event.filename ?? null },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-    };
-    const onUnhandled = (event: PromiseRejectionEvent) => {
-      // #region agent log
-      fetch("http://127.0.0.1:7892/ingest/16abbfe8-e461-4655-b535-5e0791d093a7", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "6885fa" },
-        body: JSON.stringify({
-          sessionId: "6885fa",
-          runId: "initial",
-          hypothesisId: "H1",
-          location: "frontend/src/App.tsx:134",
-          message: "frontend_unhandled_rejection",
-          data: { reasonType: typeof event.reason },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-    };
-    window.addEventListener("error", onError);
-    window.addEventListener("unhandledrejection", onUnhandled);
-    return () => {
-      window.removeEventListener("error", onError);
-      window.removeEventListener("unhandledrejection", onUnhandled);
-    };
-  }, []);
-
   const login = useCallback(
     async (opts: { rememberEmail: boolean }) => {
       setError(null);
       const trimmed = email.trim();
+      debugLog("initial", "H1", "frontend/src/App.tsx:login:start", "login_attempt_started", {
+        rememberEmail: opts.rememberEmail,
+        emailLength: trimmed.length,
+        hasPassword: Boolean(password),
+      });
       if (!trimmed) {
         setError("Please enter your email address.");
         return;
@@ -182,17 +194,38 @@ export default function App() {
             rememberMe: opts.rememberEmail,
           }),
         });
-        const data = await readJsonBody<{
+        debugLog("initial", "H2", "frontend/src/App.tsx:login:response", "login_response_received", {
+          status: res.status,
+          ok: res.ok,
+          redirected: res.redirected,
+          contentType: res.headers.get("content-type") ?? null,
+          responseUrl: res.url,
+        });
+        const parsed = await readJsonBody<{
           token?: string;
           requiresTwoFactor?: boolean;
           twoFactorToken?: string;
           error?: string;
         }>(res);
-        if (data === null) {
-          setError("Something went wrong. Please try again.");
+        if (!parsed.ok) {
+          debugLog("initial", "H3", "frontend/src/App.tsx:login:parse-failed", "login_response_parse_failed", {
+            status: res.status,
+            emptyBody: parsed.emptyBody,
+          });
+          if (res.status === 401) {
+            setError("Invalid email or password.");
+            return;
+          }
+          setError(describeUnparsedApiResponse(res, parsed.emptyBody));
           return;
         }
+        const data = parsed.data;
         if (!res.ok) {
+          debugLog("initial", "H4", "frontend/src/App.tsx:login:not-ok", "login_json_error_response", {
+            status: res.status,
+            hasErrorField: Boolean(data.error),
+            requiresTwoFactor: Boolean(data.requiresTwoFactor),
+          });
           if (res.status === 503 && data.error === "Database unavailable") {
             setError(
               "The service is temporarily unavailable. Please try again later.",
@@ -219,6 +252,10 @@ export default function App() {
           setError("Sign-in failed. Please try again.");
           return;
         }
+        debugLog("initial", "H5", "frontend/src/App.tsx:login:success", "login_success_token_received", {
+          rememberEmail: opts.rememberEmail,
+          hasToken: Boolean(data.token),
+        });
         localStorage.setItem("token", data.token);
         if (opts.rememberEmail) {
           localStorage.setItem(REMEMBER_KEY, trimmed);
@@ -228,7 +265,12 @@ export default function App() {
         setToken(data.token);
         setPending2FA(null);
         setLoginBanner(null);
-      } catch {
+      } catch (err) {
+        debugLog("initial", "H2", "frontend/src/App.tsx:login:catch", "login_fetch_threw", {
+          errorName: err instanceof Error ? err.name : "unknown",
+          errorMessage:
+            err instanceof Error ? err.message : "non_error_thrown",
+        });
         setError(
           "We couldn’t connect to the server. Check your internet connection and try again.",
         );
@@ -253,11 +295,14 @@ export default function App() {
             otp,
           }),
         });
-        const data = await readJsonBody<{ token?: string; error?: string }>(res);
-        if (data === null) {
-          setError("Something went wrong. Please try again.");
+        const parsed = await readJsonBody<{ token?: string; error?: string }>(
+          res,
+        );
+        if (!parsed.ok) {
+          setError(describeUnparsedApiResponse(res, parsed.emptyBody));
           return;
         }
+        const data = parsed.data;
         if (!res.ok) {
           if (res.status === 503 && data.error === "Database unavailable") {
             setError(

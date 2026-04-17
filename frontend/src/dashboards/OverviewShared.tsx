@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
-import { useI18n } from "../../i18n/I18nProvider";
-import { type DashboardCalendar, type DashboardLearner } from "../../api/dashboard";
+import { useI18n } from "../i18n/I18nProvider";
+import { type DashboardCalendar, type DashboardLearner } from "../api/dashboard";
 
 const learnerToolbarBtn =
   "rounded-xl bg-gradient-to-br from-[#faf7f0] to-[#ebe4d9] p-2.5 text-[#636e72] shadow-[2px_2px_5px_rgba(200,188,170,0.35),-1px_-1px_4px_rgba(255,255,255,0.9)] transition hover:text-[#5a8faf] active:translate-y-px";

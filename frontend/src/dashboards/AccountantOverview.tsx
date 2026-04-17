@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { type DashboardPayload } from "../../api/dashboard";
-import { fetchFinanceDashboard } from "../../api/financeDashboard";
-import { type FinanceDashboardPayload } from "../finance/shared/financeTypes";
-import { formatCurrencyUGX } from "../finance/shared/financeFormat";
-import { useI18n } from "../../i18n/I18nProvider";
+import { type DashboardPayload } from "../api/dashboard";
+import { fetchFinanceDashboard } from "../api/financeDashboard";
+import { type FinanceDashboardPayload } from "../components/finance/shared/financeTypes";
+import { formatCurrencyUGX } from "../components/finance/shared/financeFormat";
+import { useI18n } from "../i18n/I18nProvider";
 import { StatCard, DashboardSectionTitle } from "./OverviewShared";
 
 export function AccountantOverview({ dash, loading }: { dash: DashboardPayload | null, loading: boolean }) {

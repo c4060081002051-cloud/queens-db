@@ -1,5 +1,5 @@
-import { type DashboardPayload } from "../../api/dashboard";
-import { useI18n } from "../../i18n/I18nProvider";
+import { type DashboardPayload } from "../api/dashboard";
+import { useI18n } from "../i18n/I18nProvider";
 import { StatCard, EventScheduleCard, StatisticsChartCard, DashboardSectionTitle } from "./OverviewShared";
 
 export function HeadTeacherOverview({ dash, loading }: { dash: DashboardPayload | null, loading: boolean }) {

@@ -313,7 +313,7 @@ function TeachingStaffForm({
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
               <FieldLabel htmlFor="staff-phone" required>Primary Phone Number</FieldLabel>
-              <input id="staff-phone" name="staff-phone" required className={inputClassName} />
+              <input id="staff-phone" name="staff-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} />
             </div>
             <div>
               <FieldLabel htmlFor="staff-email">Email Address</FieldLabel>
@@ -424,7 +424,7 @@ function TeachingStaffForm({
             </div>
             <div>
               <FieldLabel htmlFor="staff-emergency-phone" required>Emergency Contact Phone</FieldLabel>
-              <input id="staff-emergency-phone" name="staff-emergency-phone" required className={inputClassName} />
+              <input id="staff-emergency-phone" name="staff-emergency-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} />
             </div>
             <div>
               <FieldLabel htmlFor="staff-referee-name" required>Professional Referee Name</FieldLabel>
@@ -532,7 +532,7 @@ function NonTeachingStaffForm({
         </div>
         <div>
           <FieldLabel htmlFor="nonstaff-phone" required>Primary Phone Number</FieldLabel>
-          <input id="nonstaff-phone" name="nonstaff-phone" required className={inputClassName} />
+          <input id="nonstaff-phone" name="nonstaff-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} />
         </div>
         <div className="sm:col-span-2">
           <FieldLabel htmlFor="nonstaff-address" required>Current Physical Address</FieldLabel>
@@ -544,7 +544,7 @@ function NonTeachingStaffForm({
         </div>
         <div>
           <FieldLabel htmlFor="nonstaff-emergency-phone" required>Emergency Contact Phone</FieldLabel>
-          <input id="nonstaff-emergency-phone" name="nonstaff-emergency-phone" required className={inputClassName} />
+          <input id="nonstaff-emergency-phone" name="nonstaff-emergency-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} />
         </div>
         <div>
           <FieldLabel htmlFor="nonstaff-national-id-number" required>National ID Number</FieldLabel>

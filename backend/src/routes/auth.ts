@@ -31,8 +31,52 @@ export function createAuthRouter(config: Config) {
   const r = Router();
 
   r.post("/login", async (req, res) => {
+    // #region agent log
+    fetch("http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "97f58a",
+      },
+      body: JSON.stringify({
+        sessionId: "97f58a",
+        runId: "initial",
+        hypothesisId: "H6",
+        location: "backend/src/routes/auth.ts:/login:start",
+        message: "backend_login_request_received",
+        data: {
+          hasBody: Boolean(req.body),
+          bodyKeys:
+            req.body && typeof req.body === "object"
+              ? Object.keys(req.body as Record<string, unknown>)
+              : [],
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
+      // #region agent log
+      fetch("http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "97f58a",
+        },
+        body: JSON.stringify({
+          sessionId: "97f58a",
+          runId: "initial",
+          hypothesisId: "H6",
+          location: "backend/src/routes/auth.ts:/login:validation",
+          message: "backend_login_validation_failed",
+          data: {
+            issueCount: parsed.error.issues.length,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       return res.status(400).json({
         error: "Enter your email and password.",
       });
@@ -51,11 +95,55 @@ export function createAuthRouter(config: Config) {
         user = found;
       }
     } catch (err) {
+      // #region agent log
+      fetch("http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "97f58a",
+        },
+        body: JSON.stringify({
+          sessionId: "97f58a",
+          runId: "initial",
+          hypothesisId: "H7",
+          location: "backend/src/routes/auth.ts:/login:userLookup",
+          message: "backend_login_user_lookup_failed",
+          data: {
+            errorName: err instanceof Error ? err.name : "unknown",
+            errorMessage: err instanceof Error ? err.message : "non_error_thrown",
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });
     }
 
     const ok = await bcrypt.compare(password, hashToCompare);
+    // #region agent log
+    fetch("http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "97f58a",
+      },
+      body: JSON.stringify({
+        sessionId: "97f58a",
+        runId: "initial",
+        hypothesisId: "H8",
+        location: "backend/src/routes/auth.ts:/login:compare",
+        message: "backend_login_compare_finished",
+        data: {
+          passwordMatched: ok,
+          userFound: Boolean(user),
+          twoFactorEnabled: Boolean(user?.twoFactorEnabled),
+          rememberMe: Boolean(rememberMe),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     if (!ok || !user) {
       return res.status(401).json({ error: "Invalid credentials" });
     }

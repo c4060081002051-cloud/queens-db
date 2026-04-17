@@ -98,11 +98,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
       ),
     [activeRooms],
   );
-  const selectedRoom = useMemo(() => {
-    const id = Number.parseInt(classRoomId, 10);
-    if (!Number.isFinite(id) || id <= 0) return undefined;
-    return rooms.find((r) => r.id === id);
-  }, [classRoomId, rooms]);
   const religions = [
     "Christian",
     "Muslim",
@@ -232,23 +227,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
       cancelled = true;
     };
   }, [classRoomId]);
-
-  useEffect(() => {
-    if (registrationType !== "first") {
-      setAdmissionMarks({});
-      return;
-    }
-    const id = Number.parseInt(classRoomId, 10);
-    const room = rooms.find((r) => r.id === id);
-    const subs = room ? subjectsForClassRoom(room.name) : [];
-    setAdmissionMarks((prev) => {
-      const next: Record<string, string> = {};
-      for (const s of subs) {
-        next[s] = prev[s] ?? "";
-      }
-      return next;
-    });
-  }, [classRoomId, rooms, registrationType]);
 
   const resetForm = () => {
     setFirstName("");
@@ -818,8 +796,13 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
                 <input
                   required
                   type="tel"
+                  minLength={10}
+                  maxLength={13}
                   value={parentPhone}
-                  onChange={(e) => setParentPhone(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^\d+]/g, '');
+                    setParentPhone(val);
+                  }}
                   className={`${fieldClass} mt-1`}
                   autoComplete="tel"
                 />
@@ -877,8 +860,13 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
                 <input
                   type="tel"
                   required
+                  minLength={10}
+                  maxLength={13}
                   value={guardianPhone}
-                  onChange={(e) => setGuardianPhone(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^\d+]/g, '');
+                    setGuardianPhone(val);
+                  }}
                   className={`${fieldClass} mt-1`}
                   autoComplete="tel"
                 />
@@ -903,8 +891,13 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
               <input
                 type="tel"
                 required
+                minLength={10}
+                maxLength={13}
                 value={emergencyContactPhone}
-                onChange={(e) => setEmergencyContactPhone(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/[^\d+]/g, '');
+                  setEmergencyContactPhone(val);
+                }}
                 className={`${fieldClass} mt-1`}
                 autoComplete="tel"
               />

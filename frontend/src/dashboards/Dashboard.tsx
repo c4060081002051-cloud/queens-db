@@ -4,51 +4,53 @@ import {
   markAllNotificationsRead,
   fetchMessages,
   fetchNotifications,
-} from "./api/inbox";
+} from "../api/inbox";
 import {
   fetchDashboard,
   type DashboardPayload,
-} from "./api/dashboard";
-import { AdminLayout, type AdminUser } from "./components/admin/AdminLayout";
-import { InboxDetailView } from "./components/inbox/InboxDetailView";
-import { InboxListView } from "./components/inbox/InboxListView";
-import type { InboxItem } from "./components/admin/headerInboxDemo";
-import { SettingsModesPanel } from "./components/settings/SettingsModesPanel";
-import { SettingsFeesStructurePanel } from "./components/settings/SettingsFeesStructurePanel";
-import { SettingsUsersRolesPanel } from "./components/settings/SettingsUsersRolesPanel";
-import { ExpensesAllPage } from "./components/expenses/ExpensesAllPage";
+} from "../api/dashboard";
+import { AdminLayout, type AdminUser } from "../components/admin/AdminLayout";
+import { InboxDetailView } from "../components/inbox/InboxDetailView";
+import { InboxListView } from "../components/inbox/InboxListView";
+import type { InboxItem } from "../components/admin/headerInboxDemo";
+import { SettingsModesPanel } from "../components/settings/SettingsModesPanel";
+import { SettingsFeesStructurePanel } from "../components/settings/SettingsFeesStructurePanel";
+import { SettingsUsersRolesPanel } from "../components/settings/SettingsUsersRolesPanel";
+import { ExpensesAllPage } from "../components/expenses/ExpensesAllPage";
 import {
   FinanceSectionPage,
   type FinanceSection,
-} from "./components/finance/FinanceSectionPage";
+} from "../components/finance/FinanceSectionPage";
 import {
   StudentsSectionPage,
   type StudentNavSection,
-} from "./components/students/StudentsSectionPage";
+} from "../components/students/StudentsSectionPage";
 import {
   StaffSectionPage,
   type StaffNavSection,
   type TeachingSection,
   type NonTeachingCategory,
-} from "./components/staff/StaffSectionPage";
+} from "../components/staff/StaffSectionPage";
 import {
   ClassesSectionPage,
   type ClassesSection,
-} from "./components/classes/ClassesSectionPage";
+} from "../components/classes/ClassesSectionPage";
 import {
   CurriculumSectionPage,
   type CurriculumSection,
-} from "./components/curriculum/CurriculumSectionPage";
-import { NoticeBoardPage } from "./components/communication/NoticeBoardPage";
-import { formatShortAgo } from "./utils/formatShortAgo";
-import { HeadTeacherOverview } from "./components/dashboard/HeadTeacherOverview";
-import { DOSOverview } from "./components/dashboard/DOSOverview";
-import { AccountantOverview } from "./components/dashboard/AccountantOverview";
+} from "../components/curriculum/CurriculumSectionPage";
+import { NoticeBoardPage } from "../components/communication/NoticeBoardPage";
+import { formatShortAgo } from "../utils/formatShortAgo";
+import { HeadTeacherOverview } from "./HeadTeacherOverview";
+import { DOSOverview } from "./DOSOverview";
+import { AccountantOverview } from "./AccountantOverview";
+import { AdminOverview } from "./AdminOverview";
 
 type DashboardProps = {
   user: AdminUser | null;
   profileLoading: boolean;
   profileError: string | null;
+  onRetryProfile?: () => void | Promise<void>;
   onLogout: () => void;
   onAccountUpdated?: () => void;
 };
@@ -194,6 +196,7 @@ export function Dashboard({
   user,
   profileLoading,
   profileError,
+  onRetryProfile,
   onLogout,
   onAccountUpdated,
 }: DashboardProps) {
@@ -235,7 +238,7 @@ export function Dashboard({
   const [curriculumSection, setCurriculumSection] = useState<CurriculumSection>(
     initialView?.curriculumSection ?? "exam_bot",
   );
-  const [selectedClassName, setSelectedClassName] = useState<string | null>(
+  const [selectedClassName] = useState<string | null>(
     initialView?.selectedClassName ?? null,
   );
 
@@ -454,10 +457,21 @@ export function Dashboard({
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             {profileError || dashError ? (
               <div className="neo-card mb-6 px-4 py-3 text-sm text-[#2d3436]" role="alert">
-                {profileError || dashError}
+                <p className="mb-2">{profileError || dashError}</p>
+                {profileError && onRetryProfile ? (
+                  <button
+                    type="button"
+                    className="rounded-md border border-[#dfe6e9] bg-white px-3 py-1.5 text-xs font-medium text-[#2d3436] hover:bg-[#f8f9fa]"
+                    onClick={() => void onRetryProfile()}
+                  >
+                    Retry
+                  </button>
+                ) : null}
               </div>
             ) : null}
-            {user?.permissions?.includes("nav_curriculum") ? (
+            {user?.role === "admin" ? (
+              <AdminOverview dash={dash} loading={dashLoading} />
+            ) : user?.permissions?.includes("nav_curriculum") ? (
               <DOSOverview dash={dash} loading={dashLoading} />
             ) : user?.permissions?.includes("nav_operations") ? (
               <AccountantOverview dash={dash} loading={dashLoading} />

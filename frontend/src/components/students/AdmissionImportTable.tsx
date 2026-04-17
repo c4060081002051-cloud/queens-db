@@ -443,8 +443,13 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
                         h.key === "emergencyContactPhone" ? (
                         <input
                           type="tel"
+                          minLength={10}
+                          maxLength={13}
                           value={String(r[h.key] ?? "")}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^\d+]/g, '');
+                            updateCell(i, h.key, val);
+                          }}
                           className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
                         />
                       ) : h.key === "gender" ? (
