@@ -506,14 +506,7 @@ export function StudentDetailModal({
                     <dt className="text-[#636e72]">Last term/year</dt>
                     <dd className="font-medium text-[#2d3436]">{row.lastTermYear ?? "—"}</dd>
                   </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Previous report card</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.previousReportCardFilename ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Previous grades</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.previousGrades ?? "—"}</dd>
-                  </div>
+
                   <div className="flex justify-between gap-4 py-2">
                     <dt className="text-[#636e72]">Transfer reason</dt>
                     <dd className="font-medium text-[#2d3436]">{row.transferReason ?? "—"}</dd>

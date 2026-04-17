@@ -889,24 +889,14 @@ export function createMeStudentsRouter() {
         }
         let csvPreviousGradesStored: string | null = null;
         if (regType === "first") {
-          if (!previousSchool || !lastClassAttended || !lastTermYear || !previousGrades) {
+          if (!previousSchool || !lastClassAttended || !lastTermYear) {
             errors.push({
               line: lineNo,
               error:
-                "previousSchool, lastClassAttended, lastTermYear, and previousGrades (JSON with marks and aggregates) are required for new admissions",
+                "previousSchool, lastClassAttended, and lastTermYear are required for new admissions",
             });
             continue;
           }
-          const pgRaw =
-            previousGrades.length > PREVIOUS_GRADES_MAX_LEN
-              ? previousGrades.slice(0, PREVIOUS_GRADES_MAX_LEN)
-              : previousGrades;
-          const v = validateNewAdmissionMarksJson(pgRaw);
-          if (!v.ok) {
-            errors.push({ line: lineNo, error: v.error });
-            continue;
-          }
-          csvPreviousGradesStored = v.stored;
         }
         try {
           await createStudentRecord({
@@ -1249,12 +1239,11 @@ export function createMeStudentsRouter() {
           previousSchool ||
           previousSchoolLocation ||
           lastClassAttended ||
-          lastTermYear ||
-          previousGradesRaw
+          lastTermYear
         ) {
           return res.status(400).json({
             error:
-              "Previous school, report card, and grade fields apply only to new admissions — omit them for transfer-in",
+              "Previous school fields apply only to new admissions — omit them for transfer-in",
           });
         }
       }
@@ -1266,9 +1255,6 @@ export function createMeStudentsRouter() {
               "previousSchool, lastClassAttended, and lastTermYear are required for new admissions",
           });
         }
-        const v = validateNewAdmissionMarksJson(previousGradesRaw);
-        if (!v.ok) return res.status(400).json({ error: v.error });
-        previousGradesStored = v.stored;
       }
       if (body.parentAliveStatus !== undefined && !parentAliveStatus) {
         return res.status(400).json({ error: "Invalid parentAliveStatus" });

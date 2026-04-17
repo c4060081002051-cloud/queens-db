@@ -10,18 +10,10 @@ import {
   createStudent,
   fetchClassrooms,
   uploadStudentPhoto,
-  uploadStudentTransferReport,
   type ClassRoomOption,
   type ClassSectionOption,
 } from "../../api/students";
 import { useI18n } from "../../i18n/I18nProvider";
-import {
-  buildAdmissionMarksJson,
-  formatOutOf100ForStorage,
-  isValidOutOf100Mark,
-  parseOutOf100Mark,
-  subjectsForClassRoom,
-} from "./admissionSubjects";
 
 type NewAdmissionFormProps = {
   onCreated: () => void;
@@ -57,11 +49,9 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
   const [previousSchoolLocation, setPreviousSchoolLocation] = useState("");
   const [lastClassAttended, setLastClassAttended] = useState("");
   const [lastTermYear, setLastTermYear] = useState("");
-  const [previousGrades, setPreviousGrades] = useState("");
   const [transferReason, setTransferReason] = useState<
     "" | "relocation" | "discipline" | "better_education"
   >("");
-  const [transferReportFile, setTransferReportFile] = useState<File | null>(null);
   const [parentAliveStatus, setParentAliveStatus] = useState<"both" | "one" | "none" | "">("");
   const [singleParentType, setSingleParentType] = useState<"mother" | "father" | "">("");
   const [parentFullName, setParentFullName] = useState("");
@@ -82,7 +72,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
-  const [admissionMarks, setAdmissionMarks] = useState<Record<string, string>>({});
   const activeRooms = useMemo(
     () => rooms.filter((r) => r.isActive !== false),
     [rooms],
@@ -280,9 +269,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
     setPreviousSchoolLocation("");
     setLastClassAttended("");
     setLastTermYear("");
-    setPreviousGrades("");
     setTransferReason("");
-    setTransferReportFile(null);
     setParentAliveStatus("");
     setSingleParentType("");
     setParentFullName("");
@@ -298,7 +285,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
     setGuardianName("");
     setGuardianPhone("");
     setPhotoFile(null);
-    setAdmissionMarks({});
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -330,49 +316,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
           return;
         }
       }
-      let previousGradesPayload: string | undefined;
-      if (registrationType === "first") {
-        const room = rooms.find((r) => r.id === cr);
-        const subs = room ? subjectsForClassRoom(room.name) : [];
-        if (subs.length === 0) {
-          setFormError(t("students.form.classRequired"));
-          setSubmitting(false);
-          return;
-        }
-        const normalizedMarks: Record<string, string> = {};
-        for (const s of subs) {
-          const raw = String(admissionMarks[s] ?? "").trim();
-          if (!raw) {
-            setFormError(t("students.form.admissionMarksRequired"));
-            setSubmitting(false);
-            return;
-          }
-          const n = parseOutOf100Mark(raw);
-          if (n === null) {
-            setFormError(t("students.form.admissionMarkInvalidNumber"));
-            setSubmitting(false);
-            return;
-          }
-          if (!isValidOutOf100Mark(n)) {
-            setFormError(t("students.form.admissionMarkInvalidRange"));
-            setSubmitting(false);
-            return;
-          }
-          normalizedMarks[s] = formatOutOf100ForStorage(n);
-        }
-        if (!previousGrades.trim()) {
-          setFormError(t("students.form.previousGradesRequiredAdmission"));
-          setSubmitting(false);
-          return;
-        }
-        previousGradesPayload = buildAdmissionMarksJson(
-          subs,
-          normalizedMarks,
-          previousGrades.trim(),
-        );
-      } else {
-        previousGradesPayload = undefined;
-      }
+
       const cc = countryCode.trim();
       const dist = district.trim();
       const created = await createStudent({
@@ -394,7 +338,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
         lastClassAttended:
           registrationType === "first" ? lastClassAttended.trim() : undefined,
         lastTermYear: registrationType === "first" ? lastTermYear.trim() : undefined,
-        previousGrades: previousGradesPayload,
+        previousGrades: undefined,
         transferReason: registrationType === "continuing" && transferReason ? transferReason : undefined,
         parentAliveStatus: parentAliveStatus || undefined,
         parentFullName: parentFullName.trim() || undefined,
@@ -410,20 +354,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
         guardianName: guardianName.trim() || undefined,
         guardianPhone: guardianPhone.trim() || undefined,
       });
-      if (registrationType === "first") {
-        if (!transferReportFile) {
-          setFormError(t("students.form.transferReportRequired"));
-          setSubmitting(false);
-          return;
-        }
-        try {
-          await uploadStudentTransferReport(created.id, transferReportFile);
-        } catch {
-          setFormError(t("students.form.transferReportUploadError"));
-          setSubmitting(false);
-          return;
-        }
-      }
+
       if (photoFile) {
         try {
           await uploadStudentPhoto(created.id, photoFile);
@@ -609,9 +540,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
                   setPreviousSchoolLocation("");
                   setLastClassAttended("");
                   setLastTermYear("");
-                  setPreviousGrades("");
-                  setTransferReportFile(null);
-                  setAdmissionMarks({});
                 } else {
                   setTransferReason("");
                 }
@@ -659,29 +587,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
                   onChange={(e) => setLastTermYear(e.target.value)}
                   className={`${fieldClass} mt-1`}
                   placeholder={t("students.form.lastTermYearPlaceholder")}
-                />
-              </label>
-              <label className="block min-w-0 text-xs font-semibold text-[#636e72] sm:col-span-2 lg:col-span-3">
-                {t("students.form.previousGrades")} *
-                <input
-                  required
-                  value={previousGrades}
-                  onChange={(e) => setPreviousGrades(e.target.value)}
-                  className={`${fieldClass} mt-1`}
-                  placeholder={t("students.form.previousGradesPlaceholder")}
-                />
-                <span className="mt-1 block text-[11px] font-normal text-[#636e72]">
-                  {t("students.form.previousGradesAdmissionHint")}
-                </span>
-              </label>
-              <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2 lg:col-span-3">
-                {t("students.form.previousReportCard")} *
-                <input
-                  type="file"
-                  required
-                  accept="application/pdf,image/jpeg,image/png,image/webp"
-                  className="mt-1 block w-full text-xs text-[#636e72] file:mr-2 file:rounded-lg file:border-0 file:bg-[#d4e8f5] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#2d3436]"
-                  onChange={(e) => setTransferReportFile(e.target.files?.[0] ?? null)}
                 />
               </label>
             </>
@@ -769,39 +674,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
               {t("students.form.sectionAutoHint")}
             </span>
           </div>
-          {registrationType === "first" && classRoomId && selectedRoom ? (
-            <div className="col-span-full rounded-xl border border-[#ebe4d9]/90 bg-[#faf9f7]/80 p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#636e72]">
-                {t("students.form.admissionMarksSection")}
-              </p>
-              <p className="mt-1 text-xs text-[#636e72]">{t("students.form.admissionMarksHint")}</p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {subjectsForClassRoom(selectedRoom.name).map((subj) => (
-                  <label key={subj} className="block text-xs font-semibold text-[#636e72]">
-                    {subj}
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <input
-                        required
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={0.01}
-                        inputMode="decimal"
-                        value={admissionMarks[subj] ?? ""}
-                        onChange={(e) =>
-                          setAdmissionMarks((m) => ({ ...m, [subj]: e.target.value }))
-                        }
-                        className={`${fieldClass} min-w-0 flex-1`}
-                        placeholder={t("students.form.admissionMarkPlaceholder")}
-                        autoComplete="off"
-                      />
-                      <span className="shrink-0 text-xs font-semibold text-[#636e72]">%</span>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-          ) : null}
+
           <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
             {t("students.form.nationality")} *
             <select

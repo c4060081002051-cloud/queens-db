@@ -34,7 +34,7 @@ type Row = {
   previousSchoolLocation: string;
   lastClassAttended: string;
   lastTermYear: string;
-  previousGrades: string;
+
   parentAliveStatus: "both" | "one" | "none" | "";
   parentFullName: string;
   parentPhone: string;
@@ -68,7 +68,7 @@ const headers: Array<{ key: keyof Row; label: string }> = [
   { key: "previousSchoolLocation", label: "Prev. school location" },
   { key: "lastClassAttended", label: "Last class attended" },
   { key: "lastTermYear", label: "Last term/year" },
-  { key: "previousGrades", label: "Previous grades JSON" },
+
   { key: "parentAliveStatus", label: "Parent status" },
   { key: "parentFullName", label: "Parent full name" },
   { key: "parentPhone", label: "Parent phone" },
@@ -116,7 +116,7 @@ function emptyRow(): Row {
     previousSchoolLocation: "",
     lastClassAttended: "",
     lastTermYear: "",
-    previousGrades: "",
+
     parentAliveStatus: "",
     parentFullName: "",
     parentPhone: "",
@@ -251,8 +251,7 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
         r.previousSchool.trim() ||
         r.previousSchoolLocation.trim() ||
         r.lastClassAttended.trim() ||
-        r.lastTermYear.trim() ||
-        r.previousGrades.trim()
+        r.lastTermYear.trim()
       ) {
         return "Omit previous school and grades columns for transfer-in (continuing)";
       }
@@ -261,15 +260,9 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
       if (
         !r.previousSchool.trim() ||
         !r.lastClassAttended.trim() ||
-        !r.lastTermYear.trim() ||
-        !r.previousGrades.trim()
+        !r.lastTermYear.trim()
       ) {
-        return "New admissions require previousSchool, lastClassAttended, lastTermYear, previousGrades (JSON)";
-      }
-      try {
-        JSON.parse(r.previousGrades.trim());
-      } catch {
-        return "previousGrades must be valid JSON (marks + aggregates)";
+        return "New admissions require previousSchool, lastClassAttended, lastTermYear";
       }
     }
     if (
@@ -340,8 +333,6 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
           lastClassAttended:
             r.registrationType === "first" ? r.lastClassAttended.trim() : undefined,
           lastTermYear: r.registrationType === "first" ? r.lastTermYear.trim() : undefined,
-          previousGrades:
-            r.registrationType === "first" ? r.previousGrades.trim() : undefined,
           parentAliveStatus: (r.parentAliveStatus || undefined) as
             | "both"
             | "one"

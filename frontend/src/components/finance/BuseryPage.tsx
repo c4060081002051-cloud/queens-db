@@ -232,46 +232,6 @@ export function BuseryPage({
           </table>
         </div>
       </section>
-      
-      {selectedRow ? (
-        <section className="neo-card border-t-4 border-[#5a8faf] p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[#2d3436]">
-                Bursary Details
-              </h2>
-              <p className="mt-1 text-lg font-semibold text-[#2d3436]">
-                {selectedRow.studentName}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSelectedRow(null)}
-              className="rounded-full bg-white px-3 py-1 text-xs font-bold uppercase tracking-wide text-[#5a8faf] ring-1 ring-[#d9e4ea] transition hover:bg-[#f8fbff]"
-            >
-              Close
-            </button>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <DetailCard label="Award Type" value={selectedRow.awardType} />
-            <DetailCard label="Coverage" value={selectedRow.coverageLabel} />
-            <DetailCard label="Term" value={selectedRow.term} />
-            <DetailCard
-              label="Amount Covered"
-              value={formatCurrencyUGX(selectedRow.amountCovered)}
-            />
-          </div>
-        </section>
-      ) : null}
-    </div>
-  );
-}
-
-function DetailCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-[#ebe4d9]/80 bg-white/40 px-4 py-3">
-      <p className="text-xs font-bold uppercase tracking-wider text-[#636e72]">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-[#2d3436]">{value}</p>
     </div>
   );
 }
