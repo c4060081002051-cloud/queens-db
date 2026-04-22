@@ -21,6 +21,7 @@ import { createMeFinanceStatementsRouter } from "./routes/meFinanceStatements.js
 import { createMeAcademicsRouter } from "./routes/meAcademics.js";
 import { createMeCommunicationNoticesRouter } from "./routes/meCommunicationNotices.js";
 import { createMeFinanceBurseryRouter } from "./routes/meFinanceBursery.js";
+import { createMeSettingsRouter } from "./routes/meSettings.js";
 
 export function buildApp(config: Config) {
   const app = express();
@@ -119,6 +120,7 @@ export function buildApp(config: Config) {
   meRouter.use(createMeFinanceBurseryRouter());
   meRouter.use(createMeAcademicsRouter());
   meRouter.use("/communication/notices", createMeCommunicationNoticesRouter());
+  meRouter.use("/settings", createMeSettingsRouter());
   meRouter.use(createMeDashboardRouter(config));
   meRouter.use(createMeAccountRouter(config));
   app.use("/api/me", requireAuth(config), meRouter);

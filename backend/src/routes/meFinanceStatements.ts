@@ -25,9 +25,23 @@ const DEFAULT_IMPORTED_STRUCTURE: Record<BoardingStatus, number> = {
   day_full_p7: 450000,
 };
 
+const SYSTEM_STATUS_LABELS: Record<BoardingStatus, string> = {
+  boarding: "Boarding",
+  day_half: "Day Half Day",
+  day_full: "Day Full Day",
+  day_full_p7: "Day Full Day (P7)",
+};
+
 function normalizeBoardingStatus(v: unknown): BoardingStatus | null {
   if (typeof v !== "string") return null;
   return BOARDING_STATUSES.includes(v as BoardingStatus) ? (v as BoardingStatus) : null;
+}
+
+/** Accept any non-empty string as a valid status slug (for custom entities). */
+function normalizeAnyStatus(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const trimmed = v.trim().slice(0, 60);
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function normalizeStudentBoardingStatus(v: unknown): "day_half" | "day_full" | "boarding" | null {
@@ -202,21 +216,35 @@ export function createMeFinanceStatementsRouter() {
         where: { term },
         order: [["boarding_status", "ASC"]],
       });
-      const byStatus = new Map<BoardingStatus, StudentFeeStructure>();
+      // Build map of all persisted rows
+      const byStatus = new Map<string, StudentFeeStructure>();
       for (const row of rows) {
-        const status = normalizeBoardingStatus(row.boardingStatus);
-        if (status) byStatus.set(status, row);
+        byStatus.set(row.boardingStatus, row);
       }
-      return res.json({
-        items: BOARDING_STATUSES.map((status) => {
-          const row = byStatus.get(status) ?? null;
-          return {
-            status,
-            amountDueUgx: row ? Number(row.amountDueUgx) : DEFAULT_IMPORTED_STRUCTURE[status],
-            notes: row?.notes ?? null,
-          };
-        }),
+      // Start with the 4 system statuses
+      const items: Array<{ status: string; label: string; amountDueUgx: number; notes: string | null; isSystem: boolean }> = BOARDING_STATUSES.map((status) => {
+        const row = byStatus.get(status) ?? null;
+        return {
+          status,
+          label: row?.get("label") as string ?? SYSTEM_STATUS_LABELS[status],
+          amountDueUgx: row ? Number(row.amountDueUgx) : DEFAULT_IMPORTED_STRUCTURE[status],
+          notes: row?.notes ?? null,
+          isSystem: true,
+        };
       });
+      // Append any custom (non-system) rows
+      for (const row of rows) {
+        if (!BOARDING_STATUSES.includes(row.boardingStatus as BoardingStatus)) {
+          items.push({
+            status: row.boardingStatus,
+            label: (row.get("label") as string) ?? row.boardingStatus,
+            amountDueUgx: Number(row.amountDueUgx),
+            notes: row.notes ?? null,
+            isSystem: false,
+          });
+        }
+      }
+      return res.json({ items });
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });
@@ -234,35 +262,47 @@ export function createMeFinanceStatementsRouter() {
         return res.status(400).json({ error: "items are required" });
       }
 
-      const parsedItems: Array<{ status: BoardingStatus; amountDueUgx: number; notes: string | null }> = [];
+      const parsedItems: Array<{ status: string; label: string | null; amountDueUgx: number; notes: string | null }> = [];
       for (const raw of rawItems) {
         const item = raw as Record<string, unknown>;
-        const status = normalizeBoardingStatus(item.status);
+        const status = normalizeAnyStatus(item.status);
         const amountDueUgx = parseAmountUgx(item.amountDueUgx);
         const notes = typeof item.notes === "string" ? item.notes.trim().slice(0, 255) : null;
+        const label = typeof item.label === "string" ? item.label.trim().slice(0, 120) : null;
         if (!status) {
           return res.status(400).json({ error: "Invalid student status in items" });
         }
         if (amountDueUgx == null) {
           return res.status(400).json({ error: "Invalid amountDueUgx in items" });
         }
-        parsedItems.push({ status, amountDueUgx, notes });
+        parsedItems.push({ status, label, amountDueUgx, notes });
       }
 
-      const uniqueByStatus = new Map<BoardingStatus, { amountDueUgx: number; notes: string | null }>();
+      const uniqueByStatus = new Map<string, { label: string | null; amountDueUgx: number; notes: string | null }>();
       for (const item of parsedItems) {
-        uniqueByStatus.set(item.status, { amountDueUgx: item.amountDueUgx, notes: item.notes });
+        uniqueByStatus.set(item.status, { label: item.label, amountDueUgx: item.amountDueUgx, notes: item.notes });
       }
+
+      // Remove custom entities from DB that are no longer in the payload
+      const deleteStatuses = typeof body.deleteStatuses === "string" ? body.deleteStatuses.split(",").map((s: string) => s.trim()).filter(Boolean) : [];
 
       const txn = await StudentFeeStructure.sequelize!.transaction();
       let updatedAssignments = 0;
       try {
+        // Delete removed custom entities
+        for (const delStatus of deleteStatuses) {
+          if (!BOARDING_STATUSES.includes(delStatus as BoardingStatus)) {
+            await StudentFeeStructure.destroy({ where: { term, boardingStatus: delStatus }, transaction: txn });
+          }
+        }
+
         for (const [status, item] of uniqueByStatus.entries()) {
           const [row] = await StudentFeeStructure.findOrCreate({
             where: { term, boardingStatus: status },
             defaults: {
               amountDueUgx: item.amountDueUgx,
               notes: item.notes,
+              label: item.label,
             },
             transaction: txn,
           });
@@ -270,9 +310,14 @@ export function createMeFinanceStatementsRouter() {
             {
               amountDueUgx: item.amountDueUgx,
               notes: item.notes,
+              label: item.label,
             },
             { transaction: txn },
           );
+
+          // Only auto-assign students for the 4 built-in boarding statuses
+          const boardingStatus = normalizeBoardingStatus(status);
+          if (!boardingStatus) continue;
 
           const students = await Student.findAll({
             attributes: ["id", "boardingStatus"],
@@ -283,7 +328,7 @@ export function createMeFinanceStatementsRouter() {
             const stBoarding = normalizeStudentBoardingStatus(stu.boardingStatus);
             const stClassName = studentClassName(stu);
             const stStatus = toFeeStructureStatus(stBoarding, stClassName);
-            if (stStatus !== status) continue;
+            if (stStatus !== boardingStatus) continue;
             const [assignment] = await StudentFeeAssignment.findOrCreate({
               where: { studentId: stu.id, term },
               defaults: {

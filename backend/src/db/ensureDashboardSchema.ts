@@ -303,6 +303,18 @@ export async function ensureDashboardSchema(sequelize: Sequelize): Promise<void>
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // Widen boarding_status to support custom entity slugs
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE student_fee_structures MODIFY boarding_status VARCHAR(60) NOT NULL",
+    "student_fee_structures.boarding_status (widen)",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE student_fee_structures ADD COLUMN label VARCHAR(120) NULL",
+    "student_fee_structures.label",
+  );
+
   await sequelize.query(`
     CREATE TABLE IF NOT EXISTS class_sections (
       id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -391,4 +403,13 @@ export async function ensureDashboardSchema(sequelize: Sequelize): Promise<void>
     "ALTER TABLE student_assessment_results ADD COLUMN subject VARCHAR(120) NOT NULL DEFAULT 'General'",
     "student_assessment_results.subject",
   );
+
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS school_settings (
+      setting_key VARCHAR(64) NOT NULL,
+      setting_value TEXT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (setting_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }

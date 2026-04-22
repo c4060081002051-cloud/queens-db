@@ -3,6 +3,7 @@ import { BuseryPage, type BuseryRecord } from "./BuseryPage";
 import { DailyExpensesPage } from "./expenses/DailyExpensesPage";
 import { DailyLedgerPage } from "./ledger/DailyLedgerPage";
 import { FinanceOverviewPage } from "./overview/FinanceOverviewPage";
+import { AssignFeesPage } from "./payments/AssignFeesPage";
 import { RecordStudentPaymentPage } from "./payments/RecordStudentPaymentPage";
 import { PayrollSummaryPage } from "./payroll/PayrollSummaryPage";
 import { AdminDailyReportsPage } from "./reports/AdminDailyReportsPage";
@@ -13,6 +14,7 @@ export type FinanceSection =
   | "overview"
   | "daily_report"
   | "debtors_report"
+  | "assign_fees"
   | "record_payment"
   | "bursery"
   | "busery"
@@ -24,6 +26,7 @@ const sectionTitle: Record<FinanceSection, string> = {
   overview: "Financial Overview",
   daily_report: "Daily Ledger",
   debtors_report: "Debtors Report",
+  assign_fees: "Assign Fees",
   record_payment: "Record Student Payment",
   bursery: "Record expences",
   busery: "Busery",
@@ -51,6 +54,7 @@ export function FinanceSectionPage({
 
   const cards: Array<{ key: FinanceSection; desc: string; icon: string; color: string }> = [
     { key: "record_payment", desc: "Record payments and print DB-backed receipts.", icon: "💳", color: "from-[#eef2f7] to-[#e0e7f1]" },
+    { key: "assign_fees", desc: "Assign and adjust student term fees for accountants.", icon: "🧮", color: "from-[#eef7ff] to-[#dcecff]" },
     { key: "daily_report", desc: "Track ledger entries for the selected day.", icon: "📚", color: "from-[#fdfcfb] to-[#f4f1ee]" },
     { key: "finance_summary", desc: "Run daily report submission and review flow.", icon: "📑", color: "from-[#f5fbf8] to-[#e8f5ed]" },
     { key: "staff_payment", desc: "View payroll totals and arrears by month.", icon: "👥", color: "from-[#f8f9ff] to-[#e8ebf9]" },
@@ -84,6 +88,15 @@ export function FinanceSectionPage({
       <div className="min-w-0 space-y-4">
         {renderHeader(sectionTitle.record_payment, "Capture fee payments and issue receipts.")}
         <RecordStudentPaymentPage />
+      </div>
+    );
+  }
+
+  if (section === "assign_fees") {
+    return (
+      <div className="min-w-0 space-y-4">
+        {renderHeader(sectionTitle.assign_fees, "Search students and assign term fee amounts.")}
+        <AssignFeesPage />
       </div>
     );
   }

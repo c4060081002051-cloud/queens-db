@@ -27,6 +27,66 @@ type StudentsListPanelProps = {
   showDirectoryTools?: boolean;
 };
 
+type StudentSortOption = StudentSortBy | "custom";
+type CustomSortColumn =
+  | "admissionNumber"
+  | "fullName"
+  | "className"
+  | "sectionName"
+  | "boardingStatus"
+  | "admittedAt";
+
+function formatStudentStatus(status: string | null): string {
+  if (!status) return "—";
+  const normalized = status.trim().toLowerCase();
+  if (!normalized) return "—";
+  return normalized
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function customColumnValue(row: StudentApiRow, column: CustomSortColumn): string {
+  switch (column) {
+    case "admissionNumber":
+      return row.admissionNumber ?? "";
+    case "fullName":
+      return row.fullName ?? "";
+    case "className":
+      return row.className ?? "";
+    case "sectionName":
+      return row.sectionName ?? "";
+    case "boardingStatus":
+      return formatStudentStatus(row.boardingStatus);
+    case "admittedAt":
+      return row.admittedAt ?? "";
+    default:
+      return "";
+  }
+}
+
+function applyCustomSort(
+  rows: StudentApiRow[],
+  dir: StudentSortDir,
+  column: CustomSortColumn,
+  query: string,
+): StudentApiRow[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  return [...rows].sort((a, b) => {
+    const aValue = customColumnValue(a, column);
+    const bValue = customColumnValue(b, column);
+    if (normalizedQuery) {
+      const aMatch = aValue.toLowerCase().includes(normalizedQuery) ? 0 : 1;
+      const bMatch = bValue.toLowerCase().includes(normalizedQuery) ? 0 : 1;
+      if (aMatch !== bMatch) return aMatch - bMatch;
+    }
+    const columnCmp = aValue.localeCompare(bValue);
+    if (columnCmp !== 0) return dir === "asc" ? columnCmp : -columnCmp;
+    const fallback = a.fullName.localeCompare(b.fullName);
+    return dir === "asc" ? fallback : -fallback;
+  });
+}
+
 function IconView({ className }: { className?: string }) {
   return (
     <svg className={className} width="18" height="18" fill="none" viewBox="0 0 24 24" aria-hidden>
@@ -78,8 +138,10 @@ export function StudentsListPanel({
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
   const [applied, setApplied] = useState("");
-  const [sortBy, setSortBy] = useState<StudentSortBy>("date");
+  const [sortBy, setSortBy] = useState<StudentSortOption>("date");
   const [sortDir, setSortDir] = useState<StudentSortDir>("desc");
+  const [customSortColumn, setCustomSortColumn] = useState<CustomSortColumn>("fullName");
+  const [customSortValue, setCustomSortValue] = useState("");
   const [items, setItems] = useState<StudentApiRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,11 +154,19 @@ export function StudentsListPanel({
   const deleteTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setApplied(draft.trim());
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [draft]);
+
+  useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     const q = classNameFilter ? `${classNameFilter} ${applied}`.trim() : applied;
-    void fetchStudents({ q, sortBy, sortDir, limit })
+    const apiSortBy: StudentSortBy = sortBy === "custom" ? "date" : sortBy;
+    void fetchStudents({ q, sortBy: apiSortBy, sortDir, limit })
       .then((rows) => {
         if (!cancelled) {
           const filtered = classNameFilter
@@ -141,18 +211,23 @@ export function StudentsListPanel({
   const reloadList = async () => {
     const q = classNameFilter ? `${classNameFilter} ${applied}`.trim() : applied;
     try {
-      const rows = await fetchStudents({ q, sortBy, sortDir, limit });
-      setItems(
-        classNameFilter
+      const apiSortBy: StudentSortBy = sortBy === "custom" ? "date" : sortBy;
+      const rows = await fetchStudents({ q, sortBy: apiSortBy, sortDir, limit });
+      const filtered = classNameFilter
           ? rows.filter(
               (r) => (r.className ?? "").trim().toLowerCase() === classNameFilter.trim().toLowerCase(),
             )
-          : rows,
-      );
+          : rows;
+      setItems(filtered);
     } catch {
       /* keep existing list on failure */
     }
   };
+
+  const displayedItems =
+    sortBy === "custom"
+      ? applyCustomSort(items, sortDir, customSortColumn, customSortValue)
+      : items;
 
   const handleExport = () => {
     const stamp = new Date().toISOString().slice(0, 10);
@@ -295,9 +370,6 @@ export function StudentsListPanel({
                 type="search"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") runSearch();
-                }}
                 placeholder={t("students.searchPlaceholder")}
                 className="min-w-0 w-full rounded-xl border border-[#e0d8cc] bg-[#faf9f7] px-3 py-2 text-sm text-[#2d3436] shadow-[inset_1px_1px_3px_rgba(0,0,0,0.06)] placeholder:text-[#636e72]/60"
               />
@@ -310,7 +382,7 @@ export function StudentsListPanel({
                 <select
                   id="student-sort-by"
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as StudentSortBy)}
+                  onChange={(e) => setSortBy(e.target.value as StudentSortOption)}
                   className={selectClass}
                   aria-label={t("students.sortBy")}
                 >
@@ -318,7 +390,33 @@ export function StudentsListPanel({
                   <option value="id">{t("students.sort.id")}</option>
                   <option value="name">{t("students.sort.name")}</option>
                   <option value="class">{t("students.sort.class")}</option>
+                  <option value="custom">Custom</option>
                 </select>
+                {sortBy === "custom" ? (
+                  <>
+                    <select
+                      value={customSortColumn}
+                      onChange={(e) => setCustomSortColumn(e.target.value as CustomSortColumn)}
+                      className={selectClass}
+                      aria-label="Custom sort column"
+                    >
+                      <option value="fullName">{t("students.col.name")}</option>
+                      <option value="admissionNumber">{t("students.col.admission")}</option>
+                      <option value="className">{t("students.col.class")}</option>
+                      <option value="sectionName">{t("students.col.section")}</option>
+                      <option value="boardingStatus">{t("students.col.status")}</option>
+                      <option value="admittedAt">{t("students.col.admitted")}</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={customSortValue}
+                      onChange={(e) => setCustomSortValue(e.target.value)}
+                      placeholder="Type value for custom sort"
+                      className={selectClass}
+                      aria-label="Custom sort value"
+                    />
+                  </>
+                ) : null}
                 <select
                   id="student-sort-dir"
                   value={sortDir}
@@ -361,6 +459,7 @@ export function StudentsListPanel({
                 <th className="w-[18%] px-1 py-3 sm:px-2">{t("students.col.name")}</th>
                 <th className="w-[12%] px-1 py-3 sm:px-2">{t("students.col.class")}</th>
                 <th className="w-[9%] px-1 py-3 sm:px-2">{t("students.col.section")}</th>
+                <th className="w-[10%] px-1 py-3 sm:px-2">{t("students.col.status")}</th>
                 <th className="w-[11%] px-1 py-3 sm:px-2">{t("students.col.dob")}</th>
                 <th className="w-[12%] px-1 py-3 sm:px-2">{t("students.col.admitted")}</th>
                 {showDirectoryTools ? (
@@ -374,7 +473,7 @@ export function StudentsListPanel({
               {loading ? (
                 <tr>
                   <td
-                    colSpan={showDirectoryTools ? 8 : 6}
+                    colSpan={showDirectoryTools ? 9 : 7}
                     className="px-5 py-10 text-center text-sm text-[#636e72]"
                   >
                     {t("students.loading")}
@@ -384,15 +483,15 @@ export function StudentsListPanel({
               {!loading && items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showDirectoryTools ? 8 : 6}
+                    colSpan={showDirectoryTools ? 9 : 7}
                     className="px-5 py-10 text-center text-sm text-[#636e72]"
                   >
-                    {applied ? t("students.noMatches") : t("students.empty")}
+                    {t("students.noRecordFound")}
                   </td>
                 </tr>
               ) : null}
               {!loading
-                ? items.map((row) => (
+                ? displayedItems.map((row) => (
                     <tr
                       key={row.id}
                       className="transition-colors hover:bg-[#f0f7f4]/90 odd:bg-[#fafaf8]/80"
@@ -420,6 +519,9 @@ export function StudentsListPanel({
                       </td>
                       <td className="min-w-0 truncate px-1 py-2 text-xs text-[#636e72] sm:px-2 sm:text-sm">
                         {row.sectionName ?? "—"}
+                      </td>
+                      <td className="min-w-0 truncate px-1 py-2 text-xs font-medium text-[#636e72] sm:px-2 sm:text-sm">
+                        {formatStudentStatus(row.boardingStatus)}
                       </td>
                       <td className="min-w-0 truncate px-1 py-2 text-[10px] tabular-nums text-[#636e72] sm:px-2 sm:text-sm">
                         {row.dateOfBirthFormatted ?? "—"}

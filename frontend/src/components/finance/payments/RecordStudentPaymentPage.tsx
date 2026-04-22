@@ -30,6 +30,8 @@ export function RecordStudentPaymentPage() {
   const [paidBy, setPaidBy] = useState("");
   const [amount, setAmount] = useState("");
   const [termDue, setTermDue] = useState("");
+  const [termDueTouched, setTermDueTouched] = useState(false);
+  const [autoAssignedDue, setAutoAssignedDue] = useState<number | null>(null);
   const [changeReason, setChangeReason] = useState("");
   const [receipt, setReceipt] = useState<StudentPaymentReceipt | null>(null);
   const [statement, setStatement] = useState<StudentStatementPayload | null>(null);
@@ -77,6 +79,29 @@ export function RecordStudentPaymentPage() {
 
   const parsedAmount = Math.max(Number(amount) || 0, 0);
   const parsedDue = Math.max(Number(termDue) || 0, 0);
+
+  useEffect(() => {
+    if (!selectedStudent) {
+      setAutoAssignedDue(null);
+      if (!termDueTouched) setTermDue("");
+      return;
+    }
+    let cancelled = false;
+    void fetchStudentStatement(selectedStudent.id, term)
+      .then((data) => {
+        if (cancelled) return;
+        setAutoAssignedDue(data.assignedAmount);
+        if (!termDueTouched) {
+          setTermDue(data.assignedAmount > 0 ? String(data.assignedAmount) : "");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAutoAssignedDue(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedStudent, term, termDueTouched]);
 
   const createReceipt = async (printAfterCreate = false) => {
     setFormError(null);
@@ -429,7 +454,7 @@ export function RecordStudentPaymentPage() {
                 letterSpacing: "0.03em",
               }}
             >
-              STUDENT SEARCH *
+              STUDENT SEARCH <span style={{ color: "#ef4444" }}>*</span>
             </label>
             <div style={{ position: "relative" }}>
               <span
@@ -528,6 +553,7 @@ export function RecordStudentPaymentPage() {
                     type="button"
                     onClick={() => {
                       setSelectedStudent(s);
+                      setTermDueTouched(false);
                       setStudentSearch(studentLabel(s));
                       setStudentMatches([]);
                       setPaidBy(s.parentFullName ?? "");
@@ -578,7 +604,7 @@ export function RecordStudentPaymentPage() {
                 letterSpacing: "0.03em",
               }}
             >
-              ACADEMIC TERM *
+              ACADEMIC TERM <span style={{ color: "#ef4444" }}>*</span>
             </label>
             <div style={{ position: "relative" }}>
               <span
@@ -595,7 +621,10 @@ export function RecordStudentPaymentPage() {
               </span>
               <select
                 value={term}
-                onChange={(e) => setTerm(e.target.value)}
+                onChange={(e) => {
+                  setTerm(e.target.value);
+                  setTermDueTouched(false);
+                }}
                 style={{
                   height: 56,
                   borderRadius: 12,
@@ -646,7 +675,7 @@ export function RecordStudentPaymentPage() {
                 letterSpacing: "0.03em",
               }}
             >
-              PAYMENT METHOD *
+              PAYMENT METHOD <span style={{ color: "#ef4444" }}>*</span>
             </label>
             <div style={{ position: "relative" }}>
               <span
@@ -773,7 +802,7 @@ export function RecordStudentPaymentPage() {
                 letterSpacing: "0.03em",
               }}
             >
-              AMOUNT PAID (UGX) *
+              AMOUNT PAID (UGX) <span style={{ color: "#ef4444" }}>*</span>
             </label>
             <div style={{ position: "relative" }}>
               <span
@@ -853,7 +882,10 @@ export function RecordStudentPaymentPage() {
                 type="number"
                 min="0"
                 value={termDue}
-                onChange={(e) => setTermDue(e.target.value)}
+                onChange={(e) => {
+                  setTermDue(e.target.value);
+                  setTermDueTouched(true);
+                }}
                 placeholder="Auto-calculated"
                 style={{
                   height: 56,
@@ -878,7 +910,9 @@ export function RecordStudentPaymentPage() {
               />
             </div>
             <span style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 4, display: "block" }}>
-              Override the fee structure amount for this term (leave blank to auto-detect).
+              {autoAssignedDue != null
+                ? `Current assigned term fee: ${autoAssignedDue.toLocaleString("en-UG")} UGX.`
+                : "Override the fee structure amount for this term (leave blank to auto-detect)."}
             </span>
           </div>
         </div>
@@ -897,7 +931,7 @@ export function RecordStudentPaymentPage() {
                 fontSize: "0.9rem",
               }}
             >
-              💬 REASON FOR ADDITIONAL CHANGE *
+              💬 REASON FOR ADDITIONAL CHANGE <span style={{ color: "#ef4444" }}>*</span>
             </label>
             <textarea
               value={changeReason}
@@ -967,65 +1001,54 @@ export function RecordStudentPaymentPage() {
           <button
             type="button"
             onClick={() => void createReceipt(false)}
-            disabled={submitting || isLocked}
+            disabled={submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim())}
             style={{
               height: 56,
-              borderRadius: 14,
-              fontWeight: 700,
-              border: "2px solid #e2e8f0",
               background: "#fff",
-              color: "#475569",
-              fontSize: "0.95rem",
-              cursor: submitting || isLocked ? "not-allowed" : "pointer",
-              opacity: submitting || isLocked ? 0.5 : 1,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
+              color: "#0c2340",
+              border: "2px solid #0c2340",
+              borderRadius: 14,
+              fontSize: "1rem",
+              fontWeight: 800,
+              cursor: submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? "not-allowed" : "pointer",
               transition: "all 0.2s",
+              boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
+              opacity: submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? 0.6 : 1,
             }}
             onMouseOver={(e) => {
-              if (!submitting && !isLocked) {
-                e.currentTarget.style.background = "#f8fafc";
-                e.currentTarget.style.borderColor = "#cbd5e1";
-              }
+              if (selectedStudent && parsedAmount > 0 && (!isReopened || changeReason.trim())) e.currentTarget.style.background = "rgba(12,35,64,0.04)";
             }}
             onMouseOut={(e) => {
               e.currentTarget.style.background = "#fff";
-              e.currentTarget.style.borderColor = "#e2e8f0";
             }}
           >
-            💾 {submitting ? "Saving..." : "Save Record"}
+            {submitting ? "Saving..." : "Save Payment"}
           </button>
           <button
             type="button"
             onClick={() => void createReceipt(true)}
-            disabled={submitting || isLocked}
+            disabled={submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim())}
             style={{
               height: 56,
               borderRadius: 14,
-              fontWeight: 700,
+              fontWeight: 800,
               border: "none",
               background: "linear-gradient(135deg, #0c2340, #1a3a5c)",
               color: "#fff",
-              fontSize: "0.95rem",
-              cursor: submitting || isLocked ? "not-allowed" : "pointer",
-              opacity: submitting || isLocked ? 0.5 : 1,
+              fontSize: "1rem",
+              cursor: submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? "not-allowed" : "pointer",
+              opacity: submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? 0.6 : 1,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               gap: 8,
-              boxShadow: "0 4px 6px -1px rgba(12,35,64,0.3)",
+              boxShadow: "0 10px 15px -3px rgba(12,35,64,0.2)",
               transition: "all 0.2s",
             }}
             onMouseOver={(e) => {
-              if (!submitting && !isLocked) {
-                e.currentTarget.style.boxShadow = "0 8px 12px -2px rgba(12,35,64,0.4)";
-                e.currentTarget.style.transform = "translateY(-1px)";
-              }
+              if (selectedStudent && parsedAmount > 0 && (!isReopened || changeReason.trim())) e.currentTarget.style.transform = "translateY(-1px)";
             }}
             onMouseOut={(e) => {
-              e.currentTarget.style.boxShadow = "0 4px 6px -1px rgba(12,35,64,0.3)";
               e.currentTarget.style.transform = "translateY(0)";
             }}
           >

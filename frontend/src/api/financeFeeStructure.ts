@@ -1,11 +1,11 @@
 import { apiUrl, authHeaders } from "./baseUrl";
 
-export type FeeStructureStatus = "day_half" | "day_full" | "day_full_p7" | "boarding";
-
 export type FeeStructureRow = {
-  status: FeeStructureStatus;
+  status: string;
+  label: string;
   amountDueUgx: number;
   notes: string | null;
+  isSystem: boolean;
 };
 
 async function readJson<T>(res: Response): Promise<T> {
@@ -29,7 +29,8 @@ export async function fetchFeeStructure(term: string): Promise<FeeStructureRow[]
 
 export async function applyFeeStructure(body: {
   term: string;
-  items: Array<{ status: FeeStructureStatus; amountDueUgx: number; notes?: string | null }>;
+  items: Array<{ status: string; label: string; amountDueUgx: number; notes?: string | null }>;
+  deleteStatuses?: string;
 }): Promise<{ ok: boolean; updatedAssignments: number }> {
   const res = await fetch(apiUrl("/api/me/finance/fees/structure/apply"), {
     method: "POST",

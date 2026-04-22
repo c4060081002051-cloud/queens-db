@@ -44,7 +44,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
   const [nationality, setNationality] = useState("");
   const [countryCode, setCountryCode] = useState("");
   const [district, setDistrict] = useState("");
-  const [registrationType, setRegistrationType] = useState<"first" | "continuing">("first");
+  const [registrationType, setRegistrationType] = useState<"first" | "continuing" | "">("");
   const [previousSchool, setPreviousSchool] = useState("");
   const [previousSchoolLocation, setPreviousSchoolLocation] = useState("");
   const [lastClassAttended, setLastClassAttended] = useState("");
@@ -242,7 +242,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
     setCountryCode("");
     setDistrict("");
     setDistricts([]);
-    setRegistrationType("first");
+    setRegistrationType("");
     setPreviousSchool("");
     setPreviousSchoolLocation("");
     setLastClassAttended("");
@@ -280,6 +280,16 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
         classRoomId.trim() === "" ? undefined : Number.parseInt(classRoomId, 10);
       if (!cr || !Number.isFinite(cr) || cr <= 0) {
         setFormError(t("students.form.classRequired"));
+        setSubmitting(false);
+        return;
+      }
+      if (!boardingStatus) {
+        setFormError(t("students.form.boardingStatusUnset"));
+        setSubmitting(false);
+        return;
+      }
+      if (!registrationType) {
+        setFormError(t("students.form.registrationTypeUnset"));
         setSubmitting(false);
         return;
       }
@@ -511,19 +521,26 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
               required
               value={registrationType}
               onChange={(e) => {
-                const v = e.target.value as "first" | "continuing";
+                const v = e.target.value as "first" | "continuing" | "";
                 setRegistrationType(v);
                 if (v === "continuing") {
                   setPreviousSchool("");
                   setPreviousSchoolLocation("");
                   setLastClassAttended("");
                   setLastTermYear("");
+                } else if (v === "first") {
+                  setTransferReason("");
                 } else {
+                  setPreviousSchool("");
+                  setPreviousSchoolLocation("");
+                  setLastClassAttended("");
+                  setLastTermYear("");
                   setTransferReason("");
                 }
               }}
               className={`${fieldClass} mt-1`}
             >
+              <option value="">{t("students.form.registrationTypeUnset")}</option>
               <option value="first">{t("students.form.registrationNewAdmission")}</option>
               <option value="continuing">{t("students.form.registrationTransferIn")}</option>
             </select>
@@ -568,7 +585,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
                 />
               </label>
             </>
-          ) : (
+          ) : registrationType === "continuing" ? (
             <label className="block min-w-0 text-xs font-semibold text-[#636e72] sm:col-span-2 lg:col-span-3">
               {t("students.form.transferReason")}
               <select
@@ -588,7 +605,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
                 </option>
               </select>
             </label>
-          )}
+          ) : null}
           <label className="block min-w-0 text-xs font-semibold text-[#636e72] sm:col-span-2 lg:col-span-3">
             {t("students.form.classroom")} *
             <select

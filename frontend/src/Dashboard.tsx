@@ -14,6 +14,7 @@ import { InboxDetailView } from "./components/inbox/InboxDetailView";
 import { InboxListView } from "./components/inbox/InboxListView";
 import type { InboxItem } from "./components/admin/headerInboxDemo";
 import { SettingsModesPanel } from "./components/settings/SettingsModesPanel";
+import { SettingsGeneralPanel } from "./components/settings/SettingsGeneralPanel";
 import { SettingsFeesStructurePanel } from "./components/settings/SettingsFeesStructurePanel";
 import { SettingsUsersRolesPanel } from "./components/settings/SettingsUsersRolesPanel";
 import { ExpensesAllPage } from "./components/expenses/ExpensesAllPage";
@@ -41,9 +42,9 @@ import {
 } from "./components/curriculum/CurriculumSectionPage";
 import { NoticeBoardPage } from "./components/communication/NoticeBoardPage";
 import { formatShortAgo } from "./utils/formatShortAgo";
-import { HeadTeacherOverview } from "./components/dashboard/HeadTeacherOverview";
-import { DOSOverview } from "./components/dashboard/DOSOverview";
-import { AccountantOverview } from "./components/dashboard/AccountantOverview";
+import { HeadTeacherOverview } from "./dashboards/HeadTeacherOverview";
+import { DOSOverview } from "./dashboards/DOSOverview";
+import { AccountantOverview } from "./dashboards/AccountantOverview";
 
 type DashboardProps = {
   user: AdminUser | null;
@@ -98,8 +99,11 @@ function readPersistedViewState(): PersistedViewState | null {
         ? parsed.mainView
         : "dashboard";
     const studentSection =
+      parsed.studentSection === "overview" ||
       parsed.studentSection === "admissions" ||
-      parsed.studentSection === "import"
+      parsed.studentSection === "profiles" ||
+      parsed.studentSection === "import" ||
+      parsed.studentSection === "parents"
         ? parsed.studentSection
         : "all";
     const staffSection =
@@ -125,6 +129,7 @@ function readPersistedViewState(): PersistedViewState | null {
     const financeSection =
       parsed.financeSection === "daily_report" ||
       parsed.financeSection === "debtors_report" ||
+      parsed.financeSection === "assign_fees" ||
       parsed.financeSection === "record_payment" ||
       parsed.financeSection === "bursery" ||
       parsed.financeSection === "busery" ||
@@ -235,7 +240,7 @@ export function Dashboard({
   const [curriculumSection, setCurriculumSection] = useState<CurriculumSection>(
     initialView?.curriculumSection ?? "exam_bot",
   );
-  const [selectedClassName, setSelectedClassName] = useState<string | null>(
+  const [selectedClassName] = useState<string | null>(
     initialView?.selectedClassName ?? null,
   );
 
@@ -390,10 +395,12 @@ export function Dashboard({
       onAccountUpdated={onAccountUpdated}
     >
       <main className="dashboard-main-padding">
+        {settingsPanel === "general" ? <SettingsGeneralPanel /> : null}
         {settingsPanel === "modes" ? <SettingsModesPanel /> : null}
         {settingsPanel === "fees_structure" ? <SettingsFeesStructurePanel /> : null}
         {settingsPanel === "users_roles" ? <SettingsUsersRolesPanel /> : null}
-        {settingsPanel === "modes" ||
+        {settingsPanel === "general" ||
+        settingsPanel === "modes" ||
         settingsPanel === "fees_structure" ||
         settingsPanel === "users_roles" ? null : inboxScreen.screen !== "home" ? (
           inboxScreen.screen === "list" ? (

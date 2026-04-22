@@ -335,6 +335,12 @@ export class RolePermission extends Model {
   declare permissionKey: string;
 }
 
+export class SchoolSetting extends Model {
+  declare settingKey: string;
+  declare settingValue: string | null;
+  declare readonly updatedAt: Date;
+}
+
 export function setupDatabase(config: Config): Sequelize {
   const sequelize = new Sequelize({
     dialect: "mysql",
@@ -902,9 +908,13 @@ export function setupDatabase(config: Config): Sequelize {
         allowNull: false,
       },
       boardingStatus: {
-        type: DataTypes.STRING(16),
+        type: DataTypes.STRING(60),
         allowNull: false,
         field: "boarding_status",
+      },
+      label: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
       },
       amountDueUgx: {
         type: DataTypes.BIGINT,
@@ -1836,6 +1846,35 @@ export function setupDatabase(config: Config): Sequelize {
       tableName: "role_permissions",
       modelName: "RolePermission",
       timestamps: false,
+    },
+  );
+
+  SchoolSetting.init(
+    {
+      settingKey: {
+        type: DataTypes.STRING(64),
+        primaryKey: true,
+        field: "setting_key",
+      },
+      settingValue: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: "setting_value",
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "updated_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "school_settings",
+      modelName: "SchoolSetting",
+      timestamps: true,
+      createdAt: false,
+      updatedAt: "updated_at",
     },
   );
 

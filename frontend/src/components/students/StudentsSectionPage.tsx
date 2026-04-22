@@ -6,7 +6,13 @@ import { StudentsListPanel } from "./StudentsListPanel";
 import { fetchStudents, type StudentApiRow } from "../../api/students";
 import { useI18n } from "../../i18n/I18nProvider";
 
-export type StudentNavSection = "all" | "admissions" | "profiles" | "import" | "parents";
+export type StudentNavSection =
+  | "overview"
+  | "all"
+  | "admissions"
+  | "profiles"
+  | "import"
+  | "parents";
 
 export function StudentsSectionPage({
   section,
@@ -23,7 +29,7 @@ export function StudentsSectionPage({
   const [overviewLoading, setOverviewLoading] = useState(false);
 
   useEffect(() => {
-    if (section !== "all") return;
+    if (section !== "overview") return;
     let cancelled = false;
     setOverviewLoading(true);
     void fetchStudents({ sortBy: "date", sortDir: "desc", limit: 500 })
@@ -94,7 +100,7 @@ export function StudentsSectionPage({
         ? "students.page.introProfiles"
         : "students.page.introAll";
 
-  if (section === "all") {
+  if (section === "overview") {
     const cards: Array<{
       key: Exclude<StudentNavSection, "all">;
       title: string;
@@ -275,15 +281,6 @@ export function StudentsSectionPage({
           </div>
         </section>
 
-        <div className="border-t border-[#ebe4d9]/50 pt-4">
-          <StudentsListPanel
-            limit={200}
-            showDirectoryTools
-            refreshKey={listRefresh}
-            classNameFilter={classNameFilter}
-            title=""
-          />
-        </div>
       </div>
     );
   }

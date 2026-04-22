@@ -42,7 +42,9 @@ type AdminLayoutProps = {
   /** Open a settings section from the sidebar (e.g. `modes`). */
   onSelectSettingsPanel?: (panel: string) => void;
   /** Students hub: open full-page list or admissions form. */
-  onSelectStudentSection?: (section: "all" | "admissions" | "profiles" | "import" | "parents") => void;
+  onSelectStudentSection?: (
+    section: "overview" | "all" | "admissions" | "profiles" | "import" | "parents",
+  ) => void;
   /** Staff hub: open teaching or non-teaching pages. */
   onSelectStaffSection?: (section: "teaching" | "nonTeaching") => void;
   /** Classes hub: open a section tab (all classes, streams, etc.). */
@@ -53,6 +55,7 @@ type AdminLayoutProps = {
       | "overview"
       | "daily_report"
       | "debtors_report"
+      | "assign_fees"
       | "record_payment"
       | "bursery"
       | "busery"
@@ -335,12 +338,13 @@ type NavLeaf = {
   badge?: string;
   settingsPanel?: string;
   inboxList?: "notifications" | "messages";
-  studentSection?: "all" | "admissions" | "profiles" | "import" | "parents";
+  studentSection?: "overview" | "all" | "admissions" | "profiles" | "import" | "parents";
   staffSection?: "teaching" | "nonTeaching";
   financeSection?:
     | "overview"
     | "daily_report"
     | "debtors_report"
+    | "assign_fees"
     | "record_payment"
     | "bursery"
     | "busery"
@@ -418,6 +422,7 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
       items: [
         { icon: IconClipboard, label: t("nav.operations.library"), financeSection: "daily_report" },
         { icon: IconBook, label: t("nav.operations.store"), financeSection: "debtors_report" },
+        { icon: IconWallet, label: t("nav.operations.assignFees"), financeSection: "assign_fees" },
         { icon: IconWallet, label: t("nav.operations.accounts"), financeSection: "record_payment" },
         { icon: IconBus, label: t("nav.operations.transport"), financeSection: "bursery" },
         { icon: IconUsers, label: t("nav.operations.hostel"), financeSection: "staff_payment" },
@@ -466,7 +471,7 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
           label: t("nav.settings.feesStructure"),
           settingsPanel: "fees_structure",
         },
-        { icon: IconGrid, label: t("nav.settings.general") },
+        { icon: IconGrid, label: t("nav.settings.general"), settingsPanel: "general" },
         { icon: IconBell, label: t("nav.settings.notifications") },
         { icon: IconUsers, label: t("nav.settings.users"), settingsPanel: "users_roles" },
         { icon: IconBackup, label: t("nav.settings.backup") },
@@ -779,6 +784,7 @@ export function AdminLayout({
                     onClick={() =>
                       setOpenGroups((prev) => {
                         if (group.id === "operations") onSelectFinanceSection?.("overview");
+                        if (group.id === "student_hub") onSelectStudentSection?.("overview");
                         if (prev[group.id]) {
                           return { ...prev, [group.id]: false };
                         }
