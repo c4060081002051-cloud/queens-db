@@ -22,6 +22,22 @@ export type FinanceSection =
   | "staff_payment"
   | "finance_summary";
 
+function hasFinancePermission(user: any, permissionKey: string): boolean {
+  const role = String(user?.role ?? "").toLowerCase();
+  if (role === "admin" || role === "super_admin") return true;
+  return Array.isArray(user?.permissions) && user.permissions.includes(permissionKey);
+}
+
+function requiredPermissionForSection(section: FinanceSection): string | null {
+  if (section === "assign_fees") return "finance_assign_fees";
+  if (section === "record_payment" || section === "bursery") return "finance_record_payments";
+  if (section === "busery" || section === "bursery_assignment") return "finance_bursary";
+  if (section === "staff_payment") return "finance_staff_pay";
+  if (section === "finance_summary") return "finance_summaries";
+  if (section === "daily_report" || section === "debtors_report") return "finance_reports";
+  return null;
+}
+
 const sectionTitle: Record<FinanceSection, string> = {
   overview: "Financial Overview",
   daily_report: "Daily Ledger",
@@ -62,6 +78,16 @@ export function FinanceSectionPage({
     { key: "bursery", desc: "Capture day expenses into the school ledger.", icon: "🛒", color: "from-[#fff9f4] to-[#ffeadb]" },
     { key: "debtors_report", desc: "Review student debtors and outstanding balances.", icon: "📉", color: "from-[#fff5f5] to-[#ffe8e8]" },
   ];
+  const visibleCards = cards.filter((card) => {
+    const required = requiredPermissionForSection(card.key);
+    if (!required) return true;
+    return hasFinancePermission(user, required);
+  });
+  const sectionRequiredPermission = requiredPermissionForSection(section);
+  const sectionAllowed =
+    section === "overview" ||
+    !sectionRequiredPermission ||
+    hasFinancePermission(user, sectionRequiredPermission);
 
   const renderHeader = (title: string, subtitle?: string) => (
     <header className="mb-6 flex flex-col gap-2 border-b border-[#ebe4d9]/80 pb-6 sm:flex-row sm:items-center sm:justify-between">
@@ -83,6 +109,14 @@ export function FinanceSectionPage({
     </header>
   );
 
+  if (!sectionAllowed) {
+    return (
+      <div className="neo-card rounded-2xl border border-amber-200 bg-amber-50 px-5 py-6 text-sm font-semibold text-amber-900">
+        You do not have permission to view this finance section. Contact admin to grant access.
+      </div>
+    );
+  }
+
   if (section === "record_payment") {
     return (
       <div className="min-w-0 space-y-4">
@@ -102,10 +136,18 @@ export function FinanceSectionPage({
   }
 
   if (section === "daily_report") {
+    const canViewPastRecords = hasFinancePermission(user, "finance_past_ledger");
+    const isAdmin =
+      String(user?.role ?? "").toLowerCase() === "admin" ||
+      String(user?.role ?? "").toLowerCase() === "super_admin";
     return (
       <div className="min-w-0 space-y-4">
         {renderHeader(sectionTitle.daily_report, "Detailed tracking of daily income and expenses.")}
-        <DailyLedgerPage initialDate={ledgerDate} />
+        <DailyLedgerPage
+          initialDate={ledgerDate}
+          canViewPastRecords={canViewPastRecords}
+          isAdmin={isAdmin}
+        />
       </div>
     );
   }
@@ -190,7 +232,7 @@ export function FinanceSectionPage({
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {cards.map((card) => (
+        {visibleCards.map((card) => (
           <button
             key={card.key}
             type="button"

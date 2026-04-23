@@ -116,8 +116,17 @@ export function createMeCommunicationNoticesRouter() {
       const notice = await NoticeBoardEntry.findByPk(id);
       if (!notice) return res.status(404).json({ error: "Notice not found." });
 
-      await NoticeBoardComment.destroy({ where: { noticeId: id } });
-      await notice.destroy();
+      const sequelize = NoticeBoardEntry.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
+      }
+      await sequelize.transaction(async (t) => {
+        await NoticeBoardComment.destroy({
+          where: { noticeId: id },
+          transaction: t,
+        });
+        await notice.destroy({ transaction: t });
+      });
 
       return res.status(204).send();
     } catch (err) {

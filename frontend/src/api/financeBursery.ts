@@ -10,6 +10,8 @@ export async function assignBursery(body: {
   studentId: number;
   percentage: number;
   term: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
 }): Promise<{ ok: boolean }> {
   const res = await fetch(apiUrl("/api/me/finance/bursery"), {
     method: "POST",

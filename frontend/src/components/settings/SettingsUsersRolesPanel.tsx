@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchRolePermissions, updateRolePermissions } from "../../api/settings";
+import {
+  fetchRolePermissions,
+  fetchUserPermissions,
+  updateRolePermissions,
+  updateUserPermissionOverrides,
+} from "../../api/settings";
+import {
+  createManagedUser,
+  fetchManagedUsers,
+  type ManagedUser,
+  updateManagedUserRole,
+} from "../../api/account";
 import {
   groupAvailableKeysBySector,
   orphanPermissionKeys,
@@ -63,32 +74,56 @@ const ROLE_OPTIONS: UserRoleOption[] = [
   },
 ];
 
-const sampleUsers = [
-  { id: 1, name: "Alice Administrator", email: "alice@queens.school", roleLabel: "admin" },
-  { id: 2, name: "Brian Accounts", email: "accounts@queens.school", roleLabel: "accountant" },
-  { id: 3, name: "Grace Head Teacher", email: "headteacher@queens.school", roleLabel: "head_teacher" },
-];
+const STRONG_PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 
 export function SettingsUsersRolesPanel() {
   const [view, setView] = useState<"list" | "add" | "permissions">("list");
-  const [users, setUsers] = useState(sampleUsers);
+  const [permissionMode, setPermissionMode] = useState<"role" | "user">("role");
+  const [users, setUsers] = useState<ManagedUser[]>([]);
   const [permissionMappings, setPermissionMappings] = useState<{ role: string; permissionKey: string }[]>([]);
   const [availablePermissionKeys, setAvailablePermissionKeys] = useState<string[]>([]);
+  const [selectedPermissionUserId, setSelectedPermissionUserId] = useState<number | null>(null);
+  const [selectedPermissionUserRole, setSelectedPermissionUserRole] = useState<string>("");
+  const [rolePermissionKeySet, setRolePermissionKeySet] = useState<Set<string>>(new Set());
+  const [userOverrideMap, setUserOverrideMap] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [selectedRoleId, setSelectedRoleId] = useState<UserRoleOption["id"] | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [roleDrafts, setRoleDrafts] = useState<Record<number, string>>({});
+  const [assigningRoleForUserId, setAssigningRoleForUserId] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
-  const selectedRole = useMemo(
-    () => ROLE_OPTIONS.find((role) => role.id === selectedRoleId) ?? null,
-    [selectedRoleId],
+  function refreshPageAfterSave(delayMs = 450) {
+    window.setTimeout(() => {
+      window.location.reload();
+    }, delayMs);
+  }
+
+  const roleSuggestions = useMemo(() => ROLE_OPTIONS.map((item) => item.id), []);
+  const passwordChecks = useMemo(
+    () => ({
+      minLength: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /\d/.test(password),
+      symbol: /[^A-Za-z0-9]/.test(password),
+      matches: password.length > 0 && password === confirmPassword,
+      isStrong: STRONG_PASSWORD_REGEX.test(password),
+    }),
+    [password, confirmPassword],
   );
 
   function resetForm() {
-    setSelectedRoleId(null);
     setName("");
     setEmail("");
+    setRole("");
+    setPassword("");
+    setConfirmPassword("");
     setStatus(null);
   }
 
@@ -102,15 +137,45 @@ export function SettingsUsersRolesPanel() {
   );
 
   useEffect(() => {
+    setIsLoadingUsers(true);
+    fetchManagedUsers()
+      .then((loadedUsers) => {
+        setUsers(loadedUsers);
+        setRoleDrafts(
+          Object.fromEntries(loadedUsers.map((u) => [u.id, u.role === "pending_assignment" ? "" : u.role])),
+        );
+      })
+      .catch((err: Error) => setStatus("Error loading users: " + err.message))
+      .finally(() => setIsLoadingUsers(false));
+  }, []);
+
+  useEffect(() => {
     if (view === "permissions") {
-      fetchRolePermissions().then(data => {
-        setPermissionMappings(data.permissions);
-        setAvailablePermissionKeys(data.availableKeys);
-      }).catch(err => {
-        setStatus("Error loading permissions: " + err.message)
-      });
+      fetchRolePermissions()
+        .then((data) => {
+          setPermissionMappings(data.permissions);
+          setAvailablePermissionKeys(data.availableKeys);
+        })
+        .catch((err) => {
+          setStatus("Error loading permissions: " + err.message);
+        });
     }
   }, [view]);
+
+  useEffect(() => {
+    if (view !== "permissions" || permissionMode !== "user") return;
+    if (selectedPermissionUserId == null) return;
+    fetchUserPermissions(selectedPermissionUserId)
+      .then((data) => {
+        setSelectedPermissionUserRole(data.userRole);
+        setAvailablePermissionKeys(data.availableKeys);
+        setRolePermissionKeySet(new Set(data.rolePermissions));
+        const map: Record<string, boolean> = {};
+        for (const row of data.overrides) map[row.permissionKey] = row.allowed;
+        setUserOverrideMap(map);
+      })
+      .catch((err: Error) => setStatus("Error loading user permissions: " + err.message));
+  }, [view, permissionMode, selectedPermissionUserId]);
 
   async function handleTogglePermission(roleId: string, permKey: string) {
     const isCurrentlyChecked = permissionMappings.some(m => m.role === roleId && m.permissionKey === permKey);
@@ -135,6 +200,7 @@ export function SettingsUsersRolesPanel() {
         await updateRolePermissions(roleId, perms);
       }
       setStatus("Permissions updated successfully!");
+      refreshPageAfterSave();
     } catch (err: any) {
       setStatus("Error saving permissions: " + err.message);
     } finally {
@@ -142,11 +208,50 @@ export function SettingsUsersRolesPanel() {
     }
   }
 
-  function handleSubmit() {
-    if (!selectedRole) {
-      setStatus("Select a role before creating the user.");
+  function effectiveForUserPermission(permissionKey: string): boolean {
+    if (permissionKey in userOverrideMap) return Boolean(userOverrideMap[permissionKey]);
+    return rolePermissionKeySet.has(permissionKey);
+  }
+
+  function cycleUserPermissionOverride(permissionKey: string) {
+    const baseAllowed = rolePermissionKeySet.has(permissionKey);
+    const hasOverride = Object.prototype.hasOwnProperty.call(userOverrideMap, permissionKey);
+    const current = hasOverride ? userOverrideMap[permissionKey] : baseAllowed;
+    const next = !current;
+    if (next === baseAllowed) {
+      setUserOverrideMap((prev) => {
+        const copy = { ...prev };
+        delete copy[permissionKey];
+        return copy;
+      });
       return;
     }
+    setUserOverrideMap((prev) => ({ ...prev, [permissionKey]: next }));
+  }
+
+  async function handleSaveUserPermissions() {
+    if (selectedPermissionUserId == null) {
+      setStatus("Select a user first.");
+      return;
+    }
+    setIsSaving(true);
+    setStatus(null);
+    try {
+      const overrides = Object.entries(userOverrideMap).map(([permissionKey, allowed]) => ({
+        permissionKey,
+        allowed,
+      }));
+      await updateUserPermissionOverrides(selectedPermissionUserId, overrides);
+      setStatus("User permissions updated successfully!");
+      refreshPageAfterSave();
+    } catch (err: any) {
+      setStatus("Error saving user permissions: " + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleSubmit() {
     if (!name.trim()) {
       setStatus("Enter the user's full name before creating the account.");
       return;
@@ -155,20 +260,40 @@ export function SettingsUsersRolesPanel() {
       setStatus("Enter the user's email before creating the account.");
       return;
     }
-
-    const nextUser = {
-      id: Date.now(),
-      name: name.trim(),
-      email: email.trim(),
-      roleLabel: selectedRole.label,
-    };
-
-    setUsers((currentUsers) => [nextUser, ...currentUsers]);
-    setSelectedRoleId(null);
-    setName("");
-    setEmail("");
-    setStatus(`User prepared successfully for the ${selectedRole.label} role.`);
-    setView("list");
+    if (!role.trim()) {
+      setStatus("Enter a role for this user.");
+      return;
+    }
+    if (!passwordChecks.isStrong) {
+      setStatus("Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.");
+      return;
+    }
+    if (!passwordChecks.matches) {
+      setStatus("Confirm password must match the password.");
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      const created = await createManagedUser({
+        name: name.trim(),
+        email: email.trim(),
+        role: role.trim(),
+        password,
+        confirmPassword,
+      });
+      setUsers((currentUsers) => [created, ...currentUsers]);
+      setName("");
+      setEmail("");
+      setRole("");
+      setPassword("");
+      setConfirmPassword("");
+      setView("list");
+      setStatus(`User account created for role "${created.role}". They can sign in and access their dashboard.`);
+    } catch (err: any) {
+      setStatus(err?.message ?? "Failed to create user");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function permissionDetail(permKey: string) {
@@ -179,6 +304,26 @@ export function SettingsUsersRolesPanel() {
         d?.description ??
         "Controls access for this capability. Extend permissionCatalog.ts when new keys are added.",
     };
+  }
+
+  async function handleAssignRole(userId: number) {
+    const roleValue = (roleDrafts[userId] ?? "").trim();
+    if (!roleValue) {
+      setStatus("Enter a role before assigning.");
+      return;
+    }
+    try {
+      setAssigningRoleForUserId(userId);
+      const updated = await updateManagedUserRole(userId, roleValue);
+      setUsers((currentUsers) => currentUsers.map((row) => (row.id === userId ? updated : row)));
+      setRoleDrafts((current) => ({ ...current, [userId]: updated.role }));
+      setStatus(`Role updated to "${updated.role}" for ${updated.name}.`);
+      refreshPageAfterSave();
+    } catch (err: any) {
+      setStatus(err?.message ?? "Failed to assign role");
+    } finally {
+      setAssigningRoleForUserId(null);
+    }
   }
 
   function renderPermissionMatrix(permKeys: string[]) {
@@ -233,7 +378,7 @@ export function SettingsUsersRolesPanel() {
   }
 
   if (view === "permissions") {
-    const successMessage = status?.startsWith("Permissions updated");
+    const successMessage = status?.startsWith("Permissions updated") || status?.startsWith("User permissions updated");
     return (
       <div className="max-w-[1100px] mx-auto space-y-6 pb-24 animate-in fade-in slide-in-from-bottom-3 duration-500">
         <header className="neo-card relative overflow-hidden rounded-2xl bg-white px-6 py-6 sm:px-8 shadow-sm">
@@ -244,14 +389,46 @@ export function SettingsUsersRolesPanel() {
                 🔐
               </div>
               <div>
-                <h1 className="text-2xl font-black tracking-tight text-[#0c2340]">Role Permissions</h1>
+                <h1 className="text-2xl font-black tracking-tight text-[#0c2340]">
+                  {permissionMode === "role" ? "Role Permissions" : "User Permissions"}
+                </h1>
                 <p className="mt-1 text-sm font-medium text-slate-500">
-                  Each sector lists its permissions in detail. Use the checkboxes to grant or revoke a permission per
-                  role, then save.
+                  {permissionMode === "role"
+                    ? "Each sector lists permissions. Grant or revoke per role, then save."
+                    : "Select a user and configure individual permission overrides set by admin."}
                 </p>
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
+              <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPermissionMode("role");
+                    setStatus(null);
+                  }}
+                  className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
+                    permissionMode === "role" ? "bg-[#0c2340] text-white" : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  By Role
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPermissionMode("user");
+                    setStatus(null);
+                    if (selectedPermissionUserId == null && users.length > 0) {
+                      setSelectedPermissionUserId(users[0].id);
+                    }
+                  }}
+                  className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
+                    permissionMode === "user" ? "bg-[#0c2340] text-white" : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  By User
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setView("list")}
@@ -262,7 +439,7 @@ export function SettingsUsersRolesPanel() {
               <button
                 type="button"
                 disabled={isSaving}
-                onClick={handleSavePermissions}
+                onClick={permissionMode === "role" ? handleSavePermissions : handleSaveUserPermissions}
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#0c2340] to-[#1a3a5c] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#0c2340]/20 transition-all hover:-translate-y-0.5 hover:shadow-xl disabled:pointer-events-none disabled:opacity-60"
               >
                 {isSaving ? "Saving..." : "Save Changes"}
@@ -272,6 +449,30 @@ export function SettingsUsersRolesPanel() {
         </header>
 
         <div className="space-y-6">
+          {permissionMode === "user" ? (
+            <section className="neo-card rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+              <label className="block space-y-1.5">
+                <span className="text-xs font-black uppercase tracking-widest text-[#0c2340]">
+                  Select User (Admin managed)
+                </span>
+                <select
+                  value={selectedPermissionUserId ?? ""}
+                  onChange={(event) => setSelectedPermissionUserId(Number.parseInt(event.target.value, 10))}
+                  className="neo-inset-field w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                >
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email}) - {u.role}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="mt-2 text-xs font-medium text-slate-500">
+                Base role: <span className="font-bold text-slate-700">{selectedPermissionUserRole || "not selected"}</span>.
+                Unchecked options are denied, checked options are allowed. Overrides can differ from role defaults.
+              </p>
+            </section>
+          ) : null}
           {permissionSectors.map((sector) => (
             <section
               key={sector.id}
@@ -281,7 +482,43 @@ export function SettingsUsersRolesPanel() {
                 <h2 className="text-sm font-black uppercase tracking-wider text-[#0c2340]">{sector.title}</h2>
                 <p className="mt-1 text-xs font-medium text-slate-600">{sector.subtitle}</p>
               </div>
-              {renderPermissionMatrix([...sector.keys])}
+              {permissionMode === "role" ? (
+                renderPermissionMatrix([...sector.keys])
+              ) : (
+                <div className="grid gap-3 p-4 sm:grid-cols-2">
+                  {sector.keys.map((permKey) => {
+                    const { title, description } = permissionDetail(permKey);
+                    const checked = effectiveForUserPermission(permKey);
+                    const roleBased = rolePermissionKeySet.has(permKey);
+                    const overridden = Object.prototype.hasOwnProperty.call(userOverrideMap, permKey);
+                    return (
+                      <label
+                        key={permKey}
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm transition hover:border-slate-300"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-slate-900">{title}</p>
+                            <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600">{description}</p>
+                            <p className="mt-1.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              {permKey}
+                            </p>
+                            <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                              {overridden ? "Admin override" : roleBased ? "Inherited from role" : "Not granted"}
+                            </p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => cycleUserPermissionOverride(permKey)}
+                            className="mt-1 h-4 w-4 cursor-pointer rounded border-slate-300 text-[#ea580c] focus:ring-[#ea580c]"
+                          />
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           ))}
 
@@ -327,7 +564,7 @@ export function SettingsUsersRolesPanel() {
               <div>
                 <h1 className="text-2xl font-black tracking-tight text-[#0c2340]">Add New User</h1>
                 <p className="mt-1 text-sm font-medium text-slate-500">
-                  Select a role and enter contact details to provision a new account.
+                  Enter the user identity, role, and secure password to provision a login-ready account.
                 </p>
               </div>
             </div>
@@ -344,47 +581,10 @@ export function SettingsUsersRolesPanel() {
           </div>
         </header>
 
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-6">
+        <div className="space-y-6">
             <section className="neo-card rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
               <h2 className="mb-4 text-[10px] font-black uppercase tracking-widest text-[#0c2340]">
-                Step 1: Select User Role
-              </h2>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {ROLE_OPTIONS.map((role) => {
-                  const active = selectedRoleId === role.id;
-                  return (
-                    <button
-                      key={role.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedRoleId(role.id);
-                        setStatus(null);
-                      }}
-                      className={`relative flex flex-col items-start rounded-xl border p-4 text-left transition-all ${
-                        active
-                          ? "border-[#ea580c] bg-orange-50/50 shadow-[0_0_0_1px_#ea580c]"
-                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-                      }`}
-                    >
-                      {active ? (
-                        <div className="absolute right-4 top-4 h-2 w-2 rounded-full bg-[#ea580c]" />
-                      ) : null}
-                      <p
-                        className={`text-sm font-bold uppercase tracking-wider ${active ? "text-[#ea580c]" : "text-[#0c2340]"}`}
-                      >
-                        {role.label}
-                      </p>
-                      <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">{role.description}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="neo-card rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-              <h2 className="mb-4 text-[10px] font-black uppercase tracking-widest text-[#0c2340]">
-                Step 2: User Details
+                Step 1: User Identity
               </h2>
               <div className="grid gap-5 sm:grid-cols-2">
                 <label className="block space-y-1.5">
@@ -399,6 +599,7 @@ export function SettingsUsersRolesPanel() {
                 <label className="block space-y-1.5">
                   <span className="text-xs font-bold text-[#0c2340]">Email <span className="text-red-500">*</span></span>
                   <input
+                    type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder="e.g. jane@queens.school"
@@ -407,32 +608,77 @@ export function SettingsUsersRolesPanel() {
                 </label>
               </div>
             </section>
-          </div>
 
-          <aside className="neo-card rounded-2xl bg-white p-6 shadow-sm border border-slate-100 self-start sticky top-6">
-            <h2 className="text-[10px] font-black uppercase tracking-widest text-[#0c2340]">
-              New User Summary
-            </h2>
-            <div className="mt-5 space-y-3">
-              <SummaryRow label="Role" value={selectedRole?.label ?? "Not selected"} active={!!selectedRole} />
-              <SummaryRow label="Internal Key" value={selectedRole?.id ?? "Not selected"} active={!!selectedRole} />
-              <SummaryRow label="Full Name" value={name.trim() || "Not entered"} active={name.trim().length > 0} />
-              <SummaryRow label="Email" value={email.trim() || "Not entered"} active={email.trim().length > 0} />
-            </div>
+            <section className="neo-card rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
+              <h2 className="mb-4 text-[10px] font-black uppercase tracking-widest text-[#0c2340]">
+                Step 2: Role & Password
+              </h2>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-bold text-[#0c2340]">Role <span className="text-red-500">*</span></span>
+                  <input
+                    list="role-suggestions"
+                    value={role}
+                    onChange={(event) => setRole(event.target.value)}
+                    placeholder="e.g. teacher, accountant, registrar"
+                    className="neo-inset-field w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                  />
+                  <datalist id="role-suggestions">
+                    {roleSuggestions.map((item) => (
+                      <option key={item} value={item} />
+                    ))}
+                  </datalist>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    You can type a custom role. Spaces and symbols are normalized when saved.
+                  </p>
+                </label>
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-bold text-[#0c2340]">Password <span className="text-red-500">*</span></span>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter secure password"
+                    className="neo-inset-field w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                  />
+                </label>
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-bold text-[#0c2340]">Confirm Password <span className="text-red-500">*</span></span>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    placeholder="Re-type password"
+                    className="neo-inset-field w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                  />
+                </label>
+              </div>
+              {password.length > 0 ? (
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <PasswordRule ok={passwordChecks.minLength} label="At least 8 characters" />
+                  <PasswordRule ok={passwordChecks.uppercase} label="At least one uppercase letter" />
+                  <PasswordRule ok={passwordChecks.lowercase} label="At least one lowercase letter" />
+                  <PasswordRule ok={passwordChecks.number} label="At least one number" />
+                  <PasswordRule ok={passwordChecks.symbol} label="At least one symbol" />
+                  <PasswordRule ok={passwordChecks.matches} label="Password confirmation matches" />
+                </div>
+              ) : null}
+            </section>
 
             {status ? (
-              <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700">
+              <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700">
                 {status}
               </div>
             ) : null}
 
-            <div className="mt-6 flex flex-col gap-3">
+            <div className="flex flex-col gap-3">
               <button
                 type="button"
                 onClick={handleSubmit}
-                className="w-full inline-flex justify-center items-center gap-2 rounded-xl bg-gradient-to-r from-[#0c2340] to-[#1a3a5c] px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#0c2340]/20 transition-all hover:-translate-y-0.5 hover:shadow-xl"
+                disabled={isSubmitting}
+                className="w-full inline-flex justify-center items-center gap-2 rounded-xl bg-gradient-to-r from-[#0c2340] to-[#1a3a5c] px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#0c2340]/20 transition-all hover:-translate-y-0.5 hover:shadow-xl disabled:pointer-events-none disabled:opacity-60"
               >
-                Create Account
+                {isSubmitting ? "Creating account..." : "Create Account"}
               </button>
               <button
                 type="button"
@@ -442,7 +688,6 @@ export function SettingsUsersRolesPanel() {
                 Clear Form
               </button>
             </div>
-          </aside>
         </div>
       </div>
     );
@@ -495,6 +740,7 @@ export function SettingsUsersRolesPanel() {
                   <th className="px-5 py-4">Name</th>
                   <th className="px-5 py-4">Email</th>
                   <th className="px-5 py-4">Role</th>
+                  <th className="px-5 py-4">Assign Role</th>
                   <th className="px-5 py-4 text-right">Status</th>
                 </tr>
               </thead>
@@ -505,37 +751,68 @@ export function SettingsUsersRolesPanel() {
                     <td className="px-5 py-4 text-sm font-semibold text-slate-500">{user.email}</td>
                     <td className="px-5 py-4">
                       <span className="inline-flex rounded-lg bg-orange-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#ea580c]">
-                        {user.roleLabel}
+                        {user.role}
                       </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-2">
+                        <input
+                          list="role-suggestions"
+                          value={roleDrafts[user.id] ?? ""}
+                          onChange={(event) =>
+                            setRoleDrafts((current) => ({ ...current, [user.id]: event.target.value }))
+                          }
+                          placeholder="Type role"
+                          className="neo-inset-field w-44 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleAssignRole(user.id)}
+                          disabled={assigningRoleForUserId === user.id}
+                          className="rounded-lg bg-[#0c2340] px-3 py-2 text-[11px] font-bold text-white transition hover:bg-[#1a3a5c] disabled:pointer-events-none disabled:opacity-60"
+                        >
+                          {assigningRoleForUserId === user.id ? "Saving..." : "Assign"}
+                        </button>
+                      </div>
                     </td>
                     <td className="px-5 py-4 text-right">
                       <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-600">
-                        Active
+                        {user.role === "pending_assignment" ? "Pending role" : "Active"}
                       </span>
                     </td>
                   </tr>
                 ))}
-                {users.length === 0 && (
+                {isLoadingUsers ? (
                   <tr>
-                    <td colSpan={4} className="px-5 py-8 text-center text-sm font-medium text-slate-400">
+                    <td colSpan={5} className="px-5 py-8 text-center text-sm font-medium text-slate-400">
+                      Loading users...
+                    </td>
+                  </tr>
+                ) : users.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-8 text-center text-sm font-medium text-slate-400">
                       No users found.
                     </td>
                   </tr>
-                )}
+                ) : null}
               </tbody>
             </table>
           </div>
         </div>
+        {status ? (
+          <div className="rounded-xl border border-blue-100 bg-blue-50 px-5 py-4 text-sm font-bold text-blue-700">
+            {status}
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function SummaryRow({ label, value, active }: { label: string; value: string; active?: boolean }) {
+function PasswordRule({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <div className={`rounded-xl border px-4 py-3 transition-colors ${active ? "border-[#0c2340]/10 bg-[#0c2340]/5" : "border-slate-100 bg-slate-50"}`}>
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-      <p className={`mt-1 text-sm font-bold ${active ? "text-[#0c2340]" : "text-slate-500"}`}>{value}</p>
-    </div>
+    <p className={`rounded-lg px-3 py-2 text-xs font-bold ${ok ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+      {ok ? "OK" : "Need"} - {label}
+    </p>
   );
 }

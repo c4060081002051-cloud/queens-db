@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "dev": "npm run build:shared && tsx watch src/server.ts",
+    "build:shared": "tsc -p ../shared/tsconfig.json",
+    "build": "npm run build:shared && tsc",
     "start": "node dist/server.js",
     "calc:install": "python -m pip install -r python_calc/requirements.txt",
     "calc:dev": "python -m uvicorn python_calc.app:app --host 127.0.0.1 --port 8100",

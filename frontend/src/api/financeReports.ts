@@ -54,6 +54,18 @@ export function reopenDailyReport(id: number, reason: string, reopenForUserId: n
   return postAction(`/api/me/finance/reports/daily/${id}/reopen`, { reason, reopenForUserId });
 }
 
+export function requestDailyReportSubmission(
+  reportDate: string,
+  reason: string,
+  requestForUserId: number,
+) {
+  return postAction("/api/me/finance/reports/daily/request", {
+    reportDate,
+    reason,
+    requestForUserId,
+  });
+}
+
 export type AuthorizedReportUser = {
   id: number;
   email: string;

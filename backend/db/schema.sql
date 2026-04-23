@@ -10,7 +10,12 @@ USE queensdb;
 
 CREATE TABLE IF NOT EXISTS users (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  full_name VARCHAR(120) NULL,
   email VARCHAR(255) NOT NULL,
+  phone_number VARCHAR(32) NULL,
+  gender VARCHAR(32) NULL,
+  date_of_birth DATE NULL,
+  address_line VARCHAR(255) NULL,
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(50) NOT NULL DEFAULT 'admin',
   two_factor_enabled TINYINT(1) NOT NULL DEFAULT 0,
@@ -62,7 +67,6 @@ CREATE TABLE IF NOT EXISTS students (
   parent_email VARCHAR(255) NULL,
   class_room_id INT UNSIGNED NULL,
   gender VARCHAR(20) NULL,
-  roll_number VARCHAR(32) NULL,
   section_name VARCHAR(80) NULL,
   passport_photo_filename VARCHAR(255) NULL,
   nationality VARCHAR(100) NULL,
@@ -89,6 +93,9 @@ CREATE TABLE IF NOT EXISTS students (
   emergency_contact_phone VARCHAR(32) NULL,
   guardian_name VARCHAR(120) NULL,
   guardian_phone VARCHAR(32) NULL,
+  bursary_percentage INT NOT NULL DEFAULT 0,
+  bursary_starts_at DATETIME NULL,
+  bursary_ends_at DATETIME NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -158,6 +165,26 @@ CREATE TABLE IF NOT EXISTS user_messages (
   KEY user_messages_recipient_unread_idx (recipient_user_id, read_at),
   CONSTRAINT fk_user_messages_recipient FOREIGN KEY (recipient_user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT fk_user_messages_sender FOREIGN KEY (sender_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  role VARCHAR(50) NOT NULL,
+  permission_key VARCHAR(64) NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_role_permissions_role_key (role, permission_key),
+  KEY role_permissions_role_idx (role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_permission_overrides (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id INT UNSIGNED NOT NULL,
+  permission_key VARCHAR(64) NOT NULL,
+  allowed TINYINT(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_user_permission_overrides_user_permission (user_id, permission_key),
+  KEY user_permission_overrides_user_idx (user_id),
+  CONSTRAINT fk_user_permission_overrides_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Existing databases: add 2FA column if missing
@@ -260,4 +287,27 @@ CREATE TABLE IF NOT EXISTS dashboard_kpis (
   kpi_key VARCHAR(64) NOT NULL,
   value_text VARCHAR(120) NOT NULL,
   PRIMARY KEY (kpi_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS academic_exam_types (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  exam_key VARCHAR(40) NOT NULL,
+  display_name VARCHAR(80) NOT NULL,
+  is_system TINYINT(1) NOT NULL DEFAULT 0,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_academic_exam_types_exam_key (exam_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS academic_subject_assignments (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  class_category_id INT UNSIGNED NOT NULL,
+  section_name VARCHAR(80) NOT NULL DEFAULT '',
+  subject_name VARCHAR(120) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_subject_assignment_category_section_subject (class_category_id, section_name, subject_name),
+  KEY idx_subject_assignment_category (class_category_id),
+  CONSTRAINT fk_subject_assignment_category FOREIGN KEY (class_category_id) REFERENCES class_categories (id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

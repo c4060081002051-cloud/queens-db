@@ -24,6 +24,18 @@ export type AccountInfo = {
   twoFactorEnabled: boolean;
 };
 
+export type ManagedUser = {
+  id: number;
+  name: string;
+  email: string;
+  phoneNumber: string | null;
+  gender: string | null;
+  dateOfBirth: string | null;
+  addressLine: string | null;
+  role: string;
+  createdAt: string;
+};
+
 export async function fetchAccount(): Promise<AccountInfo> {
   const res = await fetch(apiUrl("/api/me/account"), { headers: { ...authHeaders() } });
   if (res.status === 401) throw new Error("Unauthorized");
@@ -31,6 +43,53 @@ export async function fetchAccount(): Promise<AccountInfo> {
     throw new Error(await errorMessageFromResponse(res));
   }
   return readJson<AccountInfo>(res);
+}
+
+export async function fetchManagedUsers(): Promise<ManagedUser[]> {
+  const res = await fetch(apiUrl("/api/me/users"), { headers: { ...authHeaders() } });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    throw new Error(await errorMessageFromResponse(res));
+  }
+  const data = await readJson<{ users: ManagedUser[] }>(res);
+  return data.users;
+}
+
+export async function createManagedUser(body: {
+  name: string;
+  email: string;
+  role: string;
+  password: string;
+  confirmPassword: string;
+}): Promise<ManagedUser> {
+  const res = await fetch(apiUrl("/api/me/users"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    throw new Error(await errorMessageFromResponse(res));
+  }
+  const data = await readJson<{ user: ManagedUser }>(res);
+  return data.user;
+}
+
+export async function updateManagedUserRole(
+  userId: number,
+  role: string,
+): Promise<ManagedUser> {
+  const res = await fetch(apiUrl(`/api/me/users/${userId}/role`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ role }),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    throw new Error(await errorMessageFromResponse(res));
+  }
+  const data = await readJson<{ user: ManagedUser }>(res);
+  return data.user;
 }
 
 export async function requestPasswordChangeOtp(): Promise<void> {

@@ -9,7 +9,6 @@ export function LearnerProfileCard({ learner }: { learner: DashboardLearner }) {
   const { t } = useI18n();
   const fields = [
     { label: t("learner.gender"), value: learner.gender },
-    { label: t("learner.roll"), value: learner.roll },
     { label: t("learner.admissionId"), value: learner.admissionId },
     { label: t("learner.admitted"), value: learner.admissionDate },
     { label: t("learner.class"), value: learner.className },

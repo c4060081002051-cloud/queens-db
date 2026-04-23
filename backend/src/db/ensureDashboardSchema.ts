@@ -2,6 +2,8 @@ import type { Sequelize } from "sequelize";
 
 /** MySQL ER_DUP_FIELDNAME — column already exists */
 const MYSQL_DUP_FIELDNAME = 1060;
+/** MySQL ER_CANT_DROP_FIELD_OR_KEY — column does not exist (or index) */
+const MYSQL_CANT_DROP_FIELD_OR_KEY = 1091;
 
 async function addColumnIfMissing(
   sequelize: Sequelize,
@@ -19,6 +21,22 @@ async function addColumnIfMissing(
   }
 }
 
+async function dropColumnIfExists(
+  sequelize: Sequelize,
+  sql: string,
+  label: string,
+): Promise<void> {
+  try {
+    await sequelize.query(sql);
+    console.info(`[db] Dropped column ${label}`);
+  } catch (e: unknown) {
+    const errno = (e as { parent?: { errno?: number } })?.parent?.errno;
+    if (errno !== MYSQL_CANT_DROP_FIELD_OR_KEY) {
+      throw e;
+    }
+  }
+}
+
 /**
  * Dashboard-related tables and additive `students` columns.
  * Safe on every startup (idempotent).
@@ -28,15 +46,18 @@ export async function ensureDashboardSchema(sequelize: Sequelize): Promise<void>
     return;
   }
 
+  // Drop the legacy roll_number column if it still exists from older deploys.
+  // Idempotent: swallows ER_CANT_DROP_FIELD_OR_KEY (1091) once the column is gone.
+  await dropColumnIfExists(
+    sequelize,
+    "ALTER TABLE students DROP COLUMN roll_number",
+    "students.roll_number",
+  );
+
   await addColumnIfMissing(
     sequelize,
     "ALTER TABLE students ADD COLUMN gender VARCHAR(20) NULL",
     "students.gender",
-  );
-  await addColumnIfMissing(
-    sequelize,
-    "ALTER TABLE students ADD COLUMN roll_number VARCHAR(32) NULL",
-    "students.roll_number",
   );
   await addColumnIfMissing(
     sequelize,
@@ -172,6 +193,21 @@ export async function ensureDashboardSchema(sequelize: Sequelize): Promise<void>
     sequelize,
     "ALTER TABLE students ADD COLUMN guardian_phone VARCHAR(32) NULL",
     "students.guardian_phone",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE students ADD COLUMN bursary_percentage INT NOT NULL DEFAULT 0",
+    "students.bursary_percentage",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE students ADD COLUMN bursary_starts_at DATETIME NULL",
+    "students.bursary_starts_at",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE students ADD COLUMN bursary_ends_at DATETIME NULL",
+    "students.bursary_ends_at",
   );
 
   await sequelize.query(`
@@ -410,6 +446,33 @@ export async function ensureDashboardSchema(sequelize: Sequelize): Promise<void>
       setting_value TEXT NULL,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (setting_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS academic_exam_types (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      exam_key VARCHAR(40) NOT NULL,
+      display_name VARCHAR(80) NOT NULL,
+      is_system TINYINT(1) NOT NULL DEFAULT 0,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_academic_exam_types_exam_key (exam_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS academic_subject_assignments (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      class_category_id INT UNSIGNED NOT NULL,
+      section_name VARCHAR(80) NOT NULL DEFAULT '',
+      subject_name VARCHAR(120) NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_subject_assignment_category_section_subject (class_category_id, section_name, subject_name),
+      KEY idx_subject_assignment_category (class_category_id),
+      CONSTRAINT fk_subject_assignment_category FOREIGN KEY (class_category_id) REFERENCES class_categories (id) ON DELETE CASCADE ON UPDATE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 }

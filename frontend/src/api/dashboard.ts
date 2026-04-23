@@ -35,7 +35,6 @@ export type DashboardLearner = {
   title: string;
   name: string;
   gender: string;
-  roll: string;
   admissionId: string;
   /** DD/MM/YYYY */
   admissionDate: string;

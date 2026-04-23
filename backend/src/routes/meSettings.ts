@@ -90,14 +90,23 @@ export function createMeSettingsRouter() {
     const { settings } = parsed.data;
 
     try {
-      for (const [key, value] of Object.entries(settings)) {
-        const existing = await SchoolSetting.findByPk(key);
-        if (existing) {
-          await existing.update({ settingValue: value });
-        } else {
-          await SchoolSetting.create({ settingKey: key, settingValue: value });
-        }
+      const sequelize = SchoolSetting.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
       }
+      await sequelize.transaction(async (t) => {
+        for (const [key, value] of Object.entries(settings)) {
+          const existing = await SchoolSetting.findByPk(key, { transaction: t });
+          if (existing) {
+            await existing.update({ settingValue: value }, { transaction: t });
+          } else {
+            await SchoolSetting.create(
+              { settingKey: key, settingValue: value },
+              { transaction: t },
+            );
+          }
+        }
+      });
 
       const allSettings = await SchoolSetting.findAll();
       const settingsMap: Record<string, string> = {};

@@ -4,9 +4,12 @@ import {
   ClassRoom,
   DailyExpenseEntry,
   DailyFinanceReport,
+  RolePermission,
   Student,
   StudentFeePayment,
   StudentFeeReceipt,
+  User,
+  UserPermissionOverride,
 } from "../models/index.js";
 
 function ymd(d = new Date()): string {
@@ -23,6 +26,51 @@ function trimStr(v: unknown, max: number): string | null {
   return t.length > max ? t.slice(0, max) : t;
 }
 
+function isAdminRole(role: string | null | undefined): boolean {
+  const r = String(role ?? "").toLowerCase();
+  return r === "admin" || r === "super_admin";
+}
+
+async function userHasPermission(
+  userId: number,
+  permissionKey: string,
+): Promise<boolean> {
+  const user = await User.findByPk(userId, { attributes: ["role"] });
+  if (!user) return false;
+  if (isAdminRole(user.role)) return true;
+
+  const roleHit = await RolePermission.findOne({
+    where: { role: user.role, permissionKey },
+    attributes: ["id"],
+  });
+  let allowed = Boolean(roleHit);
+
+  const override = await UserPermissionOverride.findOne({
+    where: { userId, permissionKey },
+    attributes: ["allowed"],
+  });
+  if (override) {
+    allowed = Boolean(override.allowed);
+  }
+  return allowed;
+}
+
+async function canWriteFinanceEntriesForDate(
+  userId: number | null | undefined,
+  targetDate: string,
+): Promise<boolean> {
+  if (!userId) return false;
+  const user = await User.findByPk(userId, { attributes: ["role"] });
+  if (!user) return false;
+  if (isAdminRole(user.role)) return true;
+  const report = await DailyFinanceReport.findOne({
+    where: { reportDate: targetDate },
+    attributes: ["status"],
+  });
+  if (!report) return true;
+  return report.status === "not_submitted";
+}
+
 export function createMeFinanceLedgerRouter() {
   const r = Router();
 
@@ -31,6 +79,18 @@ export function createMeFinanceLedgerRouter() {
       const dateRaw = typeof req.query.date === "string" ? req.query.date.trim() : ymd();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
         return res.status(400).json({ error: "Invalid date" });
+      }
+      const today = ymd();
+      if (dateRaw < today) {
+        if (!req.userId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        const canViewPastLedger = await userHasPermission(req.userId, "finance_past_ledger");
+        if (!canViewPastLedger) {
+          return res.status(403).json({
+            error: "You are not allowed to view past daily ledger records.",
+          });
+        }
       }
       const start = `${dateRaw} 00:00:00`;
       const end = `${dateRaw} 23:59:59`;
@@ -127,6 +187,12 @@ export function createMeFinanceLedgerRouter() {
         typeof body.expenseDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.expenseDate)
           ? body.expenseDate
           : ymd();
+      const canWrite = await canWriteFinanceEntriesForDate(req.userId, expenseDate);
+      if (!canWrite) {
+        return res.status(403).json({
+          error: "This daily report has already been submitted. Only admin can enter data now.",
+        });
+      }
       const category = trimStr(body.category, 80);
       const description = trimStr(body.description, 255);
       const paymentMethod = trimStr(body.paymentMethod, 40) ?? "Cash";

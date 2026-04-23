@@ -10,6 +10,7 @@ import {
   StudentFeePayment,
   StudentFeeStructure,
   User,
+  UserNotification,
 } from "../models/index.js";
 
 function ymd(d = new Date()): string {
@@ -38,6 +39,27 @@ async function requestRole(userId: number | null | undefined): Promise<string> {
 
 async function ensureAdmin(userId: number | null | undefined): Promise<boolean> {
   return (await requestRole(userId)) === "admin";
+}
+
+async function notifyAdminsReportSubmitted(reportDate: string, submittedByUserId: number | null) {
+  const submitter = submittedByUserId
+    ? await User.findByPk(submittedByUserId, { attributes: ["email"] })
+    : null;
+  const submitterLabel = submitter?.email?.trim() || "A finance user";
+
+  const admins = await User.findAll({
+    attributes: ["id"],
+    where: { role: { [Op.in]: ["admin", "super_admin"] } },
+  });
+  if (admins.length === 0) return;
+
+  await UserNotification.bulkCreate(
+    admins.map((admin) => ({
+      userId: admin.id,
+      title: "Daily ledger submitted",
+      body: `${submitterLabel} handed in the daily ledger for ${reportDate}.`,
+    })),
+  );
 }
 
 export function createMeFinanceReportsRouter() {
@@ -186,6 +208,84 @@ export function createMeFinanceReportsRouter() {
         reopenedReason: null,
       });
       await appendAudit(row.id, req.userId ?? null, "submit_report");
+      await notifyAdminsReportSubmitted(reportDate, req.userId ?? null);
+      return res.json({ ok: true, id: row.id, status: row.status });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/finance/reports/daily/request", async (req, res) => {
+    try {
+      if (!(await ensureAdmin(req.userId ?? null))) {
+        return res.status(403).json({ error: "Admin only" });
+      }
+      const body = req.body as Record<string, unknown>;
+      const reportDate =
+        typeof body.reportDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.reportDate)
+          ? body.reportDate
+          : ymd();
+      const reason =
+        typeof body.reason === "string" ? body.reason.trim().slice(0, 255) : "";
+      const requestForUserId = Number(body.requestForUserId);
+
+      if (!reason) {
+        return res.status(400).json({ error: "reason is required" });
+      }
+      if (!Number.isFinite(requestForUserId) || requestForUserId < 1) {
+        return res.status(400).json({ error: "requestForUserId is required" });
+      }
+
+      const assignee = await User.findByPk(requestForUserId, {
+        attributes: ["id", "email", "role"],
+      });
+      if (!assignee) return res.status(404).json({ error: "Assigned user not found" });
+      if ((assignee.role ?? "").trim().toLowerCase() === "admin") {
+        return res.status(400).json({ error: "Assigned user must be a non-admin authorized user" });
+      }
+
+      const [row] = await DailyFinanceReport.findOrCreate({
+        where: { reportDate },
+        defaults: {
+          status: "not_submitted",
+          submittedByUserId: null,
+          submittedAt: null,
+          isReopened: true,
+          reopenedReason: reason,
+          reopenedForUserId: requestForUserId,
+        },
+      });
+
+      if (row.status === "closed") {
+        return res.status(409).json({ error: "Report is sealed. Reopen it first before requesting." });
+      }
+
+      await row.update({
+        status: "not_submitted",
+        submittedByUserId: null,
+        submittedAt: null,
+        reviewedByUserId: null,
+        reviewedAt: null,
+        isReopened: true,
+        reopenedReason: reason,
+        reopenedForUserId: requestForUserId,
+        adminNotes: null,
+      });
+
+      await appendAudit(
+        row.id,
+        req.userId ?? null,
+        "request_report_submission",
+        `Requested from ${assignee.email}. Reason: ${reason}`,
+      );
+
+      await UserNotification.create({
+        userId: assignee.id,
+        title: "Daily report requested",
+        body: `Admin requested daily ledger submission for ${reportDate}. Reason: ${reason}`,
+      });
+
       return res.json({ ok: true, id: row.id, status: row.status });
     } catch (err) {
       console.error(err);

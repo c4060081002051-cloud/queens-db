@@ -24,7 +24,6 @@ type Row = {
   gender: string;
   classRoomId: string;
   sectionName: string;
-  rollNumber: string;
   nationality: string;
   countryCode: string;
   district: string;
@@ -58,7 +57,6 @@ const headers: Array<{ key: keyof Row; label: string }> = [
   { key: "gender", label: "Gender" },
   { key: "classRoomId", label: "ClassRoom ID" },
   { key: "sectionName", label: "Section" },
-  { key: "rollNumber", label: "Roll number" },
   { key: "nationality", label: "Nationality" },
   { key: "countryCode", label: "Country code" },
   { key: "district", label: "District" },
@@ -106,7 +104,6 @@ function emptyRow(): Row {
     gender: "",
     classRoomId: "",
     sectionName: "",
-    rollNumber: "",
     nationality: "",
     countryCode: "",
     district: "",
@@ -318,7 +315,6 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
           gender: r.gender.trim() || undefined,
           classRoomId: classRoomNum,
           sectionName: r.sectionName.trim() || undefined,
-          rollNumber: r.rollNumber.trim() || undefined,
           nationality: r.nationality.trim() || undefined,
           countryCode: r.countryCode.trim() || undefined,
           district: r.district.trim() || undefined,

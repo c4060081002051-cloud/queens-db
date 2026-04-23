@@ -9,6 +9,14 @@ function studentLabel(student: StudentApiRow): string {
   return `${student.fullName} (${student.admissionNumber})`;
 }
 
+function toDateTimeLocalValue(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function AssignBurseryPage({
   initialStudentId,
   initialTerm,
@@ -25,6 +33,8 @@ export function AssignBurseryPage({
   const [selectedStudent, setSelectedStudent] = useState<StudentApiRow | null>(null);
   const [term, setTerm] = useState(initialTerm ?? "Term 1");
   const [percentage, setPercentage] = useState(initialPercentage ?? "0");
+  const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
   const [expectedBase, setExpectedBase] = useState<number | null>(null);
   
   const [submitting, setSubmitting] = useState(false);
@@ -47,6 +57,8 @@ export function AssignBurseryPage({
         if (cancelled) return;
         setSelectedStudent(student);
         setStudentSearch(studentLabel(student));
+        setStartsAt(toDateTimeLocalValue(student.bursaryStartsAt));
+        setEndsAt(toDateTimeLocalValue(student.bursaryEndsAt));
         setStudentMatches([]);
       })
       .catch(() => {
@@ -103,6 +115,18 @@ export function AssignBurseryPage({
 
   const handleApply = async () => {
     if (!selectedStudent) return;
+    if (!Number.isFinite(Number(percentage)) || Number(percentage) <= 0) {
+      setStatusMsg({ type: "error", text: "Bursary percentage must be greater than 0." });
+      return;
+    }
+    if (!startsAt || !endsAt) {
+      setStatusMsg({ type: "error", text: "Bursary start and end dates are required." });
+      return;
+    }
+    if (startsAt && endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+      setStatusMsg({ type: "error", text: "Bursary end time must be after start time." });
+      return;
+    }
     setStatusMsg(null);
     setSubmitting(true);
     try {
@@ -110,6 +134,8 @@ export function AssignBurseryPage({
         studentId: selectedStudent.id,
         percentage: Number(percentage),
         term,
+        startsAt: startsAt ? new Date(startsAt).toISOString() : null,
+        endsAt: endsAt ? new Date(endsAt).toISOString() : null,
       });
       setStatusMsg({
         type: "success",
@@ -135,6 +161,8 @@ export function AssignBurseryPage({
     try {
       await revokeBursery(selectedStudent.id, term);
       setPercentage("0");
+      setStartsAt("");
+      setEndsAt("");
       setStatusMsg({ type: "success", text: t("finance.bursery.status.revoked") });
       
       // Refresh base fee display
@@ -226,6 +254,8 @@ export function AssignBurseryPage({
                     onClick={() => {
                       setSelectedStudent(s);
                       setStudentSearch(studentLabel(s));
+                      setStartsAt(toDateTimeLocalValue(s.bursaryStartsAt));
+                      setEndsAt(toDateTimeLocalValue(s.bursaryEndsAt));
                       setStudentMatches([]);
                     }}
                     style={{
@@ -352,6 +382,67 @@ export function AssignBurseryPage({
                 }}>
                   {percentage}%
                 </div>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={percentage}
+                  onChange={(e) => setPercentage(e.target.value)}
+                  style={{
+                    width: 120,
+                    height: 48,
+                    padding: "0 12px",
+                    borderRadius: 12,
+                    border: "2px solid #e2e8f0",
+                    fontSize: "1rem",
+                    fontWeight: 700,
+                    outline: "none",
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+              <div>
+                <label style={{ display: "block", fontWeight: 700, fontSize: "0.85rem", color: "#475569", marginBottom: 8 }}>
+                  Bursary starts at *
+                </label>
+                <input
+                  type="datetime-local"
+                  value={startsAt}
+                  onChange={(e) => setStartsAt(e.target.value)}
+                  required
+                  style={{
+                    width: "100%",
+                    height: 48,
+                    padding: "0 12px",
+                    borderRadius: 12,
+                    border: "2px solid #e2e8f0",
+                    fontSize: "0.95rem",
+                    outline: "none",
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontWeight: 700, fontSize: "0.85rem", color: "#475569", marginBottom: 8 }}>
+                  Bursary ends at *
+                </label>
+                <input
+                  type="datetime-local"
+                  value={endsAt}
+                  onChange={(e) => setEndsAt(e.target.value)}
+                  required
+                  style={{
+                    width: "100%",
+                    height: 48,
+                    padding: "0 12px",
+                    borderRadius: 12,
+                    border: "2px solid #e2e8f0",
+                    fontSize: "0.95rem",
+                    outline: "none",
+                  }}
+                />
               </div>
             </div>
 
@@ -401,7 +492,7 @@ export function AssignBurseryPage({
 
             <div style={{ display: "flex", gap: 16 }}>
               <button
-                disabled={submitting}
+                disabled={submitting || !startsAt || !endsAt || !Number.isFinite(Number(percentage)) || Number(percentage) <= 0}
                 onClick={handleApply}
                 style={{
                   flex: 2,
@@ -412,8 +503,8 @@ export function AssignBurseryPage({
                   borderRadius: 16,
                   fontWeight: 800,
                   fontSize: "1rem",
-                  cursor: submitting ? "not-allowed" : "pointer",
-                  opacity: submitting ? 0.7 : 1,
+                  cursor: (submitting || !startsAt || !endsAt || !Number.isFinite(Number(percentage)) || Number(percentage) <= 0) ? "not-allowed" : "pointer",
+                  opacity: (submitting || !startsAt || !endsAt || !Number.isFinite(Number(percentage)) || Number(percentage) <= 0) ? 0.7 : 1,
                   boxShadow: "0 4px 12px rgba(12,35,64,0.2)"
                 }}
               >

@@ -14,6 +14,112 @@ export type ResultEntryOptions = {
   sections: Array<{ id: number; classRoomId: number; name: string }>;
 };
 
+export type ExamTypeConfigRow = {
+  id: number;
+  examKey: string;
+  displayName: string;
+  isSystem: boolean;
+  isActive: boolean;
+};
+
+export async function fetchExamTypeConfigs(): Promise<ExamTypeConfigRow[]> {
+  const res = await fetch(apiUrl("/api/me/academics/config/exam-types"), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ items: ExamTypeConfigRow[] }>(res);
+  return data.items;
+}
+
+export async function createExamTypeConfig(body: {
+  examKey: string;
+  displayName: string;
+}): Promise<ExamTypeConfigRow> {
+  const res = await fetch(apiUrl("/api/me/academics/config/exam-types"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: ExamTypeConfigRow }>(res);
+  return data.item;
+}
+
+export async function deleteExamTypeConfig(id: number): Promise<void> {
+  const res = await fetch(apiUrl(`/api/me/academics/config/exam-types/${id}`), {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok && res.status !== 204) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+}
+
+export type SubjectAssignmentConfigRow = {
+  id: number;
+  classCategoryId: number;
+  sectionName: string | null;
+  subjectName: string;
+};
+
+export type SubjectConfigPayload = {
+  categories: Array<{ id: number; name: string }>;
+  items: SubjectAssignmentConfigRow[];
+};
+
+export async function fetchSubjectConfigs(): Promise<SubjectConfigPayload> {
+  const res = await fetch(apiUrl("/api/me/academics/config/subjects"), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  return readJson<SubjectConfigPayload>(res);
+}
+
+export async function createSubjectConfig(body: {
+  classCategoryId: number;
+  sectionName?: string;
+  subjectName: string;
+}): Promise<SubjectAssignmentConfigRow> {
+  const res = await fetch(apiUrl("/api/me/academics/config/subjects"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: SubjectAssignmentConfigRow }>(res);
+  return data.item;
+}
+
+export async function deleteSubjectConfig(id: number): Promise<void> {
+  const res = await fetch(apiUrl(`/api/me/academics/config/subjects/${id}`), {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok && res.status !== 204) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+}
+
 export async function fetchResultEntryOptions(): Promise<ResultEntryOptions> {
   const res = await fetch(apiUrl("/api/me/academics/result-entry/options"), {
     headers: { ...authHeaders() },

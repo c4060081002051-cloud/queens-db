@@ -1,4 +1,9 @@
 import { apiUrl, authHeaders } from "./baseUrl";
+import type {
+  StudentCreateBodyInput,
+  StudentListQueryInput,
+  StudentUpdateBodyInput,
+} from "../../../shared/schemas/students";
 
 async function readJson<T>(res: Response): Promise<T> {
   const text = await res.text();
@@ -19,7 +24,6 @@ export type StudentApiRow = {
   classRoomId: number | null;
   className: string | null;
   gender: string | null;
-  rollNumber: string | null;
   sectionName: string | null;
   admittedAt: string;
   hasPassportPhoto: boolean;
@@ -48,6 +52,9 @@ export type StudentApiRow = {
   emergencyContactPhone: string | null;
   guardianName: string | null;
   guardianPhone: string | null;
+  bursaryPercentage: number;
+  bursaryStartsAt: string | null;
+  bursaryEndsAt: string | null;
 };
 
 export type ClassRoomOption = {
@@ -83,14 +90,10 @@ export type TeacherOption = {
 export type StudentSortBy = "date" | "id" | "name" | "class";
 export type StudentSortDir = "asc" | "desc";
 
-export async function fetchStudents(opts: {
-  q?: string;
-  sortBy?: StudentSortBy;
-  sortDir?: StudentSortDir;
-  limit?: number;
-}): Promise<StudentApiRow[]> {
+export async function fetchStudents(opts: StudentListQueryInput): Promise<StudentApiRow[]> {
   const p = new URLSearchParams();
-  if (opts.q?.trim()) p.set("q", opts.q.trim());
+  const query = typeof opts.q === "string" ? opts.q.trim() : "";
+  if (query) p.set("q", query);
   p.set("sortBy", opts.sortBy ?? "date");
   p.set("sortDir", opts.sortDir ?? "desc");
   if (opts.limit != null) p.set("limit", String(opts.limit));
@@ -334,40 +337,7 @@ export async function deleteClassCategory(id: number): Promise<void> {
   }
 }
 
-export type CreateStudentBody = {
-  firstName: string;
-  middleName?: string;
-  lastName: string;
-  dateOfBirth?: string;
-  parentEmail?: string;
-  classRoomId?: number | null;
-  gender?: string;
-  rollNumber?: string;
-  sectionName?: string;
-  nationality?: string;
-  countryCode?: string | null;
-  district?: string;
-  registrationType?: "first" | "continuing";
-  previousSchool?: string;
-  previousSchoolLocation?: string;
-  lastClassAttended?: string;
-  lastTermYear?: string;
-  previousGrades?: string;
-  transferReason?: "relocation" | "discipline" | "better_education";
-  parentAliveStatus?: "both" | "one" | "none";
-  parentFullName?: string;
-  parentPhone?: string;
-  parentAddress?: string;
-  religion?: string;
-  specialNeeds?: string;
-  boardingStatus?: "boarding" | "day_half" | "day_full";
-  residenceAddress?: string;
-  medicalInfo?: string;
-  emergencyContactName?: string;
-  emergencyContactPhone?: string;
-  guardianName?: string;
-  guardianPhone?: string;
-};
+export type CreateStudentBody = StudentCreateBodyInput;
 
 export async function createStudent(body: CreateStudentBody): Promise<StudentApiRow> {
   const res = await fetch(apiUrl("/api/me/students"), {
@@ -384,40 +354,7 @@ export async function createStudent(body: CreateStudentBody): Promise<StudentApi
   return data.item;
 }
 
-export type UpdateStudentBody = {
-  firstName?: string;
-  middleName?: string | null;
-  lastName?: string;
-  dateOfBirth?: string | null;
-  parentEmail?: string | null;
-  classRoomId?: number | null;
-  gender?: string | null;
-  rollNumber?: string | null;
-  sectionName?: string | null;
-  nationality?: string | null;
-  countryCode?: string | null;
-  district?: string | null;
-  registrationType?: "first" | "continuing";
-  previousSchool?: string | null;
-  previousSchoolLocation?: string | null;
-  lastClassAttended?: string | null;
-  lastTermYear?: string | null;
-  previousGrades?: string | null;
-  transferReason?: "relocation" | "discipline" | "better_education" | null;
-  parentAliveStatus?: "both" | "one" | "none" | null;
-  parentFullName?: string | null;
-  parentPhone?: string | null;
-  parentAddress?: string | null;
-  religion?: string | null;
-  specialNeeds?: string | null;
-  boardingStatus?: "boarding" | "day_half" | "day_full" | null;
-  residenceAddress?: string | null;
-  medicalInfo?: string | null;
-  emergencyContactName?: string | null;
-  emergencyContactPhone?: string | null;
-  guardianName?: string | null;
-  guardianPhone?: string | null;
-};
+export type UpdateStudentBody = StudentUpdateBodyInput;
 
 export async function updateStudent(
   id: number,

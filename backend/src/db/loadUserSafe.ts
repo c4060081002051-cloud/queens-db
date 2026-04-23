@@ -1,4 +1,19 @@
-import { User, RolePermission } from "../models/index.js";
+import { User, RolePermission, UserPermissionOverride } from "../models/index.js";
+
+function effectivePermissions(
+  rolePermissions: string[],
+  overrides: Array<{ permissionKey: string; allowed: boolean }>,
+): string[] {
+  const set = new Set(rolePermissions);
+  for (const row of overrides) {
+    if (row.allowed) {
+      set.add(row.permissionKey);
+    } else {
+      set.delete(row.permissionKey);
+    }
+  }
+  return [...set];
+}
 
 function isUnknownTwoFactorColumnError(e: unknown): boolean {
   const msg = String((e as Error)?.message ?? "");
@@ -25,7 +40,12 @@ export async function loadUserMeFields(
     const role = row?.role ?? jwtFallback.role;
     
     const perms = await RolePermission.findAll({ where: { role } });
-    const permissions = perms.map(p => p.permissionKey);
+    const rolePermissions = perms.map((p) => p.permissionKey);
+    const userOverrides = await UserPermissionOverride.findAll({
+      where: { userId },
+      attributes: ["permissionKey", "allowed"],
+    });
+    const permissions = effectivePermissions(rolePermissions, userOverrides);
 
     return {
       email,
@@ -42,7 +62,12 @@ export async function loadUserMeFields(
     const role = row?.role ?? jwtFallback.role;
 
     const perms = await RolePermission.findAll({ where: { role } });
-    const permissions = perms.map(p => p.permissionKey);
+    const rolePermissions = perms.map((p) => p.permissionKey);
+    const userOverrides = await UserPermissionOverride.findAll({
+      where: { userId },
+      attributes: ["permissionKey", "allowed"],
+    });
+    const permissions = effectivePermissions(rolePermissions, userOverrides);
 
     return {
       email,

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiUrl, authHeaders } from "./api/baseUrl";
 import { LoginPage } from "./LoginPage";
+import { RegisterPage, type RegisterPayload } from "./RegisterPage";
 import { PasswordResetPage } from "./PasswordResetPage";
 import { Dashboard } from "./dashboards/Dashboard";
 import "./App.css";
@@ -93,7 +94,7 @@ export default function App() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [authView, setAuthView] = useState<"login" | "reset">("login");
+  const [authView, setAuthView] = useState<"login" | "reset" | "register">("login");
   const [loginBanner, setLoginBanner] = useState<string | null>(null);
   const [pending2FA, setPending2FA] = useState<{
     token: string;
@@ -354,6 +355,73 @@ export default function App() {
     setPending2FA(null);
   }, []);
 
+  const register = useCallback(async (payload: RegisterPayload) => {
+    setError(null);
+    if (!payload.name.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
+    if (!EMAIL_RE.test(payload.email.trim())) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (!payload.phoneNumber.trim()) {
+      setError("Please enter your phone number.");
+      return;
+    }
+    if (!payload.gender.trim()) {
+      setError("Please select gender.");
+      return;
+    }
+    if (!payload.dateOfBirth.trim()) {
+      setError("Please select date of birth.");
+      return;
+    }
+    if (!payload.addressLine.trim()) {
+      setError("Please enter your address.");
+      return;
+    }
+    if (!payload.password) {
+      setError("Please enter a password.");
+      return;
+    }
+    if (payload.password !== payload.confirmPassword) {
+      setError("Password confirmation does not match.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(apiUrl("/api/auth/register"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const parsed = await readJsonBody<{ message?: string; error?: string }>(res);
+      if (!parsed.ok) {
+        setError(describeUnparsedApiResponse(res, parsed.emptyBody));
+        return;
+      }
+      const data = parsed.data;
+      if (!res.ok) {
+        setError(data.error ?? "Registration failed. Please try again.");
+        return;
+      }
+      setAuthView("login");
+      setPassword("");
+      setEmail(payload.email.trim());
+      setLoginBanner(
+        data.message ??
+          "Registration submitted. Wait for admin role assignment before signing in.",
+      );
+    } catch {
+      setError(
+        "We couldn’t connect to the server. Check your internet connection and try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   if (!token) {
     if (authView === "reset") {
       return (
@@ -366,6 +434,19 @@ export default function App() {
             setAuthView("login");
             setPassword("");
             setLoginBanner("Password updated. Sign in with your new password.");
+          }}
+        />
+      );
+    }
+    if (authView === "register") {
+      return (
+        <RegisterPage
+          loading={loading}
+          error={error}
+          onRegister={register}
+          onBackToLogin={() => {
+            setAuthView("login");
+            setError(null);
           }}
         />
       );
@@ -383,6 +464,11 @@ export default function App() {
         onForgotPassword={() => {
           setAuthView("reset");
           setError(null);
+        }}
+        onRegister={() => {
+          setAuthView("register");
+          setError(null);
+          setLoginBanner(null);
         }}
         successBanner={loginBanner}
         onDismissSuccessBanner={() => setLoginBanner(null)}

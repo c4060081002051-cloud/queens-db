@@ -16,6 +16,20 @@ export type RolePermissionsResponse = {
   availableKeys: string[];
 };
 
+export type UserPermissionOverride = {
+  permissionKey: string;
+  allowed: boolean;
+};
+
+export type UserPermissionsResponse = {
+  userId: number;
+  userRole: string;
+  availableKeys: string[];
+  rolePermissions: string[];
+  overrides: UserPermissionOverride[];
+  effectivePermissions: string[];
+};
+
 export async function fetchRolePermissions(): Promise<RolePermissionsResponse> {
   const requestUrl = apiUrl("/api/me/role-permissions");
   const headers = authHeaders();
@@ -51,4 +65,35 @@ export async function updateRolePermissions(role: string, permissions: string[])
     body: JSON.stringify({ role, permissions }),
   });
   if (!res.ok) throw new Error("Failed to update permissions");
+}
+
+export async function fetchUserPermissions(userId: number): Promise<UserPermissionsResponse> {
+  const res = await fetch(apiUrl(`/api/me/users/${userId}/permissions`), {
+    headers: {
+      ...authHeaders(),
+    },
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(text || "Failed to load user permissions");
+  }
+  return JSON.parse(text) as UserPermissionsResponse;
+}
+
+export async function updateUserPermissionOverrides(
+  userId: number,
+  overrides: UserPermissionOverride[],
+): Promise<void> {
+  const res = await fetch(apiUrl(`/api/me/users/${userId}/permissions`), {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
+    body: JSON.stringify({ overrides }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to update user permissions");
+  }
 }

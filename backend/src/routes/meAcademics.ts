@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { Op } from "sequelize";
 import {
+  AcademicExamType,
+  AcademicSubjectAssignment,
+  ClassCategory,
   ClassRoom,
   ClassSection,
   Student,
@@ -10,8 +13,6 @@ import {
 } from "../models/index.js";
 
 const TERM_OPTIONS = ["Term 1", "Term 2", "Term 3"] as const;
-const EXAM_TYPE_OPTIONS = ["BOT", "MID", "EOT", "ASSESSMENT"] as const;
-type ExamType = (typeof EXAM_TYPE_OPTIONS)[number];
 
 function trimStr(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
@@ -20,37 +21,22 @@ function trimStr(v: unknown, max: number): string | null {
   return t.length > max ? t.slice(0, max) : t;
 }
 
-function normalizeExamType(v: unknown): ExamType | null {
+function normalizeExamType(v: unknown, allowedExamTypes: string[]): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim().toUpperCase();
-  return EXAM_TYPE_OPTIONS.includes(t as ExamType) ? (t as ExamType) : null;
+  return allowedExamTypes.includes(t) ? t : null;
 }
 
-function subjectsForClass(className: string): string[] {
-  const c = className.trim().toUpperCase();
-  if (c.startsWith("KG")) {
-    return [
-      "Learning Area (LA) 1",
-      "Learning Area (LA) 2",
-      "Learning Area (LA) 3",
-      "Learning Area (LA) 4",
-      "Learning Area (LA) 5",
-    ];
-  }
-  if (c === "P1" || c === "P2" || c === "P3") {
-    return [
-      "English",
-      "Mathematics",
-      "Literacy A",
-      "Literacy B",
-      "Luganda",
-      "Religious Education",
-    ];
-  }
-  if (c === "P4" || c === "P5" || c === "P6" || c === "P7") {
-    return ["English", "Mathematics", "Social Studies", "Science"];
-  }
-  return ["English", "Mathematics", "Social Studies", "Science"];
+async function activeExamTypeKeys(): Promise<string[]> {
+  const rows = await AcademicExamType.findAll({
+    where: { isActive: true },
+    order: [
+      ["is_system", "DESC"],
+      ["id", "ASC"],
+    ],
+    attributes: ["examKey"],
+  });
+  return rows.map((row) => row.examKey.trim().toUpperCase()).filter(Boolean);
 }
 
 async function getUserRole(userId: number): Promise<string> {
@@ -82,6 +68,31 @@ async function getAccessibleClassrooms(userId: number): Promise<Array<{ id: numb
     .filter((x): x is { id: number; name: string } => x != null);
 }
 
+async function subjectsForStudentClass(
+  classRoomId: number | null | undefined,
+  _className: string,
+  sectionName: string | null | undefined,
+): Promise<string[]> {
+  if (!classRoomId) return [];
+  const classRoom = await ClassRoom.findByPk(classRoomId, { attributes: ["id", "categoryId"] });
+  if (!classRoom?.categoryId) return [];
+
+  const sec = (sectionName ?? "").trim();
+  const rows = await AcademicSubjectAssignment.findAll({
+    where: {
+      classCategoryId: classRoom.categoryId,
+      sectionName: { [Op.in]: sec ? ["", sec] : [""] },
+    },
+    order: [
+      ["section_name", "DESC"],
+      ["subject_name", "ASC"],
+    ],
+    attributes: ["subjectName"],
+  });
+  const dedup = Array.from(new Set(rows.map((x) => x.subjectName.trim()).filter(Boolean)));
+  return dedup;
+}
+
 function normalizeClassSortToken(value: string): [number, number] {
   const upper = value.trim().toUpperCase();
   const kg = /^KG(\d+)$/.exec(upper);
@@ -92,6 +103,19 @@ function normalizeClassSortToken(value: string): [number, number] {
   return [9, 0];
 }
 
+function routeParamId(req: { params: Record<string, string | string[] | undefined> }): number {
+  const p = req.params;
+  const pick = (v: string | string[] | undefined): string | undefined =>
+    Array.isArray(v) ? v[0] : v;
+  const raw =
+    pick(p["id"]) ??
+    pick(p["id(\\d+)"]) ??
+    Object.values(p)
+      .map(pick)
+      .find((v) => v && /^\d+$/.test(v));
+  return Number.parseInt(String(raw ?? ""), 10);
+}
+
 export function createMeAcademicsRouter() {
   const r = Router();
 
@@ -99,6 +123,7 @@ export function createMeAcademicsRouter() {
     try {
       const userId = req.userId!;
       const role = await getUserRole(userId);
+      const examTypes = await activeExamTypeKeys();
       const classes = await getAccessibleClassrooms(userId);
       const classIds = classes.map((x) => x.id);
       const sectionRows =
@@ -115,7 +140,7 @@ export function createMeAcademicsRouter() {
       return res.json({
         authority: role === "admin" ? "full" : "restricted",
         terms: TERM_OPTIONS,
-        examTypes: EXAM_TYPE_OPTIONS,
+        examTypes,
         classes,
         sections: sectionRows.map((x) => ({
           id: x.id,
@@ -133,7 +158,11 @@ export function createMeAcademicsRouter() {
     try {
       const userId = req.userId!;
       const term = trimStr(req.query.term, 20) ?? "Term 1";
-      const examType = normalizeExamType(req.query.examType) ?? "BOT";
+      const examTypes = await activeExamTypeKeys();
+      if (examTypes.length === 0) {
+        return res.status(400).json({ error: "No exam types configured. Add exam types manually first." });
+      }
+      const examType = normalizeExamType(req.query.examType, examTypes) ?? examTypes[0];
       const classes = await getAccessibleClassrooms(userId);
       const classIds = classes.map((x) => x.id);
       if (classIds.length === 0) return res.json({ rows: [] });
@@ -200,7 +229,11 @@ export function createMeAcademicsRouter() {
     try {
       const userId = req.userId!;
       const term = trimStr(req.query.term, 20) ?? "Term 1";
-      const examType = normalizeExamType(req.query.examType) ?? "BOT";
+      const examTypes = await activeExamTypeKeys();
+      if (examTypes.length === 0) {
+        return res.status(400).json({ error: "No exam types configured. Add exam types manually first." });
+      }
+      const examType = normalizeExamType(req.query.examType, examTypes) ?? examTypes[0];
       const classRoomId = Number(req.query.classRoomId);
       const sectionName = trimStr(req.query.sectionName, 80);
       if (!Number.isFinite(classRoomId) || classRoomId < 1) {
@@ -256,7 +289,11 @@ export function createMeAcademicsRouter() {
     try {
       const userId = req.userId!;
       const term = trimStr(req.query.term, 20) ?? "Term 1";
-      const examType = normalizeExamType(req.query.examType) ?? "BOT";
+      const examTypes = await activeExamTypeKeys();
+      if (examTypes.length === 0) {
+        return res.status(400).json({ error: "No exam types configured. Add exam types manually first." });
+      }
+      const examType = normalizeExamType(req.query.examType, examTypes) ?? examTypes[0];
       const classes = await getAccessibleClassrooms(userId);
       const classIds = classes.map((x) => x.id);
       if (classIds.length === 0) return res.json({ items: [] });
@@ -308,7 +345,11 @@ export function createMeAcademicsRouter() {
       const userId = req.userId!;
       const studentId = Number(req.params.studentId);
       const term = trimStr(req.query.term, 20) ?? "Term 1";
-      const examType = normalizeExamType(req.query.examType) ?? "BOT";
+      const examTypes = await activeExamTypeKeys();
+      if (examTypes.length === 0) {
+        return res.status(400).json({ error: "No exam types configured. Add exam types manually first." });
+      }
+      const examType = normalizeExamType(req.query.examType, examTypes) ?? examTypes[0];
       if (!Number.isFinite(studentId) || studentId < 1) {
         return res.status(400).json({ error: "Invalid studentId" });
       }
@@ -326,7 +367,11 @@ export function createMeAcademicsRouter() {
         (student.get("classRoom") as ClassRoom | null | undefined)?.name ??
         classes.find((x) => x.id === student.classRoomId)?.name ??
         "Unknown";
-      const subjects = subjectsForClass(className);
+      const subjects = await subjectsForStudentClass(
+        student.classRoomId,
+        className,
+        student.sectionName ?? null,
+      );
       const resultRows = await StudentAssessmentResult.findAll({
         where: { studentId, term, examType, subject: { [Op.in]: subjects } },
         attributes: ["subject", "score"],
@@ -362,7 +407,11 @@ export function createMeAcademicsRouter() {
       const studentId = Number(req.params.studentId);
       const body = req.body as Record<string, unknown>;
       const term = trimStr(body.term, 20);
-      const examType = normalizeExamType(body.examType);
+      const examTypes = await activeExamTypeKeys();
+      if (examTypes.length === 0) {
+        return res.status(400).json({ error: "No exam types configured. Add exam types manually first." });
+      }
+      const examType = normalizeExamType(body.examType, examTypes);
       const marks = Array.isArray(body.marks) ? body.marks : [];
 
       if (!Number.isFinite(studentId) || studentId < 1) {
@@ -386,7 +435,9 @@ export function createMeAcademicsRouter() {
         (student.get("classRoom") as ClassRoom | null | undefined)?.name ??
         classes.find((x) => x.id === student.classRoomId)?.name ??
         "Unknown";
-      const allowedSubjects = new Set(subjectsForClass(className));
+      const allowedSubjects = new Set(
+        await subjectsForStudentClass(student.classRoomId, className, student.sectionName ?? null),
+      );
 
       let saved = 0;
       for (const raw of marks) {
@@ -420,6 +471,167 @@ export function createMeAcademicsRouter() {
       }
 
       return res.status(201).json({ ok: true, saved });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.get("/academics/config/exam-types", async (_req, res) => {
+    try {
+      const rows = await AcademicExamType.findAll({
+        order: [
+          ["is_system", "DESC"],
+          ["id", "ASC"],
+        ],
+      });
+      return res.json({
+        items: rows.map((row) => ({
+          id: row.id,
+          examKey: row.examKey,
+          displayName: row.displayName,
+          isSystem: Boolean(row.isSystem),
+          isActive: Boolean(row.isActive),
+        })),
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/academics/config/exam-types", async (req, res) => {
+    try {
+      const userId = req.userId!;
+      const role = await getUserRole(userId);
+      if (role !== "admin") return res.status(403).json({ error: "Only admins can manage exam types" });
+
+      const body = req.body as Record<string, unknown>;
+      const examKey = trimStr(body.examKey, 40)?.toUpperCase().replace(/\s+/g, "_");
+      const displayName = trimStr(body.displayName, 80);
+      if (!examKey) return res.status(400).json({ error: "examKey is required" });
+      if (!displayName) return res.status(400).json({ error: "displayName is required" });
+
+      const existing = await AcademicExamType.findOne({ where: { examKey } });
+      if (existing) return res.status(409).json({ error: "Exam type already exists" });
+
+      const created = await AcademicExamType.create({
+        examKey,
+        displayName,
+        isSystem: false,
+        isActive: true,
+      });
+      return res.status(201).json({
+        item: {
+          id: created.id,
+          examKey: created.examKey,
+          displayName: created.displayName,
+          isSystem: Boolean(created.isSystem),
+          isActive: Boolean(created.isActive),
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.delete("/academics/config/exam-types/:id(\\d+)", async (req, res) => {
+    try {
+      const userId = req.userId!;
+      const role = await getUserRole(userId);
+      if (role !== "admin") return res.status(403).json({ error: "Only admins can manage exam types" });
+
+      const id = routeParamId(req);
+      if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
+      const row = await AcademicExamType.findByPk(id);
+      if (!row) return res.status(404).json({ error: "Not found" });
+
+      await row.destroy();
+      return res.status(204).send();
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.get("/academics/config/subjects", async (_req, res) => {
+    try {
+      const categories = await ClassCategory.findAll({
+        attributes: ["id", "name"],
+        order: [["name", "ASC"]],
+      });
+      const assignments = await AcademicSubjectAssignment.findAll({
+        order: [
+          ["class_category_id", "ASC"],
+          ["section_name", "ASC"],
+          ["subject_name", "ASC"],
+        ],
+      });
+      return res.json({
+        categories: categories.map((x) => ({ id: x.id, name: x.name })),
+        items: assignments.map((x) => ({
+          id: x.id,
+          classCategoryId: x.classCategoryId,
+          sectionName: x.sectionName?.trim() || null,
+          subjectName: x.subjectName,
+        })),
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/academics/config/subjects", async (req, res) => {
+    try {
+      const userId = req.userId!;
+      const role = await getUserRole(userId);
+      if (role !== "admin") return res.status(403).json({ error: "Only admins can manage subjects" });
+
+      const body = req.body as Record<string, unknown>;
+      const classCategoryId = Number(body.classCategoryId);
+      const sectionName = trimStr(body.sectionName, 80) ?? "";
+      const subjectName = trimStr(body.subjectName, 120);
+      if (!Number.isFinite(classCategoryId) || classCategoryId < 1) {
+        return res.status(400).json({ error: "classCategoryId is required" });
+      }
+      if (!subjectName) return res.status(400).json({ error: "subjectName is required" });
+
+      const category = await ClassCategory.findByPk(classCategoryId);
+      if (!category) return res.status(400).json({ error: "Invalid classCategoryId" });
+
+      const [row] = await AcademicSubjectAssignment.findOrCreate({
+        where: { classCategoryId, sectionName, subjectName },
+        defaults: { classCategoryId, sectionName, subjectName },
+      });
+
+      return res.status(201).json({
+        item: {
+          id: row.id,
+          classCategoryId: row.classCategoryId,
+          sectionName: row.sectionName?.trim() || null,
+          subjectName: row.subjectName,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.delete("/academics/config/subjects/:id(\\d+)", async (req, res) => {
+    try {
+      const userId = req.userId!;
+      const role = await getUserRole(userId);
+      if (role !== "admin") return res.status(403).json({ error: "Only admins can manage subjects" });
+
+      const id = routeParamId(req);
+      if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: "Invalid id" });
+      const row = await AcademicSubjectAssignment.findByPk(id);
+      if (!row) return res.status(404).json({ error: "Not found" });
+      await row.destroy();
+      return res.status(204).send();
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });

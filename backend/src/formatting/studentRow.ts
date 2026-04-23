@@ -16,7 +16,6 @@ export type StudentApiRow = {
   classRoomId: number | null;
   className: string | null;
   gender: string | null;
-  rollNumber: string | null;
   sectionName: string | null;
   admittedAt: string;
   hasPassportPhoto: boolean;
@@ -46,6 +45,9 @@ export type StudentApiRow = {
   emergencyContactPhone: string | null;
   guardianName: string | null;
   guardianPhone: string | null;
+  bursaryPercentage: number;
+  bursaryStartsAt: string | null;
+  bursaryEndsAt: string | null;
 };
 
 function resolveCreatedAt(s: Student): Date | string | undefined {
@@ -54,6 +56,12 @@ function resolveCreatedAt(s: Student): Date | string | undefined {
     (s.get("created_at") as Date | string | undefined) ??
     (s.getDataValue("created_at") as Date | string | undefined)
   );
+}
+
+function toIsoOrNull(v: Date | string | null | undefined): string | null {
+  if (v == null) return null;
+  if (typeof v === "string") return v;
+  return v.toISOString();
 }
 
 export function studentToApiRow(s: Student): StudentApiRow {
@@ -81,7 +89,6 @@ export function studentToApiRow(s: Student): StudentApiRow {
     classRoomId: s.classRoomId ?? null,
     className: cr?.name ?? null,
     gender: s.gender ?? null,
-    rollNumber: s.rollNumber ?? null,
     sectionName: s.sectionName ?? null,
     admittedAt: safeLocaleDate(resolveCreatedAt(s)),
     hasPassportPhoto: Boolean(fn && String(fn).trim() !== ""),
@@ -168,5 +175,21 @@ export function studentToApiRow(s: Student): StudentApiRow {
       (s.get("guardian_phone") as string | null | undefined) ??
       (s as unknown as { guardianPhone?: string | null }).guardianPhone ??
       null,
+    bursaryPercentage:
+      Number(
+        (s.get("bursary_percentage") as number | null | undefined) ??
+          (s as unknown as { bursaryPercentage?: number | null }).bursaryPercentage ??
+          0,
+      ) || 0,
+    bursaryStartsAt: toIsoOrNull(
+      (s.get("bursary_starts_at") as Date | string | null | undefined) ??
+        (s as unknown as { bursaryStartsAt?: Date | string | null }).bursaryStartsAt ??
+        null,
+    ),
+    bursaryEndsAt: toIsoOrNull(
+      (s.get("bursary_ends_at") as Date | string | null | undefined) ??
+        (s as unknown as { bursaryEndsAt?: Date | string | null }).bursaryEndsAt ??
+        null,
+    ),
   };
 }

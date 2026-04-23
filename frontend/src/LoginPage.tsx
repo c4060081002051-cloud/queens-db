@@ -14,6 +14,7 @@ type LoginPageProps = {
   onForgotPassword: () => void;
   successBanner: string | null;
   onDismissSuccessBanner: () => void;
+  onRegister: () => void;
   /** After password login, when 2FA is required. */
   twoFactorChallenge?: { maskedEmail: string } | null;
   onVerifyTwoFactor?: (otp: string) => void | Promise<void>;
@@ -157,6 +158,7 @@ export function LoginPage({
   onForgotPassword,
   successBanner,
   onDismissSuccessBanner,
+  onRegister,
   twoFactorChallenge,
   onVerifyTwoFactor,
   onCancelTwoFactor,
@@ -466,6 +468,14 @@ export function LoginPage({
               ) : (
                 "Log In"
               )}
+            </button>
+            <button
+              type="button"
+              onClick={onRegister}
+              disabled={loading}
+              className="h-12 w-full rounded-full bg-gradient-to-br from-[#ff9f43] to-[#ff7a00] text-[15px] font-bold text-white shadow-[4px_4px_12px_rgba(255,122,0,0.3),-2px_-2px_8px_rgba(255,255,255,0.85)] transition-all duration-300 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Sign Up
             </button>
           </form>
           )}

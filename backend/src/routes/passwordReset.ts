@@ -63,11 +63,23 @@ export function createPasswordResetRouter(config: Config) {
       const emailLower = emailKey(user.email);
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-      await PasswordResetOtp.destroy({ where: { emailLower } });
-      await PasswordResetOtp.create({
-        emailLower,
-        codeHash,
-        expiresAt,
+      const sequelize = PasswordResetOtp.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
+      }
+      await sequelize.transaction(async (t) => {
+        await PasswordResetOtp.destroy({
+          where: { emailLower },
+          transaction: t,
+        });
+        await PasswordResetOtp.create(
+          {
+            emailLower,
+            codeHash,
+            expiresAt,
+          },
+          { transaction: t },
+        );
       });
 
       const sent = await sendPasswordResetOtp(config, user.email, code);
@@ -180,9 +192,16 @@ export function createPasswordResetRouter(config: Config) {
       }
 
       const passwordHash = await bcrypt.hash(newPassword, 12);
-      await user.update({ passwordHash });
-      await PasswordResetOtp.destroy({
-        where: { emailLower: emailKey(user.email) },
+      const sequelize = User.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
+      }
+      await sequelize.transaction(async (t) => {
+        await user.update({ passwordHash }, { transaction: t });
+        await PasswordResetOtp.destroy({
+          where: { emailLower: emailKey(user.email) },
+          transaction: t,
+        });
       });
 
       return res.json({ message: "Password updated. You can sign in now." });

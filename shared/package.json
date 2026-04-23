@@ -1,0 +1,5 @@
+{
+  "name": "queens-shared-schemas",
+  "private": true,
+  "type": "module"
+}

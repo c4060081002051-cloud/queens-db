@@ -5,6 +5,7 @@ import {
   requestPasswordChangeOtp,
   requestTwoFactorOtp,
 } from "../../api/account";
+import { fetchExamTypeConfigs, type ExamTypeConfigRow } from "../../api/academics";
 import { useI18n } from "../../i18n/I18nProvider";
 import { localeLabels, type Locale } from "../../i18n/messages";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -353,12 +354,15 @@ type NavLeaf = {
   curriculumSection?: CurriculumSection;
   classSection?: ClassesSection;
   communicationSection?: "notice";
+  requiredPermission?: string;
 };
 
 type NavGroup = { id: string; title: string; icon: NavIcon; items: NavLeaf[] };
 
 function buildNavGroups(t: (key: string) => string, role: string, permissions: string[]): NavGroup[] {
   const r = role.toLowerCase();
+  const hasPerm = (key?: string) =>
+    !key || r === "super_admin" || r === "admin" || permissions.includes(key);
   const allGroups: NavGroup[] = [
     { id: "dashboard", title: t("nav.dashboard"), icon: IconHome, items: [] },
     {
@@ -366,10 +370,10 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
       title: t("nav.students"),
       icon: IconUsers,
       items: [
-        { icon: IconUsers, label: t("nav.students.all"), studentSection: "all" },
-        { icon: IconClipboard, label: t("nav.students.admissions"), studentSection: "admissions" },
-        { icon: IconClipboard, label: t("nav.students.import"), studentSection: "import" },
-        { icon: IconUsers, label: t("nav.students.parents"), studentSection: "parents" },
+        { icon: IconUsers, label: t("nav.students.all"), studentSection: "all", requiredPermission: "students_all" },
+        { icon: IconClipboard, label: t("nav.students.admissions"), studentSection: "admissions", requiredPermission: "students_admissions" },
+        { icon: IconClipboard, label: t("nav.students.import"), studentSection: "import", requiredPermission: "students_import" },
+        { icon: IconUsers, label: t("nav.students.parents"), studentSection: "parents", requiredPermission: "students_parents" },
       ],
     },
     {
@@ -377,12 +381,12 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
       title: t("nav.classes"),
       icon: IconGrid,
       items: [
-        { icon: IconGrid, label: t("nav.classes.allClasses"), classSection: "all_classes" },
-        { icon: IconLayers, label: t("nav.classes.sectionsStreams"), classSection: "sections_streams" },
-        { icon: IconUsers, label: t("nav.classes.classStudents"), classSection: "class_students" },
-        { icon: IconGradCap, label: t("nav.classes.classTeachers"), classSection: "class_teachers" },
-        { icon: IconClipboard, label: t("nav.classes.classCategories"), classSection: "class_categories" },
-        { icon: IconChartBars, label: t("nav.classes.classReports"), classSection: "class_reports" },
+        { icon: IconGrid, label: t("nav.classes.allClasses"), classSection: "all_classes", requiredPermission: "classes_all" },
+        { icon: IconLayers, label: t("nav.classes.sectionsStreams"), classSection: "sections_streams", requiredPermission: "classes_sections_streams" },
+        { icon: IconUsers, label: t("nav.classes.classStudents"), classSection: "class_students", requiredPermission: "classes_students" },
+        { icon: IconGradCap, label: t("nav.classes.classTeachers"), classSection: "class_teachers", requiredPermission: "classes_teachers" },
+        { icon: IconClipboard, label: t("nav.classes.classCategories"), classSection: "class_categories", requiredPermission: "classes_categories" },
+        { icon: IconChartBars, label: t("nav.classes.classReports"), classSection: "class_reports", requiredPermission: "classes_reports" },
       ],
     },
     {
@@ -390,8 +394,8 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
       title: t("nav.staff"),
       icon: IconUsers,
       items: [
-        { icon: IconGradCap, label: t("nav.staff.teaching"), staffSection: "teaching" },
-        { icon: IconBuilding, label: t("nav.staff.nonTeaching"), staffSection: "nonTeaching" },
+        { icon: IconGradCap, label: t("nav.staff.teaching"), staffSection: "teaching", requiredPermission: "staff_teaching" },
+        { icon: IconBuilding, label: t("nav.staff.nonTeaching"), staffSection: "nonTeaching", requiredPermission: "staff_non_teaching" },
       ],
     },
     {
@@ -399,6 +403,11 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
       title: t("nav.curriculum"),
       icon: IconBook,
       items: [
+        {
+          icon: IconChartBars,
+          label: t("nav.curriculum.examsDashboard"),
+          curriculumSection: "exams_dashboard",
+        },
         { icon: IconGradCap, label: t("nav.curriculum.exam.bot"), curriculumSection: "exam_bot" },
         { icon: IconGradCap, label: t("nav.curriculum.exam.mid"), curriculumSection: "exam_mid" },
         { icon: IconGradCap, label: t("nav.curriculum.exam.eot"), curriculumSection: "exam_eot" },
@@ -420,14 +429,14 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
       title: t("nav.operations"),
       icon: IconWallet,
       items: [
-        { icon: IconClipboard, label: t("nav.operations.library"), financeSection: "daily_report" },
-        { icon: IconBook, label: t("nav.operations.store"), financeSection: "debtors_report" },
-        { icon: IconWallet, label: t("nav.operations.assignFees"), financeSection: "assign_fees" },
-        { icon: IconWallet, label: t("nav.operations.accounts"), financeSection: "record_payment" },
-        { icon: IconBus, label: t("nav.operations.transport"), financeSection: "bursery" },
-        { icon: IconUsers, label: t("nav.operations.hostel"), financeSection: "staff_payment" },
-        { icon: IconClipboard, label: t("nav.operations.busery"), financeSection: "busery" },
-        { icon: IconChartBars, label: t("nav.operations.hostelManager"), financeSection: "finance_summary" },
+        { icon: IconClipboard, label: t("nav.operations.library"), financeSection: "daily_report", requiredPermission: "finance_reports" },
+        { icon: IconBook, label: t("nav.operations.store"), financeSection: "debtors_report", requiredPermission: "finance_reports" },
+        { icon: IconWallet, label: t("nav.operations.assignFees"), financeSection: "assign_fees", requiredPermission: "finance_assign_fees" },
+        { icon: IconWallet, label: t("nav.operations.accounts"), financeSection: "record_payment", requiredPermission: "finance_record_payments" },
+        { icon: IconBus, label: t("nav.operations.transport"), financeSection: "bursery", requiredPermission: "finance_record_payments" },
+        { icon: IconUsers, label: t("nav.operations.hostel"), financeSection: "staff_payment", requiredPermission: "finance_staff_pay" },
+        { icon: IconClipboard, label: t("nav.operations.busery"), financeSection: "busery", requiredPermission: "finance_bursary" },
+        { icon: IconChartBars, label: t("nav.operations.hostelManager"), financeSection: "finance_summary", requiredPermission: "finance_summaries" },
       ],
     },
     {
@@ -435,16 +444,18 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
       title: t("nav.communication"),
       icon: IconMail,
       items: [
-        { icon: IconBell, label: t("nav.communication.notice"), communicationSection: "notice" },
+        { icon: IconBell, label: t("nav.communication.notice"), communicationSection: "notice", requiredPermission: "communication_notice" },
         {
           icon: IconBell,
           label: t("nav.communication.notificationsList"),
           inboxList: "notifications",
+          requiredPermission: "communication_notifications",
         },
         {
           icon: IconMail,
           label: t("nav.communication.messages"),
           inboxList: "messages",
+          requiredPermission: "communication_messages",
         },
       ],
     },
@@ -465,17 +476,18 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
       title: t("nav.settings"),
       icon: IconSettings,
       items: [
-        { icon: IconSunMoon, label: t("nav.settings.modes"), settingsPanel: "modes" },
+        { icon: IconSunMoon, label: t("nav.settings.modes"), settingsPanel: "modes", requiredPermission: "settings_modes" },
         {
           icon: IconWallet,
           label: t("nav.settings.feesStructure"),
           settingsPanel: "fees_structure",
+          requiredPermission: "settings_fees_structure",
         },
-        { icon: IconGrid, label: t("nav.settings.general"), settingsPanel: "general" },
+        { icon: IconGrid, label: t("nav.settings.general"), settingsPanel: "general", requiredPermission: "settings_general" },
         { icon: IconBell, label: t("nav.settings.notifications") },
-        { icon: IconUsers, label: t("nav.settings.users"), settingsPanel: "users_roles" },
-        { icon: IconBackup, label: t("nav.settings.backup") },
-        { icon: IconRestore, label: t("nav.settings.restore") },
+        { icon: IconUsers, label: t("nav.settings.users"), settingsPanel: "users_roles", requiredPermission: "settings_users_roles" },
+        { icon: IconBackup, label: t("nav.settings.backup"), requiredPermission: "settings_backup" },
+        { icon: IconRestore, label: t("nav.settings.restore"), requiredPermission: "settings_restore" },
       ],
     },
   ];
@@ -495,10 +507,21 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
     settings: "nav_settings",
   };
 
-  return allGroups.filter((g) => {
-    const requiredPerm = mapping[g.id];
-    return requiredPerm ? permissions.includes(requiredPerm) : true;
-  });
+  return allGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => hasPerm(item.requiredPermission)),
+    }))
+    .filter((g) => {
+      const requiredPerm = mapping[g.id];
+      // Show group if:
+      // 1) no broad gate is defined, OR
+      // 2) user has broad gate, OR
+      // 3) user has at least one child permission in that group.
+      if (!requiredPerm) return true;
+      if (permissions.includes(requiredPerm)) return true;
+      return g.items.length > 0;
+    });
 }
 
 const defaultOpenGroups: Record<string, boolean> = {
@@ -569,6 +592,7 @@ export function AdminLayout({
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [msgPanelOpen, setMsgPanelOpen] = useState(false);
+  const [curriculumExamTypes, setCurriculumExamTypes] = useState<ExamTypeConfigRow[]>([]);
 
   const [pwOtpSent, setPwOtpSent] = useState(false);
   const [pwBusy, setPwBusy] = useState(false);
@@ -613,6 +637,34 @@ export function AdminLayout({
       ? t("role.admin")
       : user.role.charAt(0).toUpperCase() + user.role.slice(1)
     : t("role.admin");
+
+  const canAccess = (permissionKey?: string) => {
+    if (!permissionKey) return true;
+    const role = String(user?.role ?? "").toLowerCase();
+    if (role === "admin" || role === "super_admin") return true;
+    return Boolean(user?.permissions?.includes(permissionKey));
+  };
+
+  useEffect(() => {
+    async function loadExamTypes() {
+      try {
+        const rows = await fetchExamTypeConfigs();
+        setCurriculumExamTypes(rows.filter((row) => row.isActive));
+      } catch {
+        setCurriculumExamTypes([]);
+      }
+    }
+
+    void loadExamTypes();
+    function handleExamTypesChanged() {
+      void loadExamTypes();
+    }
+    window.addEventListener("academics:exam-types-changed", handleExamTypesChanged);
+
+    return () => {
+      window.removeEventListener("academics:exam-types-changed", handleExamTypesChanged);
+    };
+  }, []);
 
   useEffect(() => {
     if (!userMenuOpen) return;
@@ -785,6 +837,9 @@ export function AdminLayout({
                       setOpenGroups((prev) => {
                         if (group.id === "operations") onSelectFinanceSection?.("overview");
                         if (group.id === "student_hub") onSelectStudentSection?.("overview");
+                        if (group.id === "curriculum") {
+                          onSelectCurriculumSection?.("exams_dashboard");
+                        }
                         if (prev[group.id]) {
                           return { ...prev, [group.id]: false };
                         }
@@ -819,6 +874,27 @@ export function AdminLayout({
                   {open ? (
                     group.id === "curriculum" ? (
                       <ul className="neo-nav-sub mb-1 ml-3 mt-1 space-y-0.5 pb-0.5 pl-2.5">
+                        {canAccess("curriculum_exams_dashboard") ? (
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectCurriculumSection?.("exams_dashboard");
+                              setSidebarOpen(false);
+                            }}
+                            className="neo-nav-item flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] font-semibold leading-snug text-[#636e72]"
+                          >
+                            <IconChartBars className="h-3.5 w-3.5 shrink-0 text-[#5a8faf] opacity-90" />
+                            <span className="min-w-0 flex-1 truncate">
+                              {t("nav.curriculum.examsDashboard")}
+                            </span>
+                          </button>
+                        </li>
+                        ) : null}
+                        {canAccess("curriculum_exams_dashboard") ||
+                        canAccess("curriculum_exam_bot") ||
+                        canAccess("curriculum_exam_mid") ||
+                        canAccess("curriculum_exam_eot") ? (
                         <li>
                           <button
                             type="button"
@@ -830,46 +906,31 @@ export function AdminLayout({
                             <ChevronDown open={curriculumExamOpen} className="h-3.5 w-3.5" />
                           </button>
                         </li>
+                        ) : null}
                         {curriculumExamOpen ? (
                           <>
-                            <li>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onSelectCurriculumSection?.("exam_bot");
-                                  setSidebarOpen(false);
-                                }}
-                                className="neo-nav-item ml-5 flex w-full rounded-md px-1.5 py-1 text-left text-[11px] text-[#636e72]"
-                              >
-                                {t("nav.curriculum.exam.bot")}
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onSelectCurriculumSection?.("exam_mid");
-                                  setSidebarOpen(false);
-                                }}
-                                className="neo-nav-item ml-5 flex w-full rounded-md px-1.5 py-1 text-left text-[11px] text-[#636e72]"
-                              >
-                                {t("nav.curriculum.exam.mid")}
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onSelectCurriculumSection?.("exam_eot");
-                                  setSidebarOpen(false);
-                                }}
-                                className="neo-nav-item ml-5 flex w-full rounded-md px-1.5 py-1 text-left text-[11px] text-[#636e72]"
-                              >
-                                {t("nav.curriculum.exam.eot")}
-                              </button>
-                            </li>
+                            {curriculumExamTypes.map((row) => (
+                              <li key={row.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onSelectCurriculumSection?.(`exam_type:${row.examKey}`);
+                                    setSidebarOpen(false);
+                                  }}
+                                  className="neo-nav-item ml-5 flex w-full rounded-md px-1.5 py-1 text-left text-[11px] text-[#636e72]"
+                                >
+                                  {row.displayName || row.examKey}
+                                </button>
+                              </li>
+                            ))}
+                            {curriculumExamTypes.length === 0 ? (
+                              <li className="ml-5 px-1.5 py-1 text-[10px] text-[#8a9497]">
+                                No exam types configured
+                              </li>
+                            ) : null}
                           </>
                         ) : null}
+                        {canAccess("curriculum_assessment_tests") ? (
                         <li>
                           <button
                             type="button"
@@ -881,7 +942,9 @@ export function AdminLayout({
                             <ChevronDown open={curriculumTestsOpen} className="h-3.5 w-3.5" />
                           </button>
                         </li>
+                        ) : null}
                         {curriculumTestsOpen ? (
+                          canAccess("curriculum_assessment_tests") ? (
                           <li>
                             <button
                               type="button"
@@ -894,7 +957,9 @@ export function AdminLayout({
                               {t("nav.curriculum.tests.assessments")}
                             </button>
                           </li>
+                          ) : null
                         ) : null}
+                        {canAccess("curriculum_result_entry") ? (
                         <li>
                           <button
                             type="button"
@@ -908,6 +973,8 @@ export function AdminLayout({
                             <span className="min-w-0 flex-1 truncate">{t("nav.curriculum.resultsEntry")}</span>
                           </button>
                         </li>
+                        ) : null}
+                        {canAccess("curriculum_subjects") ? (
                         <li>
                           <button
                             type="button"
@@ -921,6 +988,7 @@ export function AdminLayout({
                             <span className="min-w-0 flex-1 truncate">{t("nav.curriculum.blankPage")}</span>
                           </button>
                         </li>
+                        ) : null}
                       </ul>
                     ) : (
                       <ul className="neo-nav-sub mb-1 ml-3 mt-1 space-y-0 pb-0.5 pl-2.5">

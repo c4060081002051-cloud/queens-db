@@ -10,7 +10,12 @@ import type { Config } from "../config.js";
 
 export class User extends Model {
   declare id: number;
+  declare fullName: string | null;
   declare email: string;
+  declare phoneNumber: string | null;
+  declare gender: string | null;
+  declare dateOfBirth: string | null;
+  declare addressLine: string | null;
   declare passwordHash: string;
   declare role: string;
   declare twoFactorEnabled: boolean;
@@ -70,7 +75,6 @@ export class Student extends Model {
   declare parentEmail: string | null;
   declare classRoomId: number | null;
   declare gender: string | null;
-  declare rollNumber: string | null;
   declare sectionName: string | null;
   declare passportPhotoFilename: string | null;
   declare nationality: string | null;
@@ -98,6 +102,8 @@ export class Student extends Model {
   declare guardianName: string | null;
   declare guardianPhone: string | null;
   declare bursaryPercentage: number;
+  declare bursaryStartsAt: Date | null;
+  declare bursaryEndsAt: Date | null;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 }
@@ -108,13 +114,30 @@ export class StudentAssessmentResult extends Model {
   declare classRoomId: number;
   declare sectionName: string | null;
   declare term: string;
-  declare examType: "BOT" | "MID" | "EOT" | "ASSESSMENT";
+  declare examType: string;
   declare subject: string;
   declare score: number;
   declare remarks: string | null;
   declare enteredByUserId: number | null;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
+}
+
+export class AcademicExamType extends Model {
+  declare id: number;
+  declare examKey: string;
+  declare displayName: string;
+  declare isSystem: boolean;
+  declare isActive: boolean;
+  declare readonly createdAt: Date;
+}
+
+export class AcademicSubjectAssignment extends Model {
+  declare id: number;
+  declare classCategoryId: number;
+  declare sectionName: string | null;
+  declare subjectName: string;
+  declare readonly createdAt: Date;
 }
 
 export class StudentFeeReceipt extends Model {
@@ -335,6 +358,13 @@ export class RolePermission extends Model {
   declare permissionKey: string;
 }
 
+export class UserPermissionOverride extends Model {
+  declare id: number;
+  declare userId: number;
+  declare permissionKey: string;
+  declare allowed: boolean;
+}
+
 export class SchoolSetting extends Model {
   declare settingKey: string;
   declare settingValue: string | null;
@@ -362,7 +392,12 @@ export function setupDatabase(config: Config): Sequelize {
       // Uniqueness: DB `uq_users_email` (schema.sql). Omit `unique: true` here so
       // `sequelize.sync({ alter: true })` does not emit CHANGE … UNIQUE and hit MySQL
       // ER_TOO_MANY_KEYS when a unique index already exists.
+      fullName: { type: DataTypes.STRING(120), allowNull: true, field: "full_name" },
       email: { type: DataTypes.STRING(255), allowNull: false },
+      phoneNumber: { type: DataTypes.STRING(32), allowNull: true, field: "phone_number" },
+      gender: { type: DataTypes.STRING(32), allowNull: true },
+      dateOfBirth: { type: DataTypes.DATEONLY, allowNull: true, field: "date_of_birth" },
+      addressLine: { type: DataTypes.STRING(255), allowNull: true, field: "address_line" },
       passwordHash: {
         type: DataTypes.STRING(255),
         allowNull: false,
@@ -569,7 +604,6 @@ export function setupDatabase(config: Config): Sequelize {
         field: "class_room_id",
       },
       gender: { type: DataTypes.STRING(20), allowNull: true },
-      rollNumber: { type: DataTypes.STRING(32), field: "roll_number" },
       sectionName: { type: DataTypes.STRING(80), field: "section_name" },
       passportPhotoFilename: {
         type: DataTypes.STRING(255),
@@ -694,6 +728,16 @@ export function setupDatabase(config: Config): Sequelize {
         defaultValue: 0,
         field: "bursary_percentage",
       },
+      bursaryStartsAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "bursary_starts_at",
+      },
+      bursaryEndsAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: "bursary_ends_at",
+      },
     },
     {
       sequelize,
@@ -725,7 +769,8 @@ export function setupDatabase(config: Config): Sequelize {
       },
       sectionName: {
         type: DataTypes.STRING(80),
-        allowNull: true,
+        allowNull: false,
+        defaultValue: "",
         field: "section_name",
       },
       term: {
@@ -779,6 +824,95 @@ export function setupDatabase(config: Config): Sequelize {
           name: "uq_student_assessment_results_student_term_exam_subject",
           unique: true,
           fields: ["student_id", "term", "exam_type", "subject"],
+        },
+      ],
+    },
+  );
+
+  AcademicExamType.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      examKey: {
+        type: DataTypes.STRING(40),
+        allowNull: false,
+        field: "exam_key",
+      },
+      displayName: {
+        type: DataTypes.STRING(80),
+        allowNull: false,
+        field: "display_name",
+      },
+      isSystem: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "is_system",
+      },
+      isActive: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: "is_active",
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "academic_exam_types",
+      modelName: "AcademicExamType",
+      timestamps: false,
+      indexes: [{ name: "uq_academic_exam_types_exam_key", unique: true, fields: ["exam_key"] }],
+    },
+  );
+
+  AcademicSubjectAssignment.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      classCategoryId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "class_category_id",
+      },
+      sectionName: {
+        type: DataTypes.STRING(80),
+        allowNull: true,
+        field: "section_name",
+      },
+      subjectName: {
+        type: DataTypes.STRING(120),
+        allowNull: false,
+        field: "subject_name",
+      },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      sequelize,
+      tableName: "academic_subject_assignments",
+      modelName: "AcademicSubjectAssignment",
+      timestamps: false,
+      indexes: [
+        {
+          name: "uq_subject_assignment_category_section_subject",
+          unique: true,
+          fields: ["class_category_id", "section_name", "subject_name"],
         },
       ],
     },
@@ -1849,6 +1983,44 @@ export function setupDatabase(config: Config): Sequelize {
     },
   );
 
+  UserPermissionOverride.init(
+    {
+      id: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      userId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        field: "user_id",
+      },
+      permissionKey: {
+        type: DataTypes.STRING(64),
+        allowNull: false,
+        field: "permission_key",
+      },
+      allowed: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+      },
+    },
+    {
+      sequelize,
+      tableName: "user_permission_overrides",
+      modelName: "UserPermissionOverride",
+      timestamps: false,
+      indexes: [
+        {
+          name: "uq_user_permission_overrides_user_permission",
+          unique: true,
+          fields: ["user_id", "permission_key"],
+        },
+      ],
+    },
+  );
+
   SchoolSetting.init(
     {
       settingKey: {
@@ -2000,6 +2172,16 @@ export function setupDatabase(config: Config): Sequelize {
   User.hasMany(StudentAssessmentResult, {
     foreignKey: "entered_by_user_id",
     as: "enteredAssessmentResults",
+    constraints: false,
+  });
+  AcademicSubjectAssignment.belongsTo(ClassCategory, {
+    foreignKey: "class_category_id",
+    as: "classCategory",
+    constraints: false,
+  });
+  ClassCategory.hasMany(AcademicSubjectAssignment, {
+    foreignKey: "class_category_id",
+    as: "subjectAssignments",
     constraints: false,
   });
   DailyFinanceReportAudit.belongsTo(DailyFinanceReport, {

@@ -3,12 +3,14 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import type { Config } from "../config.js";
 import { loadUserEmailAndTwoFactor, loadUserMeFields } from "../db/loadUserSafe.js";
-import { User, RolePermission } from "../models/index.js";
+import { User, RolePermission, UserPermissionOverride } from "../models/index.js";
 import { PERMISSION_KEYS } from "../constants/permissions.js";
 import {
   issueSecurityOtpChallenge,
   verifyAndConsumeSecurityOtpChallenge,
 } from "../services/securityOtpChallenge.js";
+
+const STRONG_PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 
 const requestPasswordChangeOtpSchema = z.object({});
 
@@ -31,6 +33,70 @@ const updateRolePermissionsSchema = z.object({
   role: z.string().min(1),
   permissions: z.array(z.string()),
 });
+
+const updateUserRoleSchema = z.object({
+  role: z.string().trim().min(2, "Enter a role").max(50),
+});
+
+const permissionOverrideItemSchema = z.object({
+  permissionKey: z.enum(PERMISSION_KEYS),
+  allowed: z.boolean(),
+});
+
+const updateUserPermissionOverridesSchema = z.object({
+  overrides: z.array(permissionOverrideItemSchema),
+});
+
+const createUserSchema = z
+  .object({
+    name: z.string().trim().min(2, "Enter the user's full name").max(120),
+    email: z.string().trim().email("Enter a valid email").max(255),
+    role: z.string().trim().min(2, "Enter a role").max(50),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string().min(1, "Confirm password is required"),
+  })
+  .superRefine((value, ctx) => {
+    if (value.password !== value.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Passwords do not match",
+        path: ["confirmPassword"],
+      });
+    }
+    if (!STRONG_PASSWORD_REGEX.test(value.password)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Password must include uppercase, lowercase, number, and symbol characters",
+        path: ["password"],
+      });
+    }
+  });
+
+function normalizeRole(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 50);
+}
+
+function isAdminRole(role: string): boolean {
+  return role === "admin" || role === "super_admin";
+}
+
+function effectivePermissionKeys(
+  rolePermissionKeys: string[],
+  overrides: Array<{ permissionKey: string; allowed: boolean }>,
+): string[] {
+  const set = new Set(rolePermissionKeys);
+  for (const item of overrides) {
+    if (item.allowed) set.add(item.permissionKey);
+    else set.delete(item.permissionKey);
+  }
+  return [...set];
+}
 
 export function createMeAccountRouter(config: Config) {
   const r = Router();
@@ -195,11 +261,245 @@ export function createMeAccountRouter(config: Config) {
     }
   });
 
+  r.get("/users", async (req, res) => {
+    const userId = req.userId!;
+    try {
+      const user = await User.findByPk(userId);
+      if (!user || !isAdminRole(user.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const users = await User.findAll({
+        attributes: [
+          "id",
+          "fullName",
+          "email",
+          "phoneNumber",
+          "gender",
+          "dateOfBirth",
+          "addressLine",
+          "role",
+          "createdAt",
+        ],
+        order: [["id", "DESC"]],
+      });
+
+      return res.json({
+        users: users.map((row) => ({
+          id: row.id,
+          name: row.fullName?.trim() || row.email.split("@")[0],
+          email: row.email,
+          phoneNumber: row.phoneNumber ?? null,
+          gender: row.gender ?? null,
+          dateOfBirth: row.dateOfBirth ?? null,
+          addressLine: row.addressLine ?? null,
+          role: row.role,
+          createdAt: row.createdAt,
+        })),
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/users", async (req, res) => {
+    const userId = req.userId!;
+    const parsed = createUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Invalid body";
+      return res.status(400).json({ error: msg });
+    }
+
+    const { name, email, role, password } = parsed.data;
+    const normalizedRole = normalizeRole(role);
+    if (!normalizedRole) {
+      return res.status(400).json({ error: "Enter a valid role" });
+    }
+
+    try {
+      const user = await User.findByPk(userId);
+      if (!user || !isAdminRole(user.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const existing = await User.findOne({ where: { email } });
+      if (existing) {
+        return res.status(409).json({ error: "An account with this email already exists." });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      const created = await User.create({
+        fullName: name.trim(),
+        email: email.trim(),
+        role: normalizedRole,
+        passwordHash,
+      });
+
+      return res.status(201).json({
+        user: {
+          id: created.id,
+          name: created.fullName?.trim() || created.email.split("@")[0],
+          email: created.email,
+          phoneNumber: created.phoneNumber ?? null,
+          gender: created.gender ?? null,
+          dateOfBirth: created.dateOfBirth ?? null,
+          addressLine: created.addressLine ?? null,
+          role: created.role,
+          createdAt: created.createdAt,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.patch("/users/:id/role", async (req, res) => {
+    const userId = req.userId!;
+    const targetUserId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetUserId)) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    const parsed = updateUserRoleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Invalid body";
+      return res.status(400).json({ error: msg });
+    }
+    const normalizedRole = normalizeRole(parsed.data.role);
+    if (!normalizedRole || normalizedRole === "pending_assignment") {
+      return res.status(400).json({ error: "Enter a valid assigned role" });
+    }
+    try {
+      const actor = await User.findByPk(userId);
+      if (!actor || !isAdminRole(actor.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const target = await User.findByPk(targetUserId);
+      if (!target) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      await target.update({ role: normalizedRole });
+      return res.json({
+        user: {
+          id: target.id,
+          name: target.fullName?.trim() || target.email.split("@")[0],
+          email: target.email,
+          phoneNumber: target.phoneNumber ?? null,
+          gender: target.gender ?? null,
+          dateOfBirth: target.dateOfBirth ?? null,
+          addressLine: target.addressLine ?? null,
+          role: target.role,
+          createdAt: target.createdAt,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.get("/users/:id/permissions", async (req, res) => {
+    const userId = req.userId!;
+    const targetUserId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetUserId)) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    try {
+      const actor = await User.findByPk(userId);
+      if (!actor || !isAdminRole(actor.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const target = await User.findByPk(targetUserId);
+      if (!target) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const roleRows = await RolePermission.findAll({
+        where: { role: target.role },
+        attributes: ["permissionKey"],
+      });
+      const rolePermissions = roleRows.map((row) => row.permissionKey);
+      const overrideRows = await UserPermissionOverride.findAll({
+        where: { userId: targetUserId },
+        attributes: ["permissionKey", "allowed"],
+      });
+      const overrides = overrideRows.map((row) => ({
+        permissionKey: row.permissionKey,
+        allowed: Boolean(row.allowed),
+      }));
+      const effective = effectivePermissionKeys(rolePermissions, overrides);
+
+      return res.json({
+        userId: target.id,
+        userRole: target.role,
+        availableKeys: PERMISSION_KEYS,
+        rolePermissions,
+        overrides,
+        effectivePermissions: effective,
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.put("/users/:id/permissions", async (req, res) => {
+    const userId = req.userId!;
+    const targetUserId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetUserId)) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    const parsed = updateUserPermissionOverridesSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Invalid body";
+      return res.status(400).json({ error: msg });
+    }
+    try {
+      const actor = await User.findByPk(userId);
+      if (!actor || !isAdminRole(actor.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const target = await User.findByPk(targetUserId);
+      if (!target) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const sequelize = UserPermissionOverride.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
+      }
+
+      const dedup = new Map<string, boolean>();
+      for (const item of parsed.data.overrides) {
+        dedup.set(item.permissionKey, item.allowed);
+      }
+      const rows = [...dedup.entries()].map(([permissionKey, allowed]) => ({
+        userId: targetUserId,
+        permissionKey,
+        allowed,
+      }));
+
+      await sequelize.transaction(async (t) => {
+        await UserPermissionOverride.destroy({ where: { userId: targetUserId }, transaction: t });
+        if (rows.length > 0) {
+          await UserPermissionOverride.bulkCreate(rows, { transaction: t });
+        }
+      });
+
+      return res.json({ message: "User permission overrides updated." });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
   r.get("/role-permissions", async (req, res) => {
     const userId = req.userId!;
     try {
       const user = await User.findByPk(userId);
-      if (!user || (user.role !== "super_admin" && user.role !== "admin")) {
+      if (!user || !isAdminRole(user.role)) {
         return res.status(403).json({ error: "Access denied" });
       }
 
@@ -225,19 +525,26 @@ export function createMeAccountRouter(config: Config) {
 
     try {
       const user = await User.findByPk(userId);
-      if (!user || (user.role !== "super_admin" && user.role !== "admin")) {
+      if (!user || !isAdminRole(user.role)) {
         return res.status(403).json({ error: "Access denied" });
       }
 
-      // Bulk update: delete all for this role and re-insert
-      await RolePermission.destroy({ where: { role } });
-      
-      const toCreate = permissions.map(pk => ({
+      // Bulk update: delete all for this role and re-insert, atomically so
+      // a failure mid-way never leaves the role with zero permissions.
+      const sequelize = RolePermission.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
+      }
+      const toCreate = permissions.map((pk) => ({
         role,
-        permissionKey: pk
+        permissionKey: pk,
       }));
-
-      await RolePermission.bulkCreate(toCreate);
+      await sequelize.transaction(async (t) => {
+        await RolePermission.destroy({ where: { role }, transaction: t });
+        if (toCreate.length > 0) {
+          await RolePermission.bulkCreate(toCreate, { transaction: t });
+        }
+      });
 
       return res.json({ message: `Permissions updated for ${role}` });
     } catch (err) {

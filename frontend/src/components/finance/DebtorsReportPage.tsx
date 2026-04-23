@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 import { fetchDebtorsReport } from "../../api/financeDebtors";
 import { formatCurrencyUGX } from "./shared/financeFormat";
 import type { DebtorsPayload } from "./shared/financeTypes";
 
+type ExportFormat = "excel" | "pdf";
+
 export function DebtorsReportPage() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedClass, setSelectedClass] = useState("all");
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("excel");
+  const [exporting, setExporting] = useState(false);
   const [data, setData] = useState<DebtorsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,17 +36,100 @@ export function DebtorsReportPage() {
     };
   }, []);
 
+  const classOptions = useMemo(() => {
+    if (!data) return [];
+    return Array.from(new Set(data.items.map((item) => item.className))).sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    );
+  }, [data]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
     const q = searchTerm.trim().toLowerCase();
-    if (!q) return data.items;
     return data.items.filter(
       (s) =>
+        (selectedClass === "all" || s.className === selectedClass) &&
+        (!q ||
         s.fullName.toLowerCase().includes(q) ||
         s.admissionNumber.toLowerCase().includes(q) ||
-        s.className.toLowerCase().includes(q),
+        s.className.toLowerCase().includes(q)),
     );
-  }, [data, searchTerm]);
+  }, [data, searchTerm, selectedClass]);
+
+  const filteredOutstanding = useMemo(
+    () => filtered.reduce((acc, row) => acc + row.balance, 0),
+    [filtered],
+  );
+
+  const handleExport = () => {
+    if (!data || filtered.length === 0 || exporting) return;
+    setExporting(true);
+    try {
+      const stamp = new Date().toISOString().slice(0, 10);
+      const classLabel = selectedClass === "all" ? "all-classes" : selectedClass.replace(/\s+/g, "-");
+
+      if (exportFormat === "excel") {
+        const workbook = XLSX.utils.book_new();
+        const summarySheet = XLSX.utils.json_to_sheet([
+          {
+            Term: data.term,
+            Class: selectedClass === "all" ? "All classes" : selectedClass,
+            Students: filtered.length,
+            "Outstanding (UGX)": filteredOutstanding,
+          },
+        ]);
+        const rowsSheet = XLSX.utils.json_to_sheet(
+          filtered.map((row) => ({
+            "Admission No.": row.admissionNumber,
+            "Student Name": row.fullName,
+            Class: row.className,
+            "Total Fees (UGX)": row.totalFees,
+            "Amount Paid (UGX)": row.totalPaid,
+            "Balance Due (UGX)": row.balance,
+          })),
+        );
+        XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
+        XLSX.utils.book_append_sheet(workbook, rowsSheet, "Debtors");
+        XLSX.writeFile(workbook, `debtors-report-${classLabel}-${stamp}.xlsx`);
+      } else {
+        const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        doc.setFontSize(14);
+        doc.text("Debtors Report", 40, 36);
+        doc.setFontSize(10);
+        doc.text(`Term: ${data.term}`, 40, 54);
+        doc.text(`Class: ${selectedClass === "all" ? "All classes" : selectedClass}`, 40, 68);
+        doc.text(`Total Outstanding: ${formatCurrencyUGX(filteredOutstanding)}`, 40, 82);
+        doc.text(`Students: ${filtered.length}`, pageWidth - 40, 54, { align: "right" });
+        doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth - 40, 68, { align: "right" });
+
+        autoTable(doc, {
+          startY: 94,
+          head: [["Admission No.", "Student Name", "Class", "Total Fees", "Amount Paid", "Balance Due"]],
+          body: filtered.map((row) => [
+            row.admissionNumber,
+            row.fullName,
+            row.className,
+            formatCurrencyUGX(row.totalFees),
+            formatCurrencyUGX(row.totalPaid),
+            formatCurrencyUGX(row.balance),
+          ]),
+          styles: { fontSize: 9, cellPadding: 5 },
+          headStyles: { fillColor: [90, 143, 175], textColor: 255 },
+          columnStyles: {
+            3: { halign: "right" },
+            4: { halign: "right" },
+            5: { halign: "right" },
+          },
+        });
+        doc.save(`debtors-report-${classLabel}-${stamp}.pdf`);
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to export debtors report");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading && !data) {
     return (
@@ -76,17 +167,60 @@ export function DebtorsReportPage() {
 
       <div className="neo-card overflow-hidden p-0 shadow-xl">
         {/* Search Bar Header */}
-        <div className="flex flex-col gap-4 border-b border-[#ebe4d9]/80 bg-white px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-sm font-black uppercase tracking-widest text-[#2d3436]">Debtors List</h2>
-          <div className="relative w-full sm:w-80">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-            <input
-              type="text"
-              placeholder="Filter by name, admission no, or class..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="neo-inset-field w-full rounded-xl pl-10 pr-4 py-2 text-sm text-[#2d3436] focus:ring-2 focus:ring-[#5a8faf]/50"
-            />
+        <div className="flex flex-col gap-4 border-b border-[#ebe4d9]/80 bg-white px-6 py-5">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-sm font-black uppercase tracking-widest text-[#2d3436]">Debtors List</h2>
+            <p className="text-[11px] font-semibold text-[#636e72]">
+              Showing {filtered.length} student{filtered.length === 1 ? "" : "s"} with balances
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex w-full flex-col gap-1 sm:w-auto">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#636e72]">Filter Class</span>
+              <select
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="neo-inset-field rounded-xl px-3 py-2 text-sm text-[#2d3436] focus:ring-2 focus:ring-[#5a8faf]/50 sm:min-w-44"
+              >
+                <option value="all">All classes</option>
+                {classOptions.map((className) => (
+                  <option key={className} value={className}>
+                    {className}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="relative w-full lg:max-w-xl">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+              <input
+                type="text"
+                placeholder="Filter by name, admission no, or class..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="neo-inset-field w-full rounded-xl pl-10 pr-4 py-2 text-sm text-[#2d3436] focus:ring-2 focus:ring-[#5a8faf]/50"
+              />
+            </div>
+            <div className="flex flex-col gap-1 sm:w-auto">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#636e72]">Export As</span>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <select
+                  value={exportFormat}
+                  onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+                  className="neo-inset-field rounded-xl px-3 py-2 text-sm text-[#2d3436] focus:ring-2 focus:ring-[#5a8faf]/50 sm:min-w-36"
+                >
+                  <option value="excel">Excel</option>
+                  <option value="pdf">PDF</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={handleExport}
+                  disabled={!data || filtered.length === 0 || exporting}
+                  className="rounded-xl border border-[#c9e2f2] bg-gradient-to-br from-[#e8f4fa] to-[#d4e8f5] px-4 py-2 text-sm font-bold text-[#2d3436] shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {exporting ? "Exporting..." : "Export Sheet"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 

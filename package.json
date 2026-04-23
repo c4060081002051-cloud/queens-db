@@ -10,5 +10,8 @@
     "dev:frontend": "npm run dev --prefix frontend",
     "build:backend": "npm run build --prefix backend",
     "build:frontend": "npm run build --prefix frontend"
+  },
+  "devDependencies": {
+    "zod": "^3.25.76"
   }
 }

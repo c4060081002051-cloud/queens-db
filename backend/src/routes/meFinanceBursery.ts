@@ -37,18 +37,38 @@ export function createMeFinanceBurseryRouter() {
   /** Assign or update a bursary (percentage discount) for a student. */
   r.post("/finance/bursery", async (req, res) => {
     try {
-      const { studentId, percentage, term } = req.body;
+      const { studentId, percentage, term, startsAt, endsAt } = req.body;
       const parsedStudentId = Number(studentId);
       const parsedPercentage = Number(percentage);
+      const parsedStartsAt =
+        typeof startsAt === "string" && startsAt.trim()
+          ? new Date(startsAt)
+          : null;
+      const parsedEndsAt =
+        typeof endsAt === "string" && endsAt.trim()
+          ? new Date(endsAt)
+          : null;
 
       if (!Number.isFinite(parsedStudentId) || parsedStudentId < 1) {
         return res.status(400).json({ error: "Invalid studentId" });
       }
-      if (!Number.isFinite(parsedPercentage) || parsedPercentage < 0 || parsedPercentage > 100) {
-        return res.status(400).json({ error: "Percentage must be between 0 and 100" });
+      if (!Number.isFinite(parsedPercentage) || parsedPercentage <= 0 || parsedPercentage > 100) {
+        return res.status(400).json({ error: "Percentage must be greater than 0 and at most 100" });
       }
       if (!term || typeof term !== "string") {
         return res.status(400).json({ error: "Term is required to apply the discount" });
+      }
+      if (!parsedStartsAt || !parsedEndsAt) {
+        return res.status(400).json({ error: "Bursary start and end dates are required" });
+      }
+      if (parsedStartsAt && Number.isNaN(parsedStartsAt.getTime())) {
+        return res.status(400).json({ error: "Invalid bursary start time" });
+      }
+      if (parsedEndsAt && Number.isNaN(parsedEndsAt.getTime())) {
+        return res.status(400).json({ error: "Invalid bursary end time" });
+      }
+      if (parsedStartsAt && parsedEndsAt && parsedEndsAt.getTime() <= parsedStartsAt.getTime()) {
+        return res.status(400).json({ error: "Bursary end time must be after start time" });
       }
 
       const student = await Student.findByPk(parsedStudentId, {
@@ -56,39 +76,68 @@ export function createMeFinanceBurseryRouter() {
       });
       if (!student) return res.status(404).json({ error: "Student not found" });
 
-      // 1. Update student bursary percentage
-      await student.update({ bursaryPercentage: parsedPercentage });
-
-      // 2. Identify base fee from structure or current assignment
+      // Wrap student + assignment updates in a transaction so the bursary
+      // percentage and the fee assignment never drift out of sync on failure.
+      const sequelize = Student.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
+      }
       const boardingStatus = normalizeStudentBoardingStatus(student.boardingStatus);
       const className = studentClassName(student);
       const feeStatus = toFeeStructureStatus(boardingStatus, className);
 
-      const structure = feeStatus
-        ? await StudentFeeStructure.findOne({ where: { term, boardingStatus: feeStatus } })
-        : null;
+      await sequelize.transaction(async (t) => {
+        await student.update(
+          {
+            bursaryPercentage: parsedPercentage,
+            bursaryStartsAt: parsedStartsAt,
+            bursaryEndsAt: parsedEndsAt,
+          },
+          { transaction: t },
+        );
 
-      const baseAmount = structure ? Number(structure.amountDueUgx) : 0;
-      
-      if (baseAmount > 0) {
-        const discountedAmount = Math.round(baseAmount * (1 - parsedPercentage / 100));
-        
-        // 3. Update or Create Assignment
-        const [assignment] = await StudentFeeAssignment.findOrCreate({
-          where: { studentId: parsedStudentId, term },
-          defaults: { amountDueUgx: discountedAmount, notes: `Bursery applied: ${parsedPercentage}%` },
-        });
-        
-        await assignment.update({
-          amountDueUgx: discountedAmount,
-          notes: parsedPercentage > 0 ? `Bursery applied: ${parsedPercentage}%` : null,
-        });
-      }
+        const structure = feeStatus
+          ? await StudentFeeStructure.findOne({
+              where: { term, boardingStatus: feeStatus },
+              transaction: t,
+            })
+          : null;
+
+        const baseAmount = structure ? Number(structure.amountDueUgx) : 0;
+
+        if (baseAmount > 0) {
+          const discountedAmount = Math.round(
+            baseAmount * (1 - parsedPercentage / 100),
+          );
+
+          const [assignment] = await StudentFeeAssignment.findOrCreate({
+            where: { studentId: parsedStudentId, term },
+            defaults: {
+              amountDueUgx: discountedAmount,
+              notes: `Bursery applied: ${parsedPercentage}%`,
+            },
+            transaction: t,
+          });
+
+          await assignment.update(
+            {
+              amountDueUgx: discountedAmount,
+              notes:
+                parsedPercentage > 0
+                  ? `Bursery applied: ${parsedPercentage}%`
+                  : null,
+            },
+            { transaction: t },
+          );
+        }
+      });
 
       return res.json({
         ok: true,
         studentId: parsedStudentId,
         bursaryPercentage: parsedPercentage,
+        bursaryStartsAt: parsedStartsAt,
+        bursaryEndsAt: parsedEndsAt,
         appliedToTerm: term,
       });
     } catch (err) {
@@ -115,34 +164,52 @@ export function createMeFinanceBurseryRouter() {
       });
       if (!student) return res.status(404).json({ error: "Student not found" });
 
-      // 1. Reset percentage
-      await student.update({ bursaryPercentage: 0 });
-
-      // 2. Restore base fee
+      const sequelize = Student.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
+      }
       const boardingStatus = normalizeStudentBoardingStatus(student.boardingStatus);
       const className = studentClassName(student);
       const feeStatus = toFeeStructureStatus(boardingStatus, className);
 
-      const structure = feeStatus
-        ? await StudentFeeStructure.findOne({ where: { term, boardingStatus: feeStatus } })
-        : null;
+      await sequelize.transaction(async (t) => {
+        await student.update(
+          { bursaryPercentage: 0, bursaryStartsAt: null, bursaryEndsAt: null },
+          { transaction: t },
+        );
 
-      const baseAmount = structure ? Number(structure.amountDueUgx) : 0;
+        const structure = feeStatus
+          ? await StudentFeeStructure.findOne({
+              where: { term, boardingStatus: feeStatus },
+              transaction: t,
+            })
+          : null;
 
-      if (baseAmount > 0) {
-        const assignment = await StudentFeeAssignment.findOne({ where: { studentId, term } });
-        if (assignment) {
-          await assignment.update({
-            amountDueUgx: baseAmount,
-            notes: "Bursery revoked",
+        const baseAmount = structure ? Number(structure.amountDueUgx) : 0;
+
+        if (baseAmount > 0) {
+          const assignment = await StudentFeeAssignment.findOne({
+            where: { studentId, term },
+            transaction: t,
           });
+          if (assignment) {
+            await assignment.update(
+              {
+                amountDueUgx: baseAmount,
+                notes: "Bursery revoked",
+              },
+              { transaction: t },
+            );
+          }
         }
-      }
+      });
 
       return res.json({
         ok: true,
         studentId,
         bursaryPercentage: 0,
+        bursaryStartsAt: null,
+        bursaryEndsAt: null,
         restoredTerm: term,
       });
     } catch (err) {

@@ -59,7 +59,6 @@ async function main() {
     firstName: string;
     lastName: string;
     gender: string;
-    rollNumber: string;
     sectionName: string;
     classRoomId: number;
     parentEmail: string | null;
@@ -76,7 +75,6 @@ async function main() {
         parentEmail: s.parentEmail,
         classRoomId: s.classRoomId,
         gender: s.gender,
-        rollNumber: s.rollNumber,
         sectionName: s.sectionName,
       },
     });
@@ -87,7 +85,6 @@ async function main() {
         parentEmail: s.parentEmail,
         classRoomId: s.classRoomId,
         gender: s.gender,
-        rollNumber: s.rollNumber,
         sectionName: s.sectionName,
       });
     }

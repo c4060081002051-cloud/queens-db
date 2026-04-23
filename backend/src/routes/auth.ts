@@ -1,11 +1,12 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import jwt, { type JwtPayload } from "jsonwebtoken";
+import { Op } from "sequelize";
 import { z } from "zod";
 import type { Config } from "../config.js";
 import { ensureSecuritySchema } from "../db/ensureSecuritySchema.js";
 import { loadUserMeFields } from "../db/loadUserSafe.js";
-import { User, userByEmailCi } from "../models/index.js";
+import { User, UserNotification, userByEmailCi } from "../models/index.js";
 import {
   issueSecurityOtpChallenge,
   verifyAndConsumeSecurityOtpChallenge,
@@ -22,6 +23,37 @@ const verify2faSchema = z.object({
   twoFactorToken: z.string().min(10),
   otp: z.string().min(4),
 });
+
+const STRONG_PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+
+const registerSchema = z
+  .object({
+    name: z.string().trim().min(2, "Enter your full name").max(120),
+    email: z.string().trim().email("Enter a valid email").max(255),
+    phoneNumber: z.string().trim().min(7, "Enter a valid phone number").max(32),
+    gender: z.string().trim().min(1, "Select gender").max(32),
+    dateOfBirth: z.string().trim().min(4, "Select date of birth"),
+    addressLine: z.string().trim().min(4, "Enter your address").max(255),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string().min(1, "Confirm password "),
+  })
+  .superRefine((value, ctx) => {
+    if (!STRONG_PASSWORD_REGEX.test(value.password)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["password"],
+        message:
+          "Password must include uppercase, lowercase, number, and symbol characters",
+      });
+    }
+    if (value.password !== value.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["confirmPassword"],
+        message: "Passwords do not match! Please try again.",
+      });
+    }
+  });
 
 /** Valid bcrypt hash so unknown emails still pay compare cost */
 const DUMMY_HASH =
@@ -148,6 +180,13 @@ export function createAuthRouter(config: Config) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
+    if (user.role === "pending_assignment") {
+      return res.status(403).json({
+        error:
+          "Your account is awaiting admin role assignment. Please contact the school administrator.",
+      });
+    }
+
     if (user.twoFactorEnabled) {
       const issued = await issueSecurityOtpChallenge(config, {
         userId: user.id,
@@ -179,6 +218,57 @@ export function createAuthRouter(config: Config) {
     );
 
     return res.json({ token });
+  });
+
+  r.post("/register", async (req, res) => {
+    const parsed = registerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Invalid registration details";
+      return res.status(400).json({ error: msg });
+    }
+    const { name, email, phoneNumber, gender, dateOfBirth, addressLine, password } = parsed.data;
+    const normalizedEmail = email.trim().toLowerCase();
+    try {
+      const existing = await userByEmailCi(normalizedEmail);
+      if (existing) {
+        return res.status(409).json({ error: "An account with this email already exists! Please try another email." });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      await User.create({
+        fullName: name.trim(),
+        email: normalizedEmail,
+        phoneNumber: phoneNumber.trim(),
+        gender: gender.trim(),
+        dateOfBirth: dateOfBirth.trim(),
+        addressLine: addressLine.trim(),
+        role: "pending_assignment",
+        passwordHash,
+      });
+
+      const admins = await User.findAll({
+        attributes: ["id"],
+        where: { role: { [Op.in]: ["admin", "super_admin"] } },
+      });
+
+      if (admins.length > 0) {
+        await UserNotification.bulkCreate(
+          admins.map((admin) => ({
+            userId: admin.id,
+            title: "New user registration pending approval",
+            body: `${name.trim()} (${normalizedEmail}) registered and is waiting for role assignment.`,
+          })),
+        );
+      }
+
+      return res.status(201).json({
+        message:
+          "Registration submitted successfully. An admin will assign your role before you can sign in.",
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
   });
 
   r.post("/verify-login-2fa", async (req, res) => {

@@ -13,7 +13,7 @@ const schema = z.object({
   DB_HOST: z.string().default("127.0.0.1"),
   DB_PORT: z.coerce.number().default(3306),
   DB_USER: z.string().default("root"),
-  DB_PASSWORD: z.string().default("admin@123"),
+  DB_PASSWORD: z.string().default(""),
   DB_NAME: z.string().default("queensdb"),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   /**

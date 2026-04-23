@@ -45,6 +45,7 @@ import { formatShortAgo } from "./utils/formatShortAgo";
 import { HeadTeacherOverview } from "./dashboards/HeadTeacherOverview";
 import { DOSOverview } from "./dashboards/DOSOverview";
 import { AccountantOverview } from "./dashboards/AccountantOverview";
+import { AdminOverview } from "./dashboards/AdminOverview";
 
 type DashboardProps = {
   user: AdminUser | null;
@@ -148,14 +149,17 @@ function readPersistedViewState(): PersistedViewState | null {
         ? parsed.classesSection
         : "all_classes";
     const curriculumSection: CurriculumSection =
+      parsed.curriculumSection === "exams_dashboard" ||
       parsed.curriculumSection === "exam_bot" ||
       parsed.curriculumSection === "exam_mid" ||
       parsed.curriculumSection === "exam_eot" ||
       parsed.curriculumSection === "assessment_tests" ||
       parsed.curriculumSection === "result_entry" ||
-      parsed.curriculumSection === "blank_page"
+      parsed.curriculumSection === "blank_page" ||
+      (typeof parsed.curriculumSection === "string" &&
+        parsed.curriculumSection.startsWith("exam_type:"))
         ? parsed.curriculumSection
-        : "exam_bot";
+        : "exams_dashboard";
     const inboxScreen: InboxScreen =
       parsed.inboxScreen?.screen === "list" &&
       (parsed.inboxScreen.kind === "notifications" || parsed.inboxScreen.kind === "messages")
@@ -193,6 +197,132 @@ function mapToHeaderItems(rows: { id: number; title: string; body: string; read:
     read: x.read,
     time: formatShortAgo(x.createdAt),
   }));
+}
+
+function overviewKindForRole(
+  role: string | undefined,
+  permissions: string[] | undefined,
+): "admin" | "dos" | "accountant" | "head_teacher" {
+  const normalizedRole = (role ?? "").toLowerCase();
+  switch (normalizedRole) {
+    case "super_admin":
+    case "admin":
+      return "admin";
+    case "accountant":
+    case "bursar":
+    case "finance":
+    case "finance_officer":
+    case "accounts":
+      return "accountant";
+    case "dos":
+    case "director_of_studies":
+    case "registrar":
+    case "curriculum_manager":
+      return "dos";
+    case "head_teacher":
+    case "teacher":
+    case "staff":
+    case "student":
+    case "parent":
+      return "head_teacher";
+    default:
+      break;
+  }
+  if (permissions?.includes("nav_operations")) {
+    return "accountant";
+  }
+  if (permissions?.includes("nav_curriculum")) {
+    return "dos";
+  }
+  return "head_teacher";
+}
+
+function isAccountantRole(role: string | undefined): boolean {
+  const normalizedRole = (role ?? "").toLowerCase();
+  return (
+    normalizedRole === "accountant" ||
+    normalizedRole === "bursar" ||
+    normalizedRole === "finance" ||
+    normalizedRole === "finance_officer" ||
+    normalizedRole === "accounts"
+  );
+}
+
+function hasPermission(
+  role: string | undefined,
+  permissions: string[] | undefined,
+  key: string,
+): boolean {
+  const normalizedRole = (role ?? "").toLowerCase();
+  if (normalizedRole === "admin" || normalizedRole === "super_admin") return true;
+  return Boolean(permissions?.includes(key));
+}
+
+function requiredPermissionForFinanceSection(section: FinanceSection): string | null {
+  if (section === "assign_fees") return "finance_assign_fees";
+  if (section === "record_payment" || section === "bursery") return "finance_record_payments";
+  if (section === "busery" || section === "bursery_assignment") return "finance_bursary";
+  if (section === "staff_payment") return "finance_staff_pay";
+  if (section === "finance_summary") return "finance_summaries";
+  if (section === "daily_report" || section === "debtors_report") return "finance_reports";
+  return null;
+}
+
+function canAccessFinanceSection(
+  role: string | undefined,
+  permissions: string[] | undefined,
+  section: FinanceSection,
+): boolean {
+  const required = requiredPermissionForFinanceSection(section);
+  if (!required) return true;
+  return hasPermission(role, permissions, required);
+}
+
+function requiredPermissionForStudentSection(section: StudentNavSection): string | null {
+  if (section === "admissions") return "students_admissions";
+  if (section === "import") return "students_import";
+  if (section === "parents") return "students_parents";
+  if (section === "all" || section === "profiles" || section === "overview") return "students_all";
+  return null;
+}
+
+function requiredPermissionForStaffSection(section: StaffNavSection): string | null {
+  if (section === "teaching") return "staff_teaching";
+  if (section === "nonTeaching") return "staff_non_teaching";
+  return null;
+}
+
+function requiredPermissionForClassSection(section: ClassesSection): string | null {
+  if (section === "all_classes") return "classes_all";
+  if (section === "sections_streams") return "classes_sections_streams";
+  if (section === "class_students") return "classes_students";
+  if (section === "class_teachers") return "classes_teachers";
+  if (section === "class_categories") return "classes_categories";
+  if (section === "class_reports") return "classes_reports";
+  return null;
+}
+
+function requiredPermissionForCurriculumSection(section: CurriculumSection): string | null {
+  if (section === "exams_dashboard") return "curriculum_exams_dashboard";
+  if (section === "exam_bot") return "curriculum_exam_bot";
+  if (section === "exam_mid") return "curriculum_exam_mid";
+  if (section === "exam_eot") return "curriculum_exam_eot";
+  if (section.startsWith("exam_type:")) return "curriculum_exams_dashboard";
+  if (section === "assessment_tests") return "curriculum_assessment_tests";
+  if (section === "result_entry") return "curriculum_result_entry";
+  if (section === "blank_page") return "curriculum_subjects";
+  return null;
+}
+
+function requiredPermissionForSettingsPanel(panel: string | null): string | null {
+  if (!panel) return null;
+  if (panel === "modes") return "settings_modes";
+  if (panel === "fees_structure") return "settings_fees_structure";
+  if (panel === "general") return "settings_general";
+  if (panel === "users_roles") return "settings_users_roles";
+  if (panel === "backup") return "settings_backup";
+  if (panel === "restore") return "settings_restore";
+  return null;
 }
 
 export function Dashboard({
@@ -238,11 +368,61 @@ export function Dashboard({
     initialView?.classesSection ?? "all_classes",
   );
   const [curriculumSection, setCurriculumSection] = useState<CurriculumSection>(
-    initialView?.curriculumSection ?? "exam_bot",
+    initialView?.curriculumSection ?? "exams_dashboard",
   );
   const [selectedClassName] = useState<string | null>(
     initialView?.selectedClassName ?? null,
   );
+  const overviewKind = overviewKindForRole(user?.role, user?.permissions);
+
+  useEffect(() => {
+    if (!isAccountantRole(user?.role)) return;
+    if (mainView === "dashboard") {
+      setMainView("finance");
+      setFinanceSection("overview");
+    }
+  }, [user?.role, mainView]);
+
+  useEffect(() => {
+    if (mainView !== "finance") return;
+    if (canAccessFinanceSection(user?.role, user?.permissions, financeSection)) return;
+    setFinanceSection("overview");
+  }, [mainView, user?.role, user?.permissions, financeSection]);
+
+  useEffect(() => {
+    if (mainView === "students") {
+      const req = requiredPermissionForStudentSection(studentSection);
+      if (req && !hasPermission(user?.role, user?.permissions, req)) {
+        setStudentSection("all");
+      }
+    }
+    if (mainView === "staff") {
+      const req = requiredPermissionForStaffSection(staffSection);
+      if (req && !hasPermission(user?.role, user?.permissions, req)) {
+        setStaffSection("teaching");
+      }
+    }
+    if (mainView === "classes") {
+      const req = requiredPermissionForClassSection(classesSection);
+      if (req && !hasPermission(user?.role, user?.permissions, req)) {
+        setClassesSection("all_classes");
+      }
+    }
+    if (mainView === "curriculum") {
+      const req = requiredPermissionForCurriculumSection(curriculumSection);
+      if (req && !hasPermission(user?.role, user?.permissions, req)) {
+        setCurriculumSection("exams_dashboard");
+      }
+    }
+  }, [mainView, user?.role, user?.permissions, studentSection, staffSection, classesSection, curriculumSection]);
+
+  useEffect(() => {
+    const req = requiredPermissionForSettingsPanel(settingsPanel);
+    if (!req) return;
+    if (!hasPermission(user?.role, user?.permissions, req)) {
+      setSettingsPanel(null);
+    }
+  }, [settingsPanel, user?.role, user?.permissions]);
 
   const refreshHeaderInbox = useCallback(async () => {
     try {
@@ -349,45 +529,62 @@ export function Dashboard({
         setInboxScreen({ screen: "list", kind });
       }}
       onDashboardHome={() => {
-        setMainView("dashboard");
+        if (isAccountantRole(user?.role)) {
+          setMainView("finance");
+          setFinanceSection("overview");
+        } else {
+          setMainView("dashboard");
+        }
         setSettingsPanel(null);
         setInboxScreen({ screen: "home" });
       }}
       onSelectSettingsPanel={(panel) => {
+        const req = requiredPermissionForSettingsPanel(panel);
+        if (req && !hasPermission(user?.role, user?.permissions, req)) return;
         setInboxScreen({ screen: "home" });
         setSettingsPanel(panel);
       }}
       onSelectStudentSection={(section) => {
+        const req = requiredPermissionForStudentSection(section);
+        if (req && !hasPermission(user?.role, user?.permissions, req)) return;
         setSettingsPanel(null);
         setInboxScreen({ screen: "home" });
         setMainView("students");
         setStudentSection(section);
       }}
       onSelectStaffSection={(section) => {
+        const req = requiredPermissionForStaffSection(section);
+        if (req && !hasPermission(user?.role, user?.permissions, req)) return;
         setSettingsPanel(null);
         setInboxScreen({ screen: "home" });
         setMainView("staff");
         setStaffSection(section);
       }}
       onSelectClassSection={(section) => {
+        const req = requiredPermissionForClassSection(section);
+        if (req && !hasPermission(user?.role, user?.permissions, req)) return;
         setSettingsPanel(null);
         setInboxScreen({ screen: "home" });
         setMainView("classes");
         setClassesSection(section);
       }}
       onSelectFinanceSection={(section) => {
+        if (!canAccessFinanceSection(user?.role, user?.permissions, section)) return;
         setSettingsPanel(null);
         setInboxScreen({ screen: "home" });
         setMainView("finance");
         setFinanceSection(section);
       }}
       onSelectCurriculumSection={(section) => {
+        const req = requiredPermissionForCurriculumSection(section);
+        if (req && !hasPermission(user?.role, user?.permissions, req)) return;
         setSettingsPanel(null);
         setInboxScreen({ screen: "home" });
         setMainView("curriculum");
         setCurriculumSection(section);
       }}
       onSelectCommunicationSection={() => {
+        if (!hasPermission(user?.role, user?.permissions, "communication_notice")) return;
         setSettingsPanel(null);
         setInboxScreen({ screen: "home" });
         setMainView("communication");
@@ -464,9 +661,11 @@ export function Dashboard({
                 {profileError || dashError}
               </div>
             ) : null}
-            {user?.permissions?.includes("nav_curriculum") ? (
+            {overviewKind === "admin" ? (
+              <AdminOverview dash={dash} loading={dashLoading} />
+            ) : overviewKind === "dos" ? (
               <DOSOverview dash={dash} loading={dashLoading} />
-            ) : user?.permissions?.includes("nav_operations") ? (
+            ) : overviewKind === "accountant" ? (
               <AccountantOverview dash={dash} loading={dashLoading} />
             ) : (
               <HeadTeacherOverview dash={dash} loading={dashLoading} />

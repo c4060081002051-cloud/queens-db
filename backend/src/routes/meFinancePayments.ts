@@ -3,11 +3,13 @@ import { Op } from "sequelize";
 import { studentToApiRow } from "../formatting/studentRow.js";
 import {
   ClassRoom,
+  DailyFinanceReport,
   Student,
   StudentFeeAssignment,
   StudentFeePayment,
   StudentFeeReceipt,
   StudentFeeStructure,
+  User,
 } from "../models/index.js";
 import { calculatePaymentSummary } from "../services/pythonCalc.js";
 
@@ -30,6 +32,27 @@ function ymd(d = new Date()): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function isAdminRole(role: string | null | undefined): boolean {
+  const normalized = String(role ?? "").trim().toLowerCase();
+  return normalized === "admin" || normalized === "super_admin";
+}
+
+async function canWriteFinanceEntriesForDate(
+  userId: number | null | undefined,
+  targetDate: string,
+): Promise<boolean> {
+  if (!userId) return false;
+  const user = await User.findByPk(userId, { attributes: ["role"] });
+  if (!user) return false;
+  if (isAdminRole(user.role)) return true;
+  const report = await DailyFinanceReport.findOne({
+    where: { reportDate: targetDate },
+    attributes: ["status"],
+  });
+  if (!report) return true;
+  return report.status === "not_submitted";
 }
 
 type FeeStructureStatus = "day_half" | "day_full" | "day_full_p7" | "boarding";
@@ -64,6 +87,12 @@ export function createMeFinancePaymentsRouter() {
 
   r.post("/finance/payments", async (req, res) => {
     try {
+      const canWrite = await canWriteFinanceEntriesForDate(req.userId, ymd());
+      if (!canWrite) {
+        return res.status(403).json({
+          error: "This daily report has already been submitted. Only admin can enter data now.",
+        });
+      }
       const body = req.body as Record<string, unknown>;
       const studentId = Number(body.studentId);
       const term = trimStr(body.term, 20);
@@ -91,76 +120,118 @@ export function createMeFinancePaymentsRouter() {
       });
       if (!student) return res.status(404).json({ error: "Student not found" });
 
-      if (requestedDue != null && requestedDue > 0) {
-        const [assignment] = await StudentFeeAssignment.findOrCreate({
-          where: { studentId, term },
-          defaults: { amountDueUgx: requestedDue, notes: null },
-        });
-        if (Number(assignment.amountDueUgx) !== requestedDue) {
-          await assignment.update({ amountDueUgx: requestedDue });
+      // All fee-assignment, receipt, and payment writes must commit together
+      // so a partial failure can never leave a receipt without a matching
+      // payment row (or vice versa) — critical for financial integrity.
+      const sequelize = StudentFeeReceipt.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
+      }
+
+      const createdReceipt = await sequelize.transaction(async (t) => {
+        if (requestedDue != null && requestedDue > 0) {
+          const [assignment] = await StudentFeeAssignment.findOrCreate({
+            where: { studentId, term },
+            defaults: { amountDueUgx: requestedDue, notes: null },
+            transaction: t,
+          });
+          if (Number(assignment.amountDueUgx) !== requestedDue) {
+            await assignment.update(
+              { amountDueUgx: requestedDue },
+              { transaction: t },
+            );
+          }
         }
-      }
-      const assignment = await StudentFeeAssignment.findOne({ where: { studentId, term } });
-      const boardingStatus = normalizeBoardingStatus(student.boardingStatus);
-      const className = studentClassName(student);
-      const feeStatus = toFeeStructureStatus(boardingStatus, className);
-      const structure =
-        assignment == null && feeStatus != null
-          ? await StudentFeeStructure.findOne({ where: { term, boardingStatus: feeStatus } })
-          : null;
-      if (assignment == null && structure != null) {
-        const percentage = Number(student.bursaryPercentage) || 0;
-        const baseAmount = Number(structure.amountDueUgx);
-        const discountedAmount = Math.round(baseAmount * (1 - percentage / 100));
-        
-        await StudentFeeAssignment.create({
-          studentId,
-          term,
-          amountDueUgx: discountedAmount,
-          notes: percentage > 0 ? `Bursery applied: ${percentage}%` : (structure.notes ?? null),
+        const assignment = await StudentFeeAssignment.findOne({
+          where: { studentId, term },
+          transaction: t,
         });
-      }
-      const sumRaw = await StudentFeePayment.sum("amount_paid_ugx", { where: { studentId, term } });
-      const previousPaidUgx = Math.max(Number(sumRaw ?? 0) || 0, 0);
-      const targetDue =
-        assignment != null
-          ? Number(assignment.amountDueUgx)
-          : structure != null
-            ? Number(structure.amountDueUgx)
-            : previousPaidUgx + amountPaidUgx;
-      const summary = await calculatePaymentSummary({
-        previousPaidUgx,
-        amountPaidUgx,
-        targetDueUgx: targetDue,
-      });
-      const totalFeesDueUgx = summary.totalFeesDueUgx;
-      const outstandingAfterUgx = summary.outstandingAfterUgx;
-      const creditAmountUgx = summary.creditAmountUgx;
+        const boardingStatus = normalizeBoardingStatus(student.boardingStatus);
+        const className = studentClassName(student);
+        const feeStatus = toFeeStructureStatus(boardingStatus, className);
+        const structure =
+          assignment == null && feeStatus != null
+            ? await StudentFeeStructure.findOne({
+                where: { term, boardingStatus: feeStatus },
+                transaction: t,
+              })
+            : null;
+        if (assignment == null && structure != null) {
+          const percentage = Number(student.bursaryPercentage) || 0;
+          const baseAmount = Number(structure.amountDueUgx);
+          const discountedAmount = Math.round(
+            baseAmount * (1 - percentage / 100),
+          );
 
-      const createdReceipt = await StudentFeeReceipt.create({
-        studentId,
-        receiptNo: "PENDING",
-        term,
-        paymentMethod,
-        paidBy,
-        amountPaidUgx,
-        previousPaidUgx,
-        totalFeesDueUgx,
-        outstandingAfterUgx,
-        creditAmountUgx,
-      });
-      await createdReceipt.update({
-        receiptNo: `ST-${String(createdReceipt.id).padStart(5, "0")}`,
-      });
+          await StudentFeeAssignment.create(
+            {
+              studentId,
+              term,
+              amountDueUgx: discountedAmount,
+              notes:
+                percentage > 0
+                  ? `Bursery applied: ${percentage}%`
+                  : (structure.notes ?? null),
+            },
+            { transaction: t },
+          );
+        }
+        const sumRaw = await StudentFeePayment.sum("amount_paid_ugx", {
+          where: { studentId, term },
+          transaction: t,
+        });
+        const previousPaidUgx = Math.max(Number(sumRaw ?? 0) || 0, 0);
+        const targetDue =
+          assignment != null
+            ? Number(assignment.amountDueUgx)
+            : structure != null
+              ? Number(structure.amountDueUgx)
+              : previousPaidUgx + amountPaidUgx;
+        const summary = await calculatePaymentSummary({
+          previousPaidUgx,
+          amountPaidUgx,
+          targetDueUgx: targetDue,
+        });
+        const totalFeesDueUgx = summary.totalFeesDueUgx;
+        const outstandingAfterUgx = summary.outstandingAfterUgx;
+        const creditAmountUgx = summary.creditAmountUgx;
 
-      await StudentFeePayment.create({
-        studentId,
-        term,
-        amountPaidUgx,
-        paymentMethod,
-        paidBy,
-        receiptId: createdReceipt.id,
-        changeReason,
+        const receipt = await StudentFeeReceipt.create(
+          {
+            studentId,
+            receiptNo: "PENDING",
+            term,
+            paymentMethod,
+            paidBy,
+            amountPaidUgx,
+            previousPaidUgx,
+            totalFeesDueUgx,
+            outstandingAfterUgx,
+            creditAmountUgx,
+          },
+          { transaction: t },
+        );
+        await receipt.update(
+          {
+            receiptNo: `ST-${String(receipt.id).padStart(5, "0")}`,
+          },
+          { transaction: t },
+        );
+
+        await StudentFeePayment.create(
+          {
+            studentId,
+            term,
+            amountPaidUgx,
+            paymentMethod,
+            paidBy,
+            receiptId: receipt.id,
+            changeReason,
+          },
+          { transaction: t },
+        );
+
+        return receipt;
       });
 
 

@@ -604,7 +604,6 @@ export function StudentsListPanel({
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.admission")}:</span> {profileCard.admissionNumber}</p>
-            <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.roll")}:</span> {profileCard.rollNumber ?? "—"}</p>
             <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.class")}:</span> {profileCard.className ?? "—"}</p>
             <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.section")}:</span> {profileCard.sectionName ?? "—"}</p>
             <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.dob")}:</span> {profileCard.dateOfBirthFormatted ?? "—"}</p>

@@ -212,7 +212,6 @@ export function createMeDashboardRouter(config: Config) {
           title: `Learner profile ${String(i + 1).padStart(2, "0")}`,
           name: `${s.firstName} ${s.lastName}`.trim(),
           gender: s.gender ?? "—",
-          roll: s.rollNumber ?? "—",
           admissionId: s.admissionNumber,
           admissionDate: safeLocaleDate(created),
           className: cr?.name ?? "—",

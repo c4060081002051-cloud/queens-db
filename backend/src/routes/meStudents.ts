@@ -6,18 +6,26 @@ import { Router } from "express";
 import multer from "multer";
 import { Op, Sequelize, fn, col, type WhereOptions } from "sequelize";
 import {
+  studentCreateBodySchema,
+  studentListQuerySchema,
+  studentUpdateBodySchema,
+} from "../../../shared/dist/schemas/students.js";
+import {
   districtAllowedForCountry,
   isKnownCountryCode,
 } from "../data/geoReference.js";
 import { parseQueryToIsoDate } from "../formatting/localeDate.js";
 import { studentToApiRow } from "../formatting/studentRow.js";
+import { validateWithSchema } from "../lib/validateBody.js";
 import {
   ClassCategory,
   ClassRoom,
   ClassSection,
   StaffMember,
   Student,
+  StudentFeeAssignment,
   StudentFeeReceipt,
+  StudentFeeStructure,
 } from "../models/index.js";
 
 function studentUploadDir(): string {
@@ -195,6 +203,20 @@ function classTokenFromName(name: string | null | undefined): string {
   return n.replace(/[^A-Z0-9]/g, "") || "GENERAL";
 }
 
+function hasP7Class(name: string | null | undefined): boolean {
+  return /\bP7\b/i.test(String(name ?? ""));
+}
+
+function feeStatusForStudent(
+  boardingStatus: "boarding" | "day_half" | "day_full" | null,
+  className: string | null | undefined,
+): "boarding" | "day_half" | "day_full" | "day_full_p7" {
+  if (boardingStatus === "boarding") return "boarding";
+  if (boardingStatus === "day_full" && hasP7Class(className)) return "day_full_p7";
+  if (boardingStatus === "day_full") return "day_full";
+  return "day_half";
+}
+
 async function createStudentRecord(fields: {
   firstName: string;
   middleName: string | null;
@@ -202,7 +224,6 @@ async function createStudentRecord(fields: {
   dateOfBirth: string | null;
   parentEmail: string | null;
   gender: string | null;
-  rollNumber: string | null;
   sectionName: string | null;
   classRoomId: number | null;
   nationality: string | null;
@@ -237,52 +258,96 @@ async function createStudentRecord(fields: {
   const emergencyContactName = toNameCase(fields.emergencyContactName);
   const guardianName = toNameCase(fields.guardianName);
 
-  const created = await Student.create({
-    admissionNumber: tempAdmissionKey(),
-    firstName,
-    middleName,
-    lastName,
-    dateOfBirth: fields.dateOfBirth,
-    parentEmail: fields.parentEmail,
-    classRoomId: fields.classRoomId,
-    gender: fields.gender,
-    rollNumber: fields.rollNumber,
-    sectionName: fields.sectionName,
-    nationality: fields.nationality,
-    countryCode: fields.countryCode,
-    district: fields.district,
-    registrationType: fields.registrationType,
-    previousSchool: fields.previousSchool,
-    previousSchoolLocation: fields.previousSchoolLocation,
-    lastClassAttended: fields.lastClassAttended,
-    lastTermYear: fields.lastTermYear,
-    previousReportCardFilename: fields.previousReportCardFilename,
-    previousGrades: fields.previousGrades,
-    transferReason: fields.transferReason,
-    parentAliveStatus: fields.parentAliveStatus,
-    parentFullName,
-    parentPhone: fields.parentPhone,
-    parentAddress: fields.parentAddress,
-    religion: fields.religion,
-    specialNeeds: fields.specialNeeds,
-    boardingStatus: fields.boardingStatus,
-    residenceAddress: fields.residenceAddress,
-    medicalInfo: fields.medicalInfo,
-    emergencyContactName,
-    emergencyContactPhone: fields.emergencyContactPhone,
-    guardianName,
-    guardianPhone: fields.guardianPhone,
-  });
-  const year = new Date().getFullYear();
-  let classToken = "GENERAL";
-  if (fields.classRoomId != null) {
-    const cls = await ClassRoom.findByPk(fields.classRoomId);
-    classToken = classTokenFromName(cls?.name);
+  const sequelize = Student.sequelize;
+  if (!sequelize) {
+    throw new Error("Student model is not attached to a Sequelize instance");
   }
-  await created.update({
-    admissionNumber: `QS/${year}/${classToken}/${String(created.id).padStart(4, "0")}`,
+
+  return sequelize.transaction(async (t) => {
+    const created = await Student.create(
+      {
+        admissionNumber: tempAdmissionKey(),
+        firstName,
+        middleName,
+        lastName,
+        dateOfBirth: fields.dateOfBirth,
+        parentEmail: fields.parentEmail,
+        classRoomId: fields.classRoomId,
+        gender: fields.gender,
+        sectionName: fields.sectionName,
+        nationality: fields.nationality,
+        countryCode: fields.countryCode,
+        district: fields.district,
+        registrationType: fields.registrationType,
+        previousSchool: fields.previousSchool,
+        previousSchoolLocation: fields.previousSchoolLocation,
+        lastClassAttended: fields.lastClassAttended,
+        lastTermYear: fields.lastTermYear,
+        previousReportCardFilename: fields.previousReportCardFilename,
+        previousGrades: fields.previousGrades,
+        transferReason: fields.transferReason,
+        parentAliveStatus: fields.parentAliveStatus,
+        parentFullName,
+        parentPhone: fields.parentPhone,
+        parentAddress: fields.parentAddress,
+        religion: fields.religion,
+        specialNeeds: fields.specialNeeds,
+        boardingStatus: fields.boardingStatus,
+        residenceAddress: fields.residenceAddress,
+        medicalInfo: fields.medicalInfo,
+        emergencyContactName,
+        emergencyContactPhone: fields.emergencyContactPhone,
+        guardianName,
+        guardianPhone: fields.guardianPhone,
+      },
+      { transaction: t },
+    );
+    const year = new Date().getFullYear();
+    let classToken = "GENERAL";
+    let className: string | null = null;
+    if (fields.classRoomId != null) {
+      const cls = await ClassRoom.findByPk(fields.classRoomId, {
+        transaction: t,
+      });
+      className = cls?.name ?? null;
+      classToken = classTokenFromName(cls?.name);
+    }
+    await created.update(
+      {
+        admissionNumber: `QS/${year}/${classToken}/${String(created.id).padStart(4, "0")}`,
+      },
+      { transaction: t },
+    );
+
+    const latestStructure = await StudentFeeStructure.findOne({
+      order: [["created_at", "DESC"]],
+      transaction: t,
+    });
+    const assignmentTerm = latestStructure?.term ?? "Term 1";
+    const feeStatus = feeStatusForStudent(fields.boardingStatus, className);
+    const termStructures = await StudentFeeStructure.findAll({
+      where: { term: assignmentTerm },
+      order: [["created_at", "DESC"]],
+      transaction: t,
+    });
+    const matchedStructure =
+      termStructures.find((row) => row.boardingStatus === feeStatus) ?? termStructures[0] ?? null;
+    const autoAmount = matchedStructure ? Number(matchedStructure.amountDueUgx) || 0 : 0;
+    const autoNotes = matchedStructure
+      ? `Auto-assigned on student creation (${matchedStructure.boardingStatus}).`
+      : "Auto-assigned on student creation. Update amount after configuring fee structure.";
+
+    await StudentFeeAssignment.findOrCreate({
+      where: { studentId: created.id, term: assignmentTerm },
+      defaults: {
+        amountDueUgx: autoAmount,
+        notes: autoNotes,
+      },
+      transaction: t,
+    });
+
+    return created;
   });
-  return created;
 }
 
 function normalizeCsvHeader(h: string): string {
@@ -794,7 +859,6 @@ export function createMeStudentsRouter() {
         }
         const parentEmail = csvVal(row, "parentemail", "parent_email", "email") || null;
         const gender = csvVal(row, "gender") || null;
-        const rollNumber = csvVal(row, "rollnumber", "roll_number", "roll") || null;
         const sectionName = csvVal(row, "sectionname", "section_name", "section") || null;
         const classIdStr = csvVal(row, "classroomid", "class_room_id", "classid", "class_id");
         let classRoomId: number | null = null;
@@ -906,7 +970,6 @@ export function createMeStudentsRouter() {
             dateOfBirth: dob,
             parentEmail: parentEmail ? parentEmail.slice(0, 255) : null,
             gender: gender ? gender.slice(0, 20) : null,
-            rollNumber: rollNumber ? rollNumber.slice(0, 32) : null,
             sectionName: sectionName ? sectionName.slice(0, 80) : null,
             classRoomId,
             nationality: nationality ? nationality.slice(0, 100) : null,
@@ -961,13 +1024,14 @@ export function createMeStudentsRouter() {
 
   r.get("/students", async (req, res) => {
     try {
-      const qRaw = typeof req.query.q === "string" ? req.query.q.trim() : "";
-      const sortKey = req.query.sortBy;
-      const sortDir = req.query.sortDir === "asc" ? "ASC" : "DESC";
-      const lim = Number.parseInt(String(req.query.limit ?? "100"), 10);
-      const limit = Number.isFinite(lim)
-        ? Math.min(500, Math.max(1, lim))
-        : 100;
+      const parsedQuery = validateWithSchema(studentListQuerySchema, req.query);
+      if (!parsedQuery.ok) {
+        return res.status(400).json({ error: parsedQuery.error });
+      }
+      const qRaw = parsedQuery.data.q ?? "";
+      const sortKey = parsedQuery.data.sortBy;
+      const sortDir = parsedQuery.data.sortDir === "asc" ? "ASC" : "DESC";
+      const limit = parsedQuery.data.limit;
 
       let order: unknown[];
       if (sortKey === "id") {
@@ -1001,7 +1065,6 @@ export function createMeStudentsRouter() {
             { middle_name: pattern },
             { last_name: pattern },
             { parent_email: pattern },
-            { roll_number: pattern },
             { section_name: pattern },
             { nationality: pattern },
             { district: pattern },
@@ -1095,20 +1158,31 @@ export function createMeStudentsRouter() {
       const outstandingAfterUgx = 0;
       const creditAmountUgx = 0;
 
-      const created = await StudentFeeReceipt.create({
-        studentId,
-        receiptNo: "PENDING",
-        term,
-        paymentMethod,
-        paidBy,
-        amountPaidUgx,
-        previousPaidUgx,
-        totalFeesDueUgx,
-        outstandingAfterUgx,
-        creditAmountUgx,
+      const sequelize = StudentFeeReceipt.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
+      }
+      const created = await sequelize.transaction(async (t) => {
+        const receipt = await StudentFeeReceipt.create(
+          {
+            studentId,
+            receiptNo: "PENDING",
+            term,
+            paymentMethod,
+            paidBy,
+            amountPaidUgx,
+            previousPaidUgx,
+            totalFeesDueUgx,
+            outstandingAfterUgx,
+            creditAmountUgx,
+          },
+          { transaction: t },
+        );
+        const receiptNo = `ST-${String(receipt.id).padStart(5, "0")}`;
+        await receipt.update({ receiptNo }, { transaction: t });
+        return receipt;
       });
-      const receiptNo = `ST-${String(created.id).padStart(5, "0")}`;
-      await created.update({ receiptNo });
+      const receiptNo = created.receiptNo;
 
       return res.status(201).json({
         item: {
@@ -1157,45 +1231,43 @@ export function createMeStudentsRouter() {
 
   r.post("/students", async (req, res) => {
     try {
-      const body = req.body as Record<string, unknown>;
-      const firstName = trimStr(body.firstName, 100);
-      const middleName = trimStr(body.middleName, 100);
-      const lastName = trimStr(body.lastName, 100);
-      if (!firstName || !lastName) {
-        return res.status(400).json({
-          error: "firstName and lastName are required",
-        });
+      const parsedBody = validateWithSchema(studentCreateBodySchema, req.body);
+      if (!parsedBody.ok) {
+        return res.status(400).json({ error: parsedBody.error });
       }
+      const body = parsedBody.data;
+      const firstName = body.firstName;
+      const middleName = body.middleName ?? null;
+      const lastName = body.lastName;
 
-      const dateOfBirth = trimStr(body.dateOfBirth, 32);
-      const parentEmail = trimStr(body.parentEmail, 255);
-      const gender = trimStr(body.gender, 20);
-      const rollNumber = trimStr(body.rollNumber, 32);
-      const sectionName = trimStr(body.sectionName, 80);
-      const classRoomId = parseOptionalId(body.classRoomId);
-      const nationality = trimStr(body.nationality, 100);
-      const district = trimStr(body.district, 120);
-      const previousSchool = trimStr(body.previousSchool, 200);
-      const previousSchoolLocation = trimStr(body.previousSchoolLocation, 200);
-      const lastClassAttended = trimStr(body.lastClassAttended, 120);
-      const lastTermYear = trimStr(body.lastTermYear, 40);
-      const previousGradesRaw = trimStr(body.previousGrades, PREVIOUS_GRADES_MAX_LEN);
-      const transferReason = parseTransferReason(body.transferReason) ?? null;
-      const parentAliveStatus = parseParentAliveStatus(body.parentAliveStatus);
-      const parentFullName = toNameCase(trimStr(body.parentFullName, 120));
-      const parentPhone = trimStr(body.parentPhone, 32);
-      const parentAddress = trimStr(body.parentAddress, 255);
-      const religion = trimStr(body.religion, 80);
-      const specialNeeds = trimStr(body.specialNeeds, 255);
-      const residenceAddress = trimStr(body.residenceAddress, 255);
-      const medicalInfo = trimStr(body.medicalInfo, 2000);
-      const boardingStatus = parseBoardingStatus(body.boardingStatus);
-      const emergencyContactName = toNameCase(trimStr(body.emergencyContactName, 120));
-      const emergencyContactPhone = trimStr(body.emergencyContactPhone, 32);
-      const guardianName = toNameCase(trimStr(body.guardianName, 120));
-      const guardianPhone = trimStr(body.guardianPhone, 32);
-      const countryCodeNorm = normalizeCountryCode(body.countryCode);
-      const regType = parseRegistrationType(body.registrationType) ?? "first";
+      const dateOfBirth = body.dateOfBirth ?? null;
+      const parentEmail = body.parentEmail ?? null;
+      const gender = body.gender ?? null;
+      const sectionName = body.sectionName ?? null;
+      const classRoomId = body.classRoomId ?? undefined;
+      const nationality = body.nationality ?? null;
+      const district = body.district ?? null;
+      const previousSchool = body.previousSchool ?? null;
+      const previousSchoolLocation = body.previousSchoolLocation ?? null;
+      const lastClassAttended = body.lastClassAttended ?? null;
+      const lastTermYear = body.lastTermYear ?? null;
+      const previousGradesRaw = body.previousGrades ?? null;
+      const transferReason = body.transferReason ?? null;
+      const parentAliveStatus = body.parentAliveStatus;
+      const parentFullName = toNameCase(body.parentFullName ?? null);
+      const parentPhone = body.parentPhone ?? null;
+      const parentAddress = body.parentAddress ?? null;
+      const religion = body.religion ?? null;
+      const specialNeeds = body.specialNeeds ?? null;
+      const residenceAddress = body.residenceAddress ?? null;
+      const medicalInfo = body.medicalInfo ?? null;
+      const boardingStatus = body.boardingStatus;
+      const emergencyContactName = toNameCase(body.emergencyContactName ?? null);
+      const emergencyContactPhone = body.emergencyContactPhone ?? null;
+      const guardianName = toNameCase(body.guardianName ?? null);
+      const guardianPhone = body.guardianPhone ?? null;
+      const countryCodeNorm = body.countryCode ?? undefined;
+      const regType = body.registrationType ?? "first";
 
       if (countryCodeNorm !== undefined && countryCodeNorm !== null) {
         if (!isKnownCountryCode(countryCodeNorm)) {
@@ -1256,12 +1328,6 @@ export function createMeStudentsRouter() {
           });
         }
       }
-      if (body.parentAliveStatus !== undefined && !parentAliveStatus) {
-        return res.status(400).json({ error: "Invalid parentAliveStatus" });
-      }
-      if (body.boardingStatus !== undefined && !boardingStatus) {
-        return res.status(400).json({ error: "Invalid boardingStatus" });
-      }
       if (
         (parentAliveStatus === "both" || parentAliveStatus === "one") &&
         (!parentFullName || !parentPhone || !parentAddress)
@@ -1310,7 +1376,6 @@ export function createMeStudentsRouter() {
         parentEmail: parentAliveStatus === "none" ? null : parentEmail,
         classRoomId,
         gender,
-        rollNumber,
         sectionName,
         nationality,
         countryCode: countryCodeNorm,
@@ -1358,184 +1423,78 @@ export function createMeStudentsRouter() {
       const row = await Student.findByPk(id);
       if (!row) return res.status(404).json({ error: "Not found" });
 
-      const body = req.body as Record<string, unknown>;
-      const firstName = toNameCase(trimStr(body.firstName, 100));
+      const parsedBody = validateWithSchema(studentUpdateBodySchema, req.body);
+      if (!parsedBody.ok) {
+        return res.status(400).json({ error: parsedBody.error });
+      }
+      const body = parsedBody.data;
+      const firstName = body.firstName !== undefined ? toNameCase(body.firstName) : undefined;
       const middleName =
         body.middleName === null
           ? null
           : body.middleName !== undefined
-            ? toNameCase(trimStr(body.middleName, 100))
+            ? toNameCase(body.middleName)
             : undefined;
-      const lastName = toNameCase(trimStr(body.lastName, 100));
-      if (body.firstName !== undefined && !firstName) {
-        return res.status(400).json({ error: "firstName cannot be empty" });
-      }
-      if (body.lastName !== undefined && !lastName) {
-        return res.status(400).json({ error: "lastName cannot be empty" });
-      }
+      const lastName = body.lastName !== undefined ? toNameCase(body.lastName) : undefined;
 
-      const dateOfBirth = trimStr(body.dateOfBirth, 32);
-      const parentEmail =
-        body.parentEmail === null
-          ? null
-          : body.parentEmail !== undefined
-            ? trimStr(body.parentEmail, 255)
-            : undefined;
-      const gender =
-        body.gender === null ? null : body.gender !== undefined ? trimStr(body.gender, 20) : undefined;
-      const rollNumber =
-        body.rollNumber === null
-          ? null
-          : body.rollNumber !== undefined
-            ? trimStr(body.rollNumber, 32)
-            : undefined;
-      const sectionName =
-        body.sectionName === null
-          ? null
-          : body.sectionName !== undefined
-            ? trimStr(body.sectionName, 80)
-            : undefined;
-
-      const nationality =
-        body.nationality === null
-          ? null
-          : body.nationality !== undefined
-            ? trimStr(body.nationality, 100)
-            : undefined;
-      const district =
-        body.district === null
-          ? null
-          : body.district !== undefined
-            ? trimStr(body.district, 120)
-            : undefined;
-      const previousSchoolPatch =
-        body.previousSchool === null
-          ? null
-          : body.previousSchool !== undefined
-            ? trimStr(body.previousSchool, 200)
-            : undefined;
+      const dateOfBirth = body.dateOfBirth === undefined ? undefined : body.dateOfBirth;
+      const parentEmail = body.parentEmail === undefined ? undefined : body.parentEmail;
+      const gender = body.gender === undefined ? undefined : body.gender;
+      const sectionName = body.sectionName === undefined ? undefined : body.sectionName;
+      const nationality = body.nationality === undefined ? undefined : body.nationality;
+      const district = body.district === undefined ? undefined : body.district;
+      const previousSchoolPatch = body.previousSchool === undefined ? undefined : body.previousSchool;
       const previousSchoolLocationPatch =
-        body.previousSchoolLocation === null
-          ? null
-          : body.previousSchoolLocation !== undefined
-            ? trimStr(body.previousSchoolLocation, 200)
-            : undefined;
+        body.previousSchoolLocation === undefined ? undefined : body.previousSchoolLocation;
       const lastClassAttendedPatch =
-        body.lastClassAttended === null
-          ? null
-          : body.lastClassAttended !== undefined
-            ? trimStr(body.lastClassAttended, 120)
-            : undefined;
-      const lastTermYearPatch =
-        body.lastTermYear === null
-          ? null
-          : body.lastTermYear !== undefined
-            ? trimStr(body.lastTermYear, 40)
-            : undefined;
-      const previousGradesPatch =
-        body.previousGrades === null
-          ? null
-          : body.previousGrades !== undefined
-            ? trimStr(body.previousGrades, PREVIOUS_GRADES_MAX_LEN)
-            : undefined;
-      const transferReasonPatch =
-        body.transferReason === null
-          ? null
-          : body.transferReason !== undefined
-            ? parseTransferReason(body.transferReason) ?? null
-            : undefined;
+        body.lastClassAttended === undefined ? undefined : body.lastClassAttended;
+      const lastTermYearPatch = body.lastTermYear === undefined ? undefined : body.lastTermYear;
+      const previousGradesPatch = body.previousGrades === undefined ? undefined : body.previousGrades;
+      const transferReasonPatch = body.transferReason === undefined ? undefined : body.transferReason;
       const parentAliveStatusPatch =
-        body.parentAliveStatus === null
-          ? null
-          : body.parentAliveStatus !== undefined
-            ? parseParentAliveStatus(body.parentAliveStatus)
-            : undefined;
+        body.parentAliveStatus === undefined ? undefined : body.parentAliveStatus;
       const parentFullNamePatch =
         body.parentFullName === null
           ? null
           : body.parentFullName !== undefined
-            ? toNameCase(trimStr(body.parentFullName, 120))
+            ? toNameCase(body.parentFullName)
             : undefined;
-      const parentPhonePatch =
-        body.parentPhone === null
-          ? null
-          : body.parentPhone !== undefined
-            ? trimStr(body.parentPhone, 32)
-            : undefined;
-      const parentAddressPatch =
-        body.parentAddress === null
-          ? null
-          : body.parentAddress !== undefined
-            ? trimStr(body.parentAddress, 255)
-            : undefined;
-      const religionPatch =
-        body.religion === null
-          ? null
-          : body.religion !== undefined
-            ? trimStr(body.religion, 80)
-            : undefined;
-      const specialNeedsPatch =
-        body.specialNeeds === null
-          ? null
-          : body.specialNeeds !== undefined
-            ? trimStr(body.specialNeeds, 255)
-            : undefined;
-      const boardingStatusPatch =
-        body.boardingStatus === null
-          ? null
-          : body.boardingStatus !== undefined
-            ? parseBoardingStatus(body.boardingStatus)
-            : undefined;
+      const parentPhonePatch = body.parentPhone === undefined ? undefined : body.parentPhone;
+      const parentAddressPatch = body.parentAddress === undefined ? undefined : body.parentAddress;
+      const religionPatch = body.religion === undefined ? undefined : body.religion;
+      const specialNeedsPatch = body.specialNeeds === undefined ? undefined : body.specialNeeds;
+      const boardingStatusPatch = body.boardingStatus === undefined ? undefined : body.boardingStatus;
       const residenceAddressPatch =
-        body.residenceAddress === null
-          ? null
-          : body.residenceAddress !== undefined
-            ? trimStr(body.residenceAddress, 255)
-            : undefined;
-      const medicalInfoPatch =
-        body.medicalInfo === null
-          ? null
-          : body.medicalInfo !== undefined
-            ? trimStr(body.medicalInfo, 2000)
-            : undefined;
+        body.residenceAddress === undefined ? undefined : body.residenceAddress;
+      const medicalInfoPatch = body.medicalInfo === undefined ? undefined : body.medicalInfo;
       const emergencyContactNamePatch =
         body.emergencyContactName === null
           ? null
           : body.emergencyContactName !== undefined
-            ? toNameCase(trimStr(body.emergencyContactName, 120))
+            ? toNameCase(body.emergencyContactName)
             : undefined;
       const emergencyContactPhonePatch =
-        body.emergencyContactPhone === null
-          ? null
-          : body.emergencyContactPhone !== undefined
-            ? trimStr(body.emergencyContactPhone, 32)
-            : undefined;
+        body.emergencyContactPhone === undefined ? undefined : body.emergencyContactPhone;
       const guardianNamePatch =
         body.guardianName === null
           ? null
           : body.guardianName !== undefined
-            ? toNameCase(trimStr(body.guardianName, 120))
+            ? toNameCase(body.guardianName)
             : undefined;
-      const guardianPhonePatch =
-        body.guardianPhone === null
-          ? null
-          : body.guardianPhone !== undefined
-            ? trimStr(body.guardianPhone, 32)
-            : undefined;
+      const guardianPhonePatch = body.guardianPhone === undefined ? undefined : body.guardianPhone;
 
       let countryPatch: string | null | undefined;
-      if (body.countryCode === null) countryPatch = null;
-      else if (body.countryCode !== undefined) {
-        const n = normalizeCountryCode(body.countryCode);
-        if (n == null || !isKnownCountryCode(n)) {
+      if (body.countryCode === null) {
+        countryPatch = null;
+      } else if (body.countryCode !== undefined) {
+        if (!isKnownCountryCode(body.countryCode)) {
           return res.status(400).json({ error: "Invalid countryCode" });
         }
-        countryPatch = n;
+        countryPatch = body.countryCode;
       }
 
-      const regPatch = parseRegistrationType(body.registrationType);
-
-      const classParsed = parseOptionalId(body.classRoomId);
+      const regPatch = body.registrationType ?? undefined;
+      const classParsed = body.classRoomId;
       if (classParsed !== undefined && classParsed !== null) {
         const cr = await ClassRoom.findByPk(classParsed);
         if (!cr) return res.status(400).json({ error: "Invalid classRoomId" });
@@ -1629,12 +1588,6 @@ export function createMeStudentsRouter() {
       ) {
         return res.status(400).json({ error: "District does not match selected country" });
       }
-      if (body.parentAliveStatus !== undefined && parentAliveStatusPatch === undefined) {
-        return res.status(400).json({ error: "Invalid parentAliveStatus" });
-      }
-      if (body.boardingStatus !== undefined && boardingStatusPatch === undefined) {
-        return res.status(400).json({ error: "Invalid boardingStatus" });
-      }
       if (
         (nextParentStatus === "both" || nextParentStatus === "one") &&
         !(nextParentFullName && nextParentPhone)
@@ -1661,7 +1614,6 @@ export function createMeStudentsRouter() {
         ...(dobUpdate !== undefined ? { dateOfBirth: dobUpdate } : {}),
         ...(parentEmail !== undefined ? { parentEmail } : {}),
         ...(gender !== undefined ? { gender } : {}),
-        ...(rollNumber !== undefined ? { rollNumber } : {}),
         ...(sectionName !== undefined ? { sectionName } : {}),
         ...(classParsed !== undefined ? { classRoomId: classParsed } : {}),
         ...(nationality !== undefined ? { nationality } : {}),
