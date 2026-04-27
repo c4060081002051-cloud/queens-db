@@ -6,11 +6,20 @@ import {
   ClassCategory,
   ClassRoom,
   ClassSection,
+  SchoolSetting,
   Student,
   StudentAssessmentResult,
   User,
   UserClassAuthorization,
 } from "../models/index.js";
+import {
+  divisionForAggregate,
+  expectedSubjectCountForClassName,
+  gradeForScore,
+  parseGradingScale,
+  passRateThresholdFromScale,
+  type GradingBand,
+} from "../lib/grading.js";
 
 const TERM_OPTIONS = ["Term 1", "Term 2", "Term 3"] as const;
 
@@ -37,6 +46,20 @@ async function activeExamTypeKeys(): Promise<string[]> {
     attributes: ["examKey"],
   });
   return rows.map((row) => row.examKey.trim().toUpperCase()).filter(Boolean);
+}
+
+async function loadGradingScale(): Promise<GradingBand[]> {
+  const row = await SchoolSetting.findByPk("grading_scale", {
+    attributes: ["settingKey", "settingValue"],
+  });
+  return parseGradingScale(row?.settingValue ?? null);
+}
+
+function normalizeScalePayload(value: unknown): string | null {
+  if (!Array.isArray(value)) return null;
+  const parsed = parseGradingScale(JSON.stringify(value));
+  if (parsed.length === 0) return null;
+  return JSON.stringify(parsed);
 }
 
 async function getUserRole(userId: number): Promise<string> {
@@ -159,6 +182,8 @@ export function createMeAcademicsRouter() {
       const userId = req.userId!;
       const term = trimStr(req.query.term, 20) ?? "Term 1";
       const examTypes = await activeExamTypeKeys();
+      const gradingScale = await loadGradingScale();
+      const passThreshold = passRateThresholdFromScale(gradingScale);
       if (examTypes.length === 0) {
         return res.status(400).json({ error: "No exam types configured. Add exam types manually first." });
       }
@@ -194,7 +219,7 @@ export function createMeAcademicsRouter() {
         const score = Number(row.score) || 0;
         prev.count += 1;
         prev.sum += score;
-        if (score >= 50) prev.pass += 1;
+        if (score >= passThreshold) prev.pass += 1;
         resultsMap.set(k, prev);
       }
 
@@ -218,7 +243,7 @@ export function createMeAcademicsRouter() {
         })
         .sort((a, b) => a.className.localeCompare(b.className) || a.sectionName.localeCompare(b.sectionName));
 
-      return res.json({ rows });
+      return res.json({ passThreshold, rows });
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });
@@ -376,8 +401,24 @@ export function createMeAcademicsRouter() {
         where: { studentId, term, examType, subject: { [Op.in]: subjects } },
         attributes: ["subject", "score"],
       });
+      const gradingScale = await loadGradingScale();
+      const expectedSubjectCount = expectedSubjectCountForClassName(className);
       const markBySubject = new Map<string, number>();
       for (const row of resultRows) markBySubject.set(row.subject, Number(row.score) || 0);
+      const subjectRows = subjects.map((subject) => {
+        const score = markBySubject.get(subject) ?? null;
+        if (score == null) return { subject, score: null, grade: null, aggregate: null };
+        const gradeBand = gradeForScore(score, gradingScale);
+        return { subject, score, grade: gradeBand.grade, aggregate: gradeBand.aggregate };
+      });
+      const completed = subjectRows.filter((x) => x.score != null);
+      const totalScore = completed.reduce((sum, x) => sum + Number(x.score ?? 0), 0);
+      const totalAggregate = completed.reduce((sum, x) => sum + Number(x.aggregate ?? 0), 0);
+      const averageScore = completed.length > 0 ? totalScore / completed.length : null;
+      const division =
+        completed.length >= expectedSubjectCount
+          ? divisionForAggregate(totalAggregate, expectedSubjectCount)
+          : null;
 
       return res.json({
         item: {
@@ -389,10 +430,15 @@ export function createMeAcademicsRouter() {
           sectionName: student.sectionName ?? null,
           term,
           examType,
-          subjects: subjects.map((subject) => ({
-            subject,
-            score: markBySubject.get(subject) ?? null,
-          })),
+          expectedSubjectCount,
+          summary: {
+            resultsEntered: completed.length,
+            totalScore: completed.length > 0 ? totalScore : null,
+            totalAggregate: completed.length > 0 ? totalAggregate : null,
+            averageScore,
+            division,
+          },
+          subjects: subjectRows,
         },
       });
     } catch (err) {
@@ -477,6 +523,95 @@ export function createMeAcademicsRouter() {
     }
   });
 
+  r.get("/academics/report-card/student/:studentId", async (req, res) => {
+    try {
+      const userId = req.userId!;
+      const studentId = Number(req.params.studentId);
+      const term = trimStr(req.query.term, 20) ?? "Term 1";
+      const examTypes = await activeExamTypeKeys();
+      if (examTypes.length === 0) {
+        return res.status(400).json({ error: "No exam types configured. Add exam types manually first." });
+      }
+      const examType = normalizeExamType(req.query.examType, examTypes) ?? examTypes[0];
+      if (!Number.isFinite(studentId) || studentId < 1) {
+        return res.status(400).json({ error: "Invalid studentId" });
+      }
+
+      const student = await Student.findByPk(studentId, {
+        include: [{ model: ClassRoom, as: "classRoom", attributes: ["id", "name"], required: false }],
+      });
+      if (!student || !student.classRoomId) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+      const classes = await getAccessibleClassrooms(userId);
+      if (!classes.some((x) => x.id === student.classRoomId)) {
+        return res.status(403).json({ error: "Not authorized for this class" });
+      }
+
+      const className =
+        (student.get("classRoom") as ClassRoom | null | undefined)?.name ??
+        classes.find((x) => x.id === student.classRoomId)?.name ??
+        "Unknown";
+      const subjects = await subjectsForStudentClass(
+        student.classRoomId,
+        className,
+        student.sectionName ?? null,
+      );
+      const results = await StudentAssessmentResult.findAll({
+        where: { studentId, term, examType, subject: { [Op.in]: subjects } },
+        attributes: ["subject", "score"],
+      });
+      const gradingScale = await loadGradingScale();
+      const expectedSubjectCount = expectedSubjectCountForClassName(className);
+
+      const scoreBySubject = new Map<string, number>();
+      for (const row of results) {
+        scoreBySubject.set(row.subject, Number(row.score) || 0);
+      }
+      const subjectRows = subjects.map((subject) => {
+        const score = scoreBySubject.get(subject) ?? null;
+        if (score == null) return { subject, score: null, grade: null, aggregate: null };
+        const gradeBand = gradeForScore(score, gradingScale);
+        return { subject, score, grade: gradeBand.grade, aggregate: gradeBand.aggregate };
+      });
+      const completedRows = subjectRows.filter((x) => x.score != null);
+      const totalScore = completedRows.reduce((sum, x) => sum + Number(x.score ?? 0), 0);
+      const totalAggregate = completedRows.reduce((sum, x) => sum + Number(x.aggregate ?? 0), 0);
+      const averageScore = completedRows.length > 0 ? totalScore / completedRows.length : null;
+      const division =
+        completedRows.length >= expectedSubjectCount
+          ? divisionForAggregate(totalAggregate, expectedSubjectCount)
+          : null;
+
+      return res.json({
+        item: {
+          studentId: student.id,
+          admissionNumber: student.admissionNumber,
+          fullName: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" "),
+          classRoomId: student.classRoomId,
+          className,
+          sectionName: student.sectionName ?? null,
+          term,
+          examType,
+          expectedSubjectCount,
+          enteredSubjectCount: completedRows.length,
+          summary: {
+            totalScore: completedRows.length > 0 ? totalScore : null,
+            totalAggregate: completedRows.length > 0 ? totalAggregate : null,
+            averageScore,
+            division,
+            status: completedRows.length >= expectedSubjectCount ? "complete" : "pending",
+          },
+          subjects: subjectRows,
+        },
+        gradingScale,
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
   r.get("/academics/config/exam-types", async (_req, res) => {
     try {
       const rows = await AcademicExamType.findAll({
@@ -549,6 +684,39 @@ export function createMeAcademicsRouter() {
 
       await row.destroy();
       return res.status(204).send();
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.get("/academics/config/grading-scale", async (_req, res) => {
+    try {
+      const scale = await loadGradingScale();
+      return res.json({ items: scale });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/academics/config/grading-scale", async (req, res) => {
+    try {
+      const userId = req.userId!;
+      const role = await getUserRole(userId);
+      if (role !== "admin") return res.status(403).json({ error: "Only admins can manage grading scale" });
+
+      const body = req.body as Record<string, unknown>;
+      const normalized = normalizeScalePayload(body.items);
+      if (!normalized) return res.status(400).json({ error: "items must be a valid grading scale array" });
+
+      const existing = await SchoolSetting.findByPk("grading_scale");
+      if (existing) {
+        await existing.update({ settingValue: normalized });
+      } else {
+        await SchoolSetting.create({ settingKey: "grading_scale", settingValue: normalized });
+      }
+      return res.status(201).json({ items: parseGradingScale(normalized) });
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });

@@ -25,8 +25,6 @@ export type StudentApiRow = {
   district: string | null;
   /** `first` | `continuing` */
   registrationType: string;
-  previousSchool: string | null;
-  previousSchoolLocation: string | null;
   lastClassAttended: string | null;
   lastTermYear: string | null;
   previousReportCardFilename: string | null;
@@ -97,11 +95,6 @@ export function studentToApiRow(s: Student): StudentApiRow {
     countryName: countryNameFromCode(cc),
     district: s.district ?? null,
     registrationType: reg,
-    previousSchool: s.previousSchool ?? null,
-    previousSchoolLocation:
-      (s.get("previous_school_location") as string | null | undefined) ??
-      (s as unknown as { previousSchoolLocation?: string | null }).previousSchoolLocation ??
-      null,
     lastClassAttended:
       (s.get("last_class_attended") as string | null | undefined) ??
       (s as unknown as { lastClassAttended?: string | null }).lastClassAttended ??

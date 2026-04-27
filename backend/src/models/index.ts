@@ -19,6 +19,8 @@ export class User extends Model {
   declare passwordHash: string;
   declare role: string;
   declare twoFactorEnabled: boolean;
+  declare isActive: boolean;
+  declare isDeleted: boolean;
   declare readonly createdAt: Date;
 }
 
@@ -137,6 +139,15 @@ export class AcademicSubjectAssignment extends Model {
   declare classCategoryId: number;
   declare sectionName: string | null;
   declare subjectName: string;
+  declare readonly createdAt: Date;
+}
+
+export class Exam extends Model {
+  declare id: number;
+  declare examKey: string;
+  declare classRoomId: number;
+  declare subject: string;
+  declare examDate: string;
   declare readonly createdAt: Date;
 }
 
@@ -265,9 +276,33 @@ export class UserMessage extends Model {
 export class StaffMember extends Model {
   declare id: number;
   declare userId: number | null;
+  declare staffType: string;
   declare displayName: string;
   declare email: string | null;
   declare staffRole: string;
+  declare phone: string | null;
+  declare address: string | null;
+  declare gender: string | null;
+  declare dateOfBirth: string | null;
+  declare nationality: string | null;
+  declare maritalStatus: string | null;
+  declare nationalId: string | null;
+  declare qualification: string | null;
+  declare languages: string | null;
+  declare dateOfJoining: string | null;
+  declare experience: string | null;
+  declare emergencyContactName: string | null;
+  declare emergencyContactPhone: string | null;
+  declare refereeName: string | null;
+  declare refereeContact: string | null;
+  declare staffPhotoUrl: string | null;
+  declare staffPhotoName: string | null;
+  declare assignedClass: string | null;
+  declare teachingSection: string | null;
+  declare staffCategory: string | null;
+  declare nationalIdPhotoUrl: string | null;
+  declare nationalIdPhotoName: string | null;
+  declare updatedAt: Date;
   declare readonly createdAt: Date;
 }
 
@@ -413,6 +448,18 @@ export function setupDatabase(config: Config): Sequelize {
         allowNull: false,
         defaultValue: false,
         field: "two_factor_enabled",
+      },
+      isActive: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: "is_active",
+      },
+      isDeleted: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: "is_deleted",
       },
       createdAt: {
         type: DataTypes.DATE,
@@ -1614,6 +1661,12 @@ export function setupDatabase(config: Config): Sequelize {
         field: "user_id",
         allowNull: true,
       },
+      staffType: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "teaching",
+        field: "staff_type",
+      },
       displayName: {
         type: DataTypes.STRING(120),
         allowNull: false,
@@ -1625,10 +1678,54 @@ export function setupDatabase(config: Config): Sequelize {
         allowNull: false,
         field: "staff_role",
       },
+      phone: { type: DataTypes.STRING(32), allowNull: true },
+      address: { type: DataTypes.STRING(255), allowNull: true },
+      gender: { type: DataTypes.STRING(20), allowNull: true },
+      dateOfBirth: { type: DataTypes.STRING(20), allowNull: true, field: "date_of_birth" },
+      nationality: { type: DataTypes.STRING(100), allowNull: true },
+      maritalStatus: { type: DataTypes.STRING(40), allowNull: true, field: "marital_status" },
+      nationalId: { type: DataTypes.STRING(60), allowNull: true, field: "national_id" },
+      qualification: { type: DataTypes.STRING(120), allowNull: true },
+      languages: { type: DataTypes.STRING(255), allowNull: true },
+      dateOfJoining: { type: DataTypes.STRING(20), allowNull: true, field: "date_of_joining" },
+      experience: { type: DataTypes.TEXT, allowNull: true },
+      emergencyContactName: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        field: "emergency_contact_name",
+      },
+      emergencyContactPhone: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: "emergency_contact_phone",
+      },
+      refereeName: { type: DataTypes.STRING(120), allowNull: true, field: "referee_name" },
+      refereeContact: { type: DataTypes.STRING(120), allowNull: true, field: "referee_contact" },
+      staffPhotoUrl: { type: DataTypes.STRING(255), allowNull: true, field: "staff_photo_url" },
+      staffPhotoName: { type: DataTypes.STRING(255), allowNull: true, field: "staff_photo_name" },
+      assignedClass: { type: DataTypes.STRING(80), allowNull: true, field: "assigned_class" },
+      teachingSection: { type: DataTypes.STRING(32), allowNull: true, field: "teaching_section" },
+      staffCategory: { type: DataTypes.STRING(32), allowNull: true, field: "staff_category" },
+      nationalIdPhotoUrl: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: "national_id_photo_url",
+      },
+      nationalIdPhotoName: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: "national_id_photo_name",
+      },
       createdAt: {
         type: DataTypes.DATE,
         allowNull: false,
         field: "created_at",
+        defaultValue: DataTypes.NOW,
+      },
+      updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        field: "updated_at",
         defaultValue: DataTypes.NOW,
       },
     },
@@ -2049,6 +2146,21 @@ export function setupDatabase(config: Config): Sequelize {
       updatedAt: "updated_at",
     },
   );
+
+  Exam.init(
+    {
+      id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+      examKey: { type: DataTypes.STRING(40), allowNull: false, field: "exam_key" },
+      classRoomId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, field: "class_room_id" },
+      subject: { type: DataTypes.STRING(120), allowNull: false },
+      examDate: { type: DataTypes.DATEONLY, allowNull: false, field: "exam_date" },
+      createdAt: { type: DataTypes.DATE, field: "created_at", defaultValue: DataTypes.NOW },
+    },
+    { sequelize, tableName: "exams", modelName: "Exam", timestamps: false }
+  );
+
+  Exam.belongsTo(ClassRoom, { foreignKey: "class_room_id", as: "classRoom", constraints: false });
+  ClassRoom.hasMany(Exam, { foreignKey: "class_room_id", as: "exams", constraints: false });
 
   StaffMember.belongsTo(User, {
     foreignKey: "user_id",

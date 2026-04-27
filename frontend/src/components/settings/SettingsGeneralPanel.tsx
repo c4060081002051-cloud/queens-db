@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   users_require_admin_approval: "yes",
   roles_allow_custom_roles: "no",
   roles_allow_non_admin_user_management: "no",
+  classes_sections_streams_enabled: "yes",
   security_mfa_admin_required: "yes",
   security_session_timeout_minutes: "60",
   security_password_min_length: "8",
@@ -126,6 +127,7 @@ export function SettingsGeneralPanel() {
       setSettings(merged);
       originalRef.current = JSON.stringify(merged);
       setDirty(false);
+      window.dispatchEvent(new CustomEvent("settings:general-updated", { detail: merged }));
       setToast({ message: "Settings saved successfully.", type: "success" });
     } catch (err: any) {
       setToast({ message: err.message || "Failed to save settings.", type: "error" });
@@ -398,6 +400,11 @@ export function SettingsGeneralPanel() {
               className={baseControlClass}
             />
           }
+        />
+        <SettingsRow
+          label="Enable Sections / Streams"
+          description="When enabled, will allow the creation of sections and streams for classes."
+          control={renderToggle("classes_sections_streams_enabled")}
         />
         <SettingsRow
           label="Allow Self Registration"

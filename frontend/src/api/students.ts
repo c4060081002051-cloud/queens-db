@@ -32,8 +32,6 @@ export type StudentApiRow = {
   countryName: string | null;
   district: string | null;
   registrationType: string;
-  previousSchool: string | null;
-  previousSchoolLocation: string | null;
   lastClassAttended: string | null;
   lastTermYear: string | null;
   previousReportCardFilename: string | null;
@@ -422,6 +420,125 @@ export async function uploadStudentTransferReport(
   }
   const data = await readJson<{ item: StudentApiRow }>(res);
   return data.item;
+}
+
+export type StaffMemberApiRow = {
+  id: number;
+  userId: number | null;
+  staffType: string;
+  displayName: string;
+  email: string | null;
+  staffRole: string;
+  phone: string | null;
+  address: string | null;
+  gender: string | null;
+  dateOfBirth: string | null;
+  nationality: string | null;
+  maritalStatus: string | null;
+  nationalId: string | null;
+  qualification: string | null;
+  languages: string | null;
+  dateOfJoining: string | null;
+  experience: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  refereeName: string | null;
+  refereeContact: string | null;
+  staffPhotoUrl: string | null;
+  staffPhotoName: string | null;
+  assignedClass: string | null;
+  teachingSection: string | null;
+  staffCategory: string | null;
+  nationalIdPhotoUrl: string | null;
+  nationalIdPhotoName: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StaffMemberWriteBody = {
+  staffType: "teaching" | "non_teaching";
+  displayName: string;
+  email?: string;
+  staffRole: string;
+  phone?: string;
+  address?: string;
+  gender?: string;
+  dateOfBirth?: string;
+  nationality?: string;
+  maritalStatus?: string;
+  nationalId?: string;
+  qualification?: string;
+  languages?: string;
+  dateOfJoining?: string;
+  experience?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  refereeName?: string;
+  refereeContact?: string;
+  staffPhotoUrl?: string;
+  staffPhotoName?: string;
+  assignedClass?: string;
+  teachingSection?: string;
+  staffCategory?: string;
+  nationalIdPhotoUrl?: string;
+  nationalIdPhotoName?: string;
+};
+
+export async function fetchStaffMembers(type?: "teaching" | "non_teaching"): Promise<StaffMemberApiRow[]> {
+  const q = type ? `?type=${encodeURIComponent(type)}` : "";
+  const res = await fetch(apiUrl(`/api/me/staff-members${q}`), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ items: StaffMemberApiRow[] }>(res);
+  return data.items;
+}
+
+export async function createStaffMember(body: StaffMemberWriteBody): Promise<StaffMemberApiRow> {
+  const res = await fetch(apiUrl("/api/me/staff-members"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: StaffMemberApiRow }>(res);
+  return data.item;
+}
+
+export async function updateStaffMember(id: number, body: Partial<StaffMemberWriteBody>): Promise<StaffMemberApiRow> {
+  const res = await fetch(apiUrl(`/api/me/staff-members/${id}`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: StaffMemberApiRow }>(res);
+  return data.item;
+}
+
+export async function deleteStaffMember(id: number): Promise<void> {
+  const res = await fetch(apiUrl(`/api/me/staff-members/${id}`), {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (res.status === 404) throw new Error("Not found");
+  if (!res.ok && res.status !== 204) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
 }
 
 export type BulkUploadResult = {

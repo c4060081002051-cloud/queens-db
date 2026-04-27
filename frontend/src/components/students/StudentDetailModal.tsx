@@ -7,6 +7,7 @@ import {
 } from "../../api/geo";
 import {
   deleteStudent,
+  fetchClassSections,
   fetchClassrooms,
   fetchStudent,
   updateStudent,
@@ -17,23 +18,16 @@ import {
 import { useI18n } from "../../i18n/I18nProvider";
 import { AuthenticatedStudentPhoto } from "./AuthenticatedStudentPhoto";
 
-const fieldClass =
-  "w-full rounded-lg border border-[#e0d8cc] bg-[#faf9f7] px-3 py-2 text-sm text-[#2d3436] shadow-[inset_1px_1px_3px_rgba(0,0,0,0.06)] outline-none focus:border-[#6a9570]/60";
+import { useTheme } from "../../theme/ThemeProvider";
 
-type StudentDetailModalProps = {
+export type StudentDetailModalProps = {
   studentId: number | null;
-  /** When opening from the row “edit” action */
   initialEditing?: boolean;
-  /** Focus stream/section control after opening in edit mode (e.g. class roster “Move section”). */
   focusSectionField?: boolean;
-  /**
-   * When provided (non-empty), section is chosen from this list (streams for the current class).
-   * Otherwise the free-text section field is used.
-   */
   streamOptions?: string[] | null;
   onClose: () => void;
   onChanged: () => void | Promise<void>;
-  onSaved?: (studentName: string) => void;
+  onSaved?: (name: string) => void;
 };
 
 export function StudentDetailModal({
@@ -46,13 +40,17 @@ export function StudentDetailModal({
   onSaved,
 }: StudentDetailModalProps) {
   const { t } = useI18n();
-  const sectionSelectRef = useRef<HTMLSelectElement>(null);
-  const sectionInputRef = useRef<HTMLInputElement>(null);
+  const { resolvedTheme } = useTheme();
+  const isDarkUi = resolvedTheme === "dark" || resolvedTheme === "tinted-dark";
+
   const [row, setRow] = useState<StudentApiRow | null>(null);
-  const [rooms, setRooms] = useState<ClassRoomOption[]>([]);
+  const [editing, setEditing] = useState(initialEditing);
+  const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [districtsLoading, setDistrictsLoading] = useState(false);
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
+
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -61,59 +59,61 @@ export function StudentDetailModal({
   const [gender, setGender] = useState("");
   const [sectionName, setSectionName] = useState("");
   const [classRoomId, setClassRoomId] = useState("");
-  const [nationalities, setNationalities] = useState<string[]>([]);
-  const [countries, setCountries] = useState<CountryOption[]>([]);
-  const [districts, setDistricts] = useState<string[]>([]);
-  const [districtsLoading, setDistrictsLoading] = useState(false);
   const [nationality, setNationality] = useState("");
   const [countryCode, setCountryCode] = useState("");
   const [district, setDistrict] = useState("");
+  
   const [emergencyContactName, setEmergencyContactName] = useState("");
   const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
   const [guardianName, setGuardianName] = useState("");
   const [guardianPhone, setGuardianPhone] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
-  const kindergartenRooms = rooms.filter((r) => /^KG[1-3]$/i.test(r.name.trim()));
-  const lowerPrimaryRooms = rooms.filter((r) => /^P[1-3]$/i.test(r.name.trim()));
-  const upperPrimaryRooms = rooms.filter((r) => /^P[4-7]$/i.test(r.name.trim()));
-  const otherRooms = rooms.filter(
-    (r) =>
-      !/^KG[1-3]$/i.test(r.name.trim()) &&
-      !/^P[1-3]$/i.test(r.name.trim()) &&
-      !/^P[4-7]$/i.test(r.name.trim()),
-  );
 
-  const inferSectionFromClassroomName = (name: string): string => {
-    const n = name.trim().toUpperCase();
-    if (/^KG[1-3]$/.test(n)) return "Kindergarten";
-    if (/^P[1-3]$/.test(n)) return "Lower Primary";
-    if (/^P[4-7]$/.test(n)) return "Upper Primary";
-    return "";
-  };
+  const [nationalities, setNationalities] = useState<string[]>([]);
+  const [countries, setCountries] = useState<CountryOption[]>([]);
+  const [districts, setDistricts] = useState<string[]>([]);
+  const [classrooms, setClassrooms] = useState<ClassRoomOption[]>([]);
+  const [allSections, setAllSections] = useState<any[]>([]);
+
+  const sectionSelectRef = useRef<HTMLSelectElement>(null);
+  const sectionInputRef = useRef<HTMLInputElement>(null);
+
+  const sortedRooms = useMemo(() => {
+    return [...classrooms].sort((a, b) => a.name.localeCompare(b.name));
+  }, [classrooms]);
+
+  const resolvedStreamOptions = useMemo(() => {
+    if (streamOptions) return streamOptions;
+    const cid = Number(classRoomId);
+    if (!cid) return null;
+    const names = allSections
+      .filter((s) => s.classRoomId === cid)
+      .map((s) => s.name.trim())
+      .filter(Boolean);
+    if (names.length === 0) return null;
+    return [...new Set(names)].sort();
+  }, [classRoomId, allSections, streamOptions]);
 
   useEffect(() => {
-    if (studentId == null) {
-      setRow(null);
-      setEditing(false);
-      return;
+    if (editing && focusSectionField) {
+      setTimeout(() => {
+        sectionSelectRef.current?.focus();
+        sectionInputRef.current?.focus();
+      }, 100);
     }
-    setEditing(initialEditing);
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    void Promise.all([
-      fetchStudent(studentId),
-      fetchClassrooms(),
-      fetchNationalities(),
-      fetchCountries(),
-    ])
-      .then(([s, r, nat, ctry]) => {
-        if (cancelled) return;
+  }, [editing, focusSectionField]);
+
+  useEffect(() => {
+    if (studentId) {
+      setLoading(true);
+      setError(null);
+      void Promise.all([
+        fetchStudent(studentId),
+        fetchNationalities(),
+        fetchCountries(),
+        fetchClassrooms(),
+        fetchClassSections(),
+      ]).then(([s, nats, counts, rooms, secs]) => {
         setRow(s);
-        setRooms(r);
-        setNationalities(nat);
-        setCountries(ctry);
         setFirstName(s.firstName);
         setMiddleName(s.middleName ?? "");
         setLastName(s.lastName);
@@ -129,76 +129,44 @@ export function StudentDetailModal({
         setEmergencyContactPhone(s.emergencyContactPhone ?? "");
         setGuardianName(s.guardianName ?? "");
         setGuardianPhone(s.guardianPhone ?? "");
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Error");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+
+        setNationalities(nats);
+        setCountries(counts);
+        setClassrooms(rooms);
+        setAllSections(secs);
+        setLoading(false);
+      }).catch(e => {
+        setError(e instanceof Error ? e.message : "Failed to load student");
+        setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [studentId, initialEditing]);
-
-  useEffect(() => {
-    if (!editing) return;
-    const roomId = Number.parseInt(classRoomId, 10);
-    if (!Number.isFinite(roomId) || roomId <= 0) return;
-    const room = rooms.find((r) => r.id === roomId);
-    if (!room) return;
-    const inferred = inferSectionFromClassroomName(room.name);
-    if (inferred) setSectionName(inferred);
-  }, [classRoomId, rooms, editing]);
-
-  useEffect(() => {
-    if (studentId == null || row == null || row.id !== studentId) return;
-    const code = countryCode.trim();
-    if (!code) {
-      setDistricts([]);
-      setDistrict("");
-      return;
     }
-    let cancelled = false;
-    setDistrictsLoading(true);
-    void fetchDistricts(code)
-      .then((list) => {
-        if (!cancelled) {
-          setDistricts(list);
-          setDistrict((d) => (d && list.includes(d) ? d : ""));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDistricts([]);
-          setDistrict("");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setDistrictsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [studentId, countryCode, row]);
-
-  const resolvedStreamOptions = useMemo(() => {
-    if (!streamOptions?.length) return null;
-    const cur = sectionName.trim();
-    if (cur && !streamOptions.includes(cur)) return [cur, ...streamOptions];
-    return streamOptions;
-  }, [streamOptions, sectionName]);
+  }, [studentId]);
 
   useEffect(() => {
-    if (!focusSectionField || !editing || loading || row == null) return;
-    const timer = window.setTimeout(() => {
-      const el = sectionSelectRef.current ?? sectionInputRef.current;
-      if (!el) return;
-      el.focus();
-      if (el instanceof HTMLInputElement) el.select();
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [focusSectionField, editing, loading, row?.id, studentId]);
+    if (countryCode) {
+      setDistrictsLoading(true);
+      void fetchDistricts(countryCode).then(list => {
+        setDistricts(list);
+        setDistrictsLoading(false);
+      }).catch(() => {
+        setDistricts([]);
+        setDistrictsLoading(false);
+      });
+    } else {
+      setDistricts([]);
+    }
+  }, [countryCode]);
+
+  useEffect(() => {
+    setEditing(initialEditing);
+  }, [initialEditing]);
+
+
+  const fieldClass = `w-full rounded-xl border px-4 py-2.5 text-sm transition-all focus:ring-2 focus:ring-teal-500/20 outline-none ${
+    isDarkUi 
+      ? "bg-slate-800/50 border-slate-700 text-slate-200 placeholder-slate-500 focus:border-teal-500" 
+      : "bg-slate-50 border-slate-200 text-[#0c2340] placeholder-slate-400 focus:border-teal-600"
+  }`;
 
   if (studentId == null) return null;
 
@@ -228,6 +196,10 @@ export function StudentDetailModal({
     setNationality(s.nationality ?? "");
     setCountryCode(s.countryCode ?? "");
     setDistrict(s.district ?? "");
+    setEmergencyContactName(s.emergencyContactName ?? "");
+    setEmergencyContactPhone(s.emergencyContactPhone ?? "");
+    setGuardianName(s.guardianName ?? "");
+    setGuardianPhone(s.guardianPhone ?? "");
     await Promise.resolve(onChanged());
     return s;
   };
@@ -247,14 +219,7 @@ export function StudentDetailModal({
         dateOfBirth: dateOfBirth.trim() || null,
         parentEmail: parentEmail.trim() || null,
         gender: gender.trim() || null,
-        sectionName:
-          (() => {
-            const selectedRoom = rooms.find((r) => String(r.id) === classRoomId);
-            const inferred = selectedRoom
-              ? inferSectionFromClassroomName(selectedRoom.name)
-              : "";
-            return inferred || sectionName.trim() || null;
-          })(),
+        sectionName: sectionName.trim() || null,
         classRoomId:
           cr != null && Number.isFinite(cr) && cr > 0 ? cr : null,
         nationality: nationality.trim() || null,
@@ -302,551 +267,252 @@ export function StudentDetailModal({
   return (
     <>
       {confirmSaveOpen ? (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-          <button
-            type="button"
-            className="absolute inset-0 bg-[#2d3436]/35 backdrop-blur-[1px]"
-            onClick={() => setConfirmSaveOpen(false)}
-            aria-label="Close update confirmation"
-          />
-          <div className="relative w-full max-w-sm rounded-2xl border border-[#d9e4f0] bg-[#fffcf7] p-5 shadow-[8px_12px_40px_rgba(45,52,54,0.18)]">
-            <h3 className="text-base font-bold text-[#2d3436]">Confirm Update</h3>
-            <p className="mt-2 text-sm text-[#636e72]">
-              Do you want to update the information as provided?
-            </p>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => void handleSave()}
-                className="rounded-full bg-gradient-to-br from-[#b8d8ba] to-[#8fb892] px-5 py-2 text-sm font-bold text-[#2d3436] shadow-sm transition hover:brightness-105 disabled:opacity-50"
-              >
-                Yes
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => setConfirmSaveOpen(false)}
-                className="rounded-full bg-[#faf7f0] px-5 py-2 text-sm font-semibold text-[#636e72] ring-1 ring-[#ebe4d9] transition hover:bg-[#f0ebe3] disabled:opacity-50"
-              >
-                No
-              </button>
-            </div>
-          </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setConfirmSaveOpen(false)} />
+           <div className={`relative w-full max-w-sm rounded-[2rem] p-8 shadow-2xl border animate-in zoom-in-95 duration-300 ${isDarkUi ? "bg-slate-900 border-slate-700" : "bg-white border-slate-100"}`}>
+              <div className="flex flex-col items-center text-center">
+                 <div className="h-16 w-16 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center text-3xl mb-4">🛡️</div>
+                 <h3 className={`text-lg font-black mb-2 ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>Confirm Changes</h3>
+                 <p className="text-sm font-medium text-slate-500 leading-relaxed mb-8">Are you sure you want to update this student's information?</p>
+                 <div className="flex w-full gap-3">
+                   <button 
+                    onClick={() => setConfirmSaveOpen(false)}
+                    className={`flex-1 py-3 rounded-xl font-bold transition-all ${isDarkUi ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                   >
+                     Go Back
+                   </button>
+                   <button 
+                    disabled={saving}
+                    onClick={() => void handleSave()}
+                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-bold shadow-lg shadow-teal-600/20 transition-all hover:brightness-105 disabled:opacity-50"
+                   >
+                     {saving ? "Saving..." : "Confirm"}
+                   </button>
+                 </div>
+              </div>
+           </div>
         </div>
       ) : null}
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="student-modal-title"
-      >
-      <button
-        type="button"
-        className="absolute inset-0 bg-[#2d3436]/40 backdrop-blur-[2px]"
-        aria-label={t("students.modal.close")}
-        onClick={onClose}
-      />
-      <div className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto overflow-x-hidden rounded-2xl border border-[#ebe4d9] bg-[#fffcf7] shadow-[8px_12px_40px_rgba(45,52,54,0.18)]">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#ebe4d9] bg-gradient-to-r from-[#f8faf6] to-[#eef6f9] px-5 py-3">
-          <h2 id="student-modal-title" className="text-base font-bold text-[#2d3436]">
-            {editing ? t("students.modal.editTitle") : t("students.modal.viewTitle")}
-          </h2>
-          <button
-            type="button"
-            onClick={handleClosePanel}
-            className="rounded-lg p-2 text-[#636e72] transition hover:bg-[#ebe4d9]/80 hover:text-[#2d3436]"
-            aria-label={t("students.modal.close")}
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden>
-              <path
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                d="M6 6l12 12M18 6L6 18"
-              />
-            </svg>
-          </button>
-        </div>
 
-        <div className="p-5">
-          {loading ? (
-            <p className="text-sm text-[#636e72]">{t("students.loading")}</p>
-          ) : null}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300" onClick={onClose} />
+        <div className={`relative w-full max-w-2xl max-h-[90vh] overflow-hidden animate-in zoom-in-95 fade-in duration-300 rounded-[2.5rem] shadow-2xl flex flex-col ${
+          isDarkUi ? "bg-slate-900 border border-slate-700 text-slate-200" : "bg-white text-[#0c2340]"
+        }`}>
+          {/* Header */}
+          <div className={`flex items-center justify-between px-8 py-6 border-b shrink-0 ${isDarkUi ? "border-slate-800 bg-slate-900/50" : "border-slate-100 bg-slate-50/50"}`}>
+            <div>
+              <h2 className="text-lg font-black tracking-tight">{editing ? t("students.modal.editTitle") : t("students.modal.viewTitle")}</h2>
+              <p className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>
+                Student Management Profile
+              </p>
+            </div>
+            <button onClick={handleClosePanel} className={`rounded-full p-2 transition-colors ${isDarkUi ? "hover:bg-slate-800 text-slate-500" : "hover:bg-slate-100 text-slate-400"}`}>
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
 
-          {error ? (
-            <p
-              className="mb-3 rounded-lg border border-[#f7d1cd] bg-[#fff7f5] px-3 py-2 text-sm text-[#a9332a]"
-              role="alert"
-            >
-              {error}
-            </p>
-          ) : null}
-
-          {row && !loading ? (
-            <>
-              <div className="mb-5 flex flex-col items-center gap-3 sm:flex-row sm:items-start">
-                <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl ring-2 ring-[#ebe4d9]">
-                  <AuthenticatedStudentPhoto
-                    studentId={row.id}
-                    hasPhoto={row.hasPassportPhoto}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <div className="min-w-0 flex-1 text-center sm:text-left">
-                  <p className="font-mono text-xs text-[#636e72]">{row.admissionNumber}</p>
-                  <p className="text-lg font-bold text-[#2d3436]">{row.fullName}</p>
-                  <label className="mt-2 block">
-                    <span className="text-xs font-semibold text-[#636e72]">
-                      {t("students.photo.label")}
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif"
-                      className="mt-1 block w-full text-xs text-[#636e72] file:mr-2 file:rounded-lg file:border-0 file:bg-[#cde8cf] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#2d3436]"
-                      onChange={(e) => void handlePhoto(e.target.files?.[0] ?? null)}
-                    />
-                  </label>
-                </div>
+          {/* Content Area */}
+          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            {error && (
+              <div className="mb-6 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4 flex items-center gap-3">
+                 <span className="text-rose-500 text-xl">⚠️</span>
+                 <p className="text-xs font-bold text-rose-500">{error}</p>
               </div>
+            )}
 
-              {!editing ? (
-                <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">{t("students.col.admission")}</dt>
-                    <dd className="font-mono font-semibold text-[#2d3436]">
-                      {row.admissionNumber}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">{t("students.col.nationality")}</dt>
-                    <dd className="min-w-0 text-right font-medium text-[#2d3436]">
-                      {row.nationality ?? "—"}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">{t("students.col.country")}</dt>
-                    <dd className="min-w-0 text-right font-medium text-[#2d3436]">
-                      {row.countryName ?? row.countryCode ?? "—"}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">{t("students.col.district")}</dt>
-                    <dd className="min-w-0 text-right font-medium text-[#2d3436]">
-                      {row.district ?? "—"}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">{t("students.col.registrationType")}</dt>
-                    <dd className="min-w-0 text-right font-medium text-[#2d3436]">
-                      {row.registrationType === "continuing"
-                        ? t("students.form.registrationContinuing")
-                        : t("students.form.registrationFirst")}
-                    </dd>
-                  </div>
-                  {row.registrationType === "continuing" ? (
-                    <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                      <dt className="text-[#636e72]">{t("students.col.previousSchool")}</dt>
-                      <dd className="min-w-0 break-words text-right font-medium text-[#2d3436]">
-                        {row.previousSchool ?? "—"}
-                      </dd>
-                    </div>
-                  ) : null}
-                  <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">{t("students.col.class")}</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.className ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">{t("students.col.section")}</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.sectionName ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">{t("learner.gender")}</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.gender ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">{t("students.col.dob")}</dt>
-                    <dd className="font-medium text-[#2d3436]">
-                      {row.dateOfBirthFormatted ?? "—"}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">{t("students.col.parentEmail")}</dt>
-                    <dd className="min-w-0 break-all font-medium text-[#2d3436]">
-                      {row.parentEmail ?? "—"}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">{t("students.col.admitted")}</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.admittedAt}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-t border-[#f0ebe3] py-2">
-                    <dt className="text-[#636e72]">Middle name</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.middleName ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Previous school location</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.previousSchoolLocation ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Last class attended</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.lastClassAttended ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Last term/year</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.lastTermYear ?? "—"}</dd>
-                  </div>
-
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Transfer reason</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.transferReason ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Parent full name</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.parentFullName ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Parent phone</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.parentPhone ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Parent address</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.parentAddress ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Parent alive status</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.parentAliveStatus ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Religion</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.religion ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Special needs</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.specialNeeds ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Boarding status</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.boardingStatus ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Residence address</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.residenceAddress ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Medical info</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.medicalInfo ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Emergency contact name</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.emergencyContactName ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Emergency contact phone</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.emergencyContactPhone ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Guardian name</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.guardianName ?? "—"}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 py-2">
-                    <dt className="text-[#636e72]">Guardian phone</dt>
-                    <dd className="font-medium text-[#2d3436]">{row.guardianPhone ?? "—"}</dd>
-                  </div>
-                </dl>
-              ) : (
-                <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-                  <label className="block min-w-0 text-xs font-semibold text-[#636e72] sm:col-span-2">
-                    {t("students.col.admission")}
-                    <input
-                      disabled
-                      className={`${fieldClass} mt-1 font-mono disabled:opacity-80`}
-                      value={row.admissionNumber}
-                    />
-                  </label>
-                  <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
-                    {t("students.form.nationality")}
-                    <select
-                      className={`${fieldClass} mt-1`}
-                      value={nationality}
-                      onChange={(e) => setNationality(e.target.value)}
-                    >
-                      <option value="">{t("students.form.nationalityUnset")}</option>
-                      {nationalities.map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
-                    {t("students.form.country")}
-                    <select
-                      className={`${fieldClass} mt-1`}
-                      value={countryCode}
-                      onChange={(e) => {
-                        setCountryCode(e.target.value);
-                        setDistrict("");
-                      }}
-                    >
-                      <option value="">{t("students.form.countryUnset")}</option>
-                      {countries.map((c) => (
-                        <option key={c.code} value={c.code}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block min-w-0 text-xs font-semibold text-[#636e72] sm:col-span-2">
-                    {t("students.form.district")}
-                    <select
-                      className={`${fieldClass} mt-1 disabled:opacity-60`}
-                      value={district}
-                      onChange={(e) => setDistrict(e.target.value)}
-                      disabled={!countryCode.trim() || districtsLoading}
-                    >
-                      <option value="">
-                        {!countryCode.trim()
-                          ? t("students.form.districtPickCountry")
-                          : districtsLoading
-                            ? t("students.form.districtLoading")
-                            : t("students.form.districtUnset")}
-                      </option>
-                      {districts.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-1">
-                    {t("students.form.firstName")} *
-                    <input
-                      className={`${fieldClass} mt-1`}
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                    />
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-1">
-                    {t("students.form.middleName")}
-                    <input
-                      className={`${fieldClass} mt-1`}
-                      value={middleName}
-                      onChange={(e) => setMiddleName(e.target.value)}
-                    />
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-1">
-                    {t("students.form.lastName")} *
-                    <input
-                      className={`${fieldClass} mt-1`}
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                    />
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
-                    {t("students.form.dob")}
-                    <input
-                      type="date"
-                      className={`${fieldClass} mt-1`}
-                      value={dateOfBirth}
-                      onChange={(e) => setDateOfBirth(e.target.value)}
-                    />
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
-                    {t("students.form.parentEmail")}
-                    <input
-                      type="email"
-                      className={`${fieldClass} mt-1`}
-                      value={parentEmail}
-                      onChange={(e) => setParentEmail(e.target.value)}
-                    />
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
-                    {t("students.form.classroom")}
-                    <select
-                      className={`${fieldClass} mt-1`}
-                      value={classRoomId}
-                      onChange={(e) => setClassRoomId(e.target.value)}
-                    >
-                      <option value="">{t("students.form.classroomUnset")}</option>
-                      {kindergartenRooms.length > 0 ? (
-                        <optgroup label={t("students.form.classGroupKindergarten")}>
-                          {kindergartenRooms.map((r) => (
-                            <option key={r.id} value={String(r.id)}>
-                              {r.name} ({r.academicYear})
-                            </option>
-                          ))}
-                        </optgroup>
-                      ) : null}
-                      {lowerPrimaryRooms.length > 0 ? (
-                        <optgroup label={t("students.form.classGroupLowerPrimary")}>
-                          {lowerPrimaryRooms.map((r) => (
-                            <option key={r.id} value={String(r.id)}>
-                              {r.name} ({r.academicYear})
-                            </option>
-                          ))}
-                        </optgroup>
-                      ) : null}
-                      {upperPrimaryRooms.length > 0 ? (
-                        <optgroup label={t("students.form.classGroupUpperPrimary")}>
-                          {upperPrimaryRooms.map((r) => (
-                            <option key={r.id} value={String(r.id)}>
-                              {r.name} ({r.academicYear})
-                            </option>
-                          ))}
-                        </optgroup>
-                      ) : null}
-                      {otherRooms.map((r) => (
-                        <option key={r.id} value={String(r.id)}>
-                          {r.name} ({r.academicYear})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
-                    Emergency Contact Name *
-                    <input
-                      required
-                      className={`${fieldClass} mt-1`}
-                      value={emergencyContactName}
-                      onChange={(e) => setEmergencyContactName(e.target.value)}
-                    />
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
-                    Emergency Contact Phone *
-                    <input
-                      required
-                      type="tel"
-                      minLength={10}
-                      maxLength={13}
-                      className={`${fieldClass} mt-1`}
-                      value={emergencyContactPhone}
-                      onChange={(e) => setEmergencyContactPhone(e.target.value.replace(/[^\d+]/g, ''))}
-                    />
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
-                    {t("students.form.guardianName")}
-                    <input
-                      className={`${fieldClass} mt-1`}
-                      value={guardianName}
-                      onChange={(e) => setGuardianName(e.target.value)}
-                    />
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
-                    {t("students.form.guardianPhone")}
-                    <input
-                      type="tel"
-                      minLength={10}
-                      maxLength={13}
-                      className={`${fieldClass} mt-1`}
-                      value={guardianPhone}
-                      onChange={(e) => setGuardianPhone(e.target.value.replace(/[^\d+]/g, ''))}
-                    />
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72]">
-                    {t("students.form.gender")}
-                    <select
-                      className={`${fieldClass} mt-1`}
-                      value={gender}
-                      onChange={(e) => setGender(e.target.value)}
-                    >
-                      <option value="">{t("students.form.genderUnset")}</option>
-                      <option value="Female">{t("students.form.genderFemale")}</option>
-                      <option value="Male">{t("students.form.genderMale")}</option>
-                      <option value="Other">{t("students.form.genderOther")}</option>
-                    </select>
-                  </label>
-                  <label className="block text-xs font-semibold text-[#636e72] sm:col-span-2">
-                    {t("students.form.section")}
-                    {resolvedStreamOptions ? (
-                      <select
-                        ref={sectionSelectRef}
-                        className={`${fieldClass} mt-1`}
-                        value={sectionName}
-                        onChange={(e) => setSectionName(e.target.value)}
-                      >
-                        <option value="">{t("classes.classStudents.pickStream")}</option>
-                        {resolvedStreamOptions.map((name) => (
-                          <option key={name} value={name}>
-                            {name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        ref={sectionInputRef}
-                        className={`${fieldClass} mt-1`}
-                        value={sectionName}
-                        onChange={(e) => setSectionName(e.target.value)}
-                      />
-                    )}
-                  </label>
+            {row && !loading ? (
+              <>
+                {/* Profile Header Card */}
+                <div className={`mb-8 flex items-center gap-6 p-6 rounded-[2rem] border ${isDarkUi ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-100"}`}>
+                   <div className="relative group">
+                     <div className="h-24 w-24 shrink-0 overflow-hidden rounded-[1.5rem] shadow-xl ring-4 ring-white/10">
+                        <AuthenticatedStudentPhoto
+                          studentId={row.id}
+                          hasPhoto={row.hasPassportPhoto}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                     </div>
+                     <label className="absolute -bottom-2 -right-2 h-8 w-8 bg-teal-600 rounded-xl flex items-center justify-center text-white cursor-pointer shadow-lg hover:scale-110 transition-transform">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <input type="file" className="hidden" accept="image/*" onChange={(e) => void handlePhoto(e.target.files?.[0] ?? null)} />
+                     </label>
+                   </div>
+                   <div className="flex-1 min-w-0">
+                      <span className={`inline-block px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest mb-2 ${isDarkUi ? "bg-slate-900 text-teal-400" : "bg-teal-100 text-teal-700"}`}>
+                        #{row.admissionNumber}
+                      </span>
+                      <h3 className="text-2xl font-black truncate leading-tight">{row.fullName}</h3>
+                      <p className={`text-xs font-bold ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>
+                        {row.className || "Unassigned"} · {row.sectionName || "No Stream"}
+                      </p>
+                   </div>
                 </div>
-              )}
 
-              <div className="mt-6 flex flex-wrap gap-2 border-t border-[#ebe4d9] pt-4">
                 {!editing ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setEditing(true)}
-                      className="rounded-full bg-gradient-to-br from-[#b9d9eb] to-[#8bb8d4] px-5 py-2 text-sm font-bold text-[#2d3436] shadow-sm transition hover:brightness-105"
-                    >
-                      {t("students.modal.edit")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDelete()}
-                      className="rounded-full bg-gradient-to-br from-[#fad5d0] to-[#e8b5b0] px-5 py-2 text-sm font-bold text-[#2d3436] shadow-sm transition hover:brightness-105"
-                    >
-                      {t("students.modal.delete")}
-                    </button>
-                  </>
+                  <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+                    <DetailRow label={t("students.col.nationality")} value={row.nationality} isDarkUi={isDarkUi} />
+                    <DetailRow label={t("students.col.country")} value={row.countryName || row.countryCode} isDarkUi={isDarkUi} />
+                    <DetailRow label={t("students.col.district")} value={row.district} isDarkUi={isDarkUi} />
+                    <DetailRow label={t("students.col.registrationType")} value={row.registrationType === "continuing" ? "Continuing" : "First Registration"} isDarkUi={isDarkUi} />
+                    <DetailRow label={t("learner.gender")} value={row.gender} isDarkUi={isDarkUi} />
+                    <DetailRow label={t("students.col.dob")} value={row.dateOfBirthFormatted} isDarkUi={isDarkUi} />
+                    <DetailRow label={t("students.col.parentEmail")} value={row.parentEmail} isDarkUi={isDarkUi} />
+                    <DetailRow label="Guardian" value={row.guardianName} isDarkUi={isDarkUi} />
+                    <DetailRow label="Guardian Phone" value={row.guardianPhone} isDarkUi={isDarkUi} />
+                    <DetailRow label="Emergency Contact" value={row.emergencyContactName} isDarkUi={isDarkUi} />
+                    <DetailRow label="Emergency Phone" value={row.emergencyContactPhone} isDarkUi={isDarkUi} />
+                    <DetailRow label="Religion" value={row.religion} isDarkUi={isDarkUi} />
+                  </div>
                 ) : (
-                  <>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => setConfirmSaveOpen(true)}
-                      className="rounded-full bg-gradient-to-br from-[#b8d8ba] to-[#8fb892] px-5 py-2 text-sm font-bold text-[#2d3436] shadow-sm transition hover:brightness-105 disabled:opacity-50"
-                    >
-                      {saving ? t("students.form.saving") : t("students.modal.save")}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => {
-                        setEditing(false);
-                        if (row) {
-                          setFirstName(row.firstName);
-                          setLastName(row.lastName);
-                          setDateOfBirth(row.dateOfBirth ?? "");
-                          setParentEmail(row.parentEmail ?? "");
-                          setGender(row.gender ?? "");
-                          setSectionName(row.sectionName ?? "");
-                          setClassRoomId(row.classRoomId != null ? String(row.classRoomId) : "");
-                          setNationality(row.nationality ?? "");
-                          setCountryCode(row.countryCode ?? "");
-                          setDistrict(row.district ?? "");
-                          setEmergencyContactName(row.emergencyContactName ?? "");
-                          setEmergencyContactPhone(row.emergencyContactPhone ?? "");
-                          setGuardianName(row.guardianName ?? "");
-                          setGuardianPhone(row.guardianPhone ?? "");
-                        }
-                      }}
-                      className="rounded-full bg-[#faf7f0] px-5 py-2 text-sm font-semibold text-[#636e72] ring-1 ring-[#ebe4d9] transition hover:bg-[#f0ebe3]"
-                    >
-                      {t("students.modal.cancelEdit")}
-                    </button>
-                  </>
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>{t("students.form.firstName")} *</label>
+                      <input className={fieldClass} value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>{t("students.form.lastName")} *</label>
+                      <input className={fieldClass} value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>{t("students.form.gender")}</label>
+                      <select className={fieldClass} value={gender} onChange={(e) => setGender(e.target.value)}>
+                        <option value="">Select Gender</option>
+                        <option value="Female">Female</option>
+                        <option value="Male">Male</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>{t("students.form.dob")}</label>
+                      <input type="date" className={fieldClass} value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>{t("students.form.classroom")}</label>
+                      <select className={fieldClass} value={classRoomId} onChange={(e) => setClassRoomId(e.target.value)}>
+                        <option value="">Unassigned</option>
+                        {sortedRooms.map((r) => <option key={r.id} value={String(r.id)}>{r.name} ({r.academicYear})</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>{t("students.form.section")}</label>
+                      {resolvedStreamOptions ? (
+                        <select ref={sectionSelectRef} className={fieldClass} value={sectionName} onChange={(e) => setSectionName(e.target.value)}>
+                          <option value="">Pick Stream</option>
+                          {resolvedStreamOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                        </select>
+                      ) : (
+                        <input ref={sectionInputRef} className={fieldClass} value={sectionName} onChange={(e) => setSectionName(e.target.value)} />
+                      )}
+                    </div>
+                     <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>Nationality</label>
+                      <select className={fieldClass} value={nationality} onChange={(e) => setNationality(e.target.value)}>
+                        <option value="">Unset</option>
+                        {nationalities.map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                     <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>Parent Email</label>
+                      <input type="email" className={fieldClass} value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>Country</label>
+                      <select className={fieldClass} value={countryCode} onChange={(e) => setCountryCode(e.target.value)}>
+                        <option value="">Select Country</option>
+                        {countries.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>District</label>
+                      <select className={fieldClass} value={district} onChange={(e) => setDistrict(e.target.value)} disabled={districtsLoading}>
+                        <option value="">{districtsLoading ? "Loading..." : "Select District"}</option>
+                        {districts.map((d) => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>Guardian Name</label>
+                      <input className={fieldClass} value={guardianName} onChange={(e) => setGuardianName(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>Guardian Phone</label>
+                      <input className={fieldClass} value={guardianPhone} onChange={(e) => setGuardianPhone(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>Emergency Contact</label>
+                      <input className={fieldClass} value={emergencyContactName} onChange={(e) => setEmergencyContactName(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>Emergency Phone</label>
+                      <input className={fieldClass} value={emergencyContactPhone} onChange={(e) => setEmergencyContactPhone(e.target.value)} />
+                    </div>
+                  </div>
                 )}
-              </div>
-            </>
-          ) : null}
+              </>
+            ) : (
+               <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mb-4" />
+                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Loading Records...</p>
+               </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className={`px-8 py-6 border-t shrink-0 flex items-center gap-4 ${isDarkUi ? "border-slate-800 bg-slate-900/50" : "border-slate-100 bg-slate-50/50"}`}>
+             {!editing ? (
+               <>
+                 <button
+                    onClick={() => setEditing(true)}
+                    className="flex-1 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 py-3 text-sm font-black text-white shadow-lg shadow-teal-600/20 transition-all hover:-translate-y-1"
+                  >
+                    Edit Profile
+                  </button>
+                  <button
+                    onClick={() => void handleDelete()}
+                    className={`px-6 py-3 rounded-2xl font-black text-sm transition-all hover:bg-rose-500/10 ${isDarkUi ? "text-rose-500" : "text-rose-600"}`}
+                  >
+                    Delete
+                  </button>
+               </>
+             ) : (
+               <>
+                  <button
+                    onClick={() => {
+                       setEditing(false);
+                       if (row) reload();
+                    }}
+                    className={`flex-1 py-3 rounded-2xl font-black text-sm transition-all ${isDarkUi ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={saving}
+                    onClick={() => setConfirmSaveOpen(true)}
+                    className="flex-[2] py-3 rounded-2xl bg-gradient-to-r from-[#0c2340] to-[#1a3a5c] text-white font-black text-sm shadow-xl shadow-[#0c2340]/20 transition-all hover:-translate-y-1"
+                  >
+                    {saving ? "Saving Changes..." : "Save Changes"}
+                  </button>
+               </>
+             )}
+          </div>
         </div>
-      </div>
       </div>
     </>
   );
 }
+
+function DetailRow({ label, value, isDarkUi }: { label: string; value: string | null | undefined; isDarkUi: boolean }) {
+  return (
+    <div className={`flex items-center justify-between py-3 border-b border-dashed ${isDarkUi ? "border-slate-800" : "border-slate-100"}`}>
+      <span className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>{label}</span>
+      <span className={`text-sm font-bold ${isDarkUi ? "text-slate-200" : "text-[#0c2340]"}`}>{value || "—"}</span>
+    </div>
+  );
+}
+

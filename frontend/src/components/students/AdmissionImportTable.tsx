@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import {
   fetchCountries,
   fetchNationalities,
@@ -29,10 +30,6 @@ type Row = {
   district: string;
   religion: string;
   registrationType: "first" | "continuing";
-  previousSchool: string;
-  previousSchoolLocation: string;
-  lastClassAttended: string;
-  lastTermYear: string;
 
   parentAliveStatus: "both" | "one" | "none" | "";
   parentFullName: string;
@@ -62,10 +59,6 @@ const headers: Array<{ key: keyof Row; label: string }> = [
   { key: "district", label: "District" },
   { key: "religion", label: "Religion" },
   { key: "registrationType", label: "Registration type" },
-  { key: "previousSchool", label: "Previous school (first only)" },
-  { key: "previousSchoolLocation", label: "Prev. school location" },
-  { key: "lastClassAttended", label: "Last class attended" },
-  { key: "lastTermYear", label: "Last term/year" },
 
   { key: "parentAliveStatus", label: "Parent status" },
   { key: "parentFullName", label: "Parent full name" },
@@ -81,6 +74,50 @@ const headers: Array<{ key: keyof Row; label: string }> = [
   { key: "residenceAddress", label: "Residence address" },
   { key: "medicalInfo", label: "Medical info" },
 ];
+
+const HEADER_ALIASES: Record<string, keyof Row> = {
+  firstname: "firstName",
+  middlename: "middleName",
+  lastname: "lastName",
+  dateofbirth: "dateOfBirth",
+  dob: "dateOfBirth",
+  gender: "gender",
+  classroomid: "classRoomId",
+  classroom: "classRoomId",
+  classid: "classRoomId",
+  sectionname: "sectionName",
+  section: "sectionName",
+  stream: "sectionName",
+  nationality: "nationality",
+  countrycode: "countryCode",
+  country: "countryCode",
+  district: "district",
+  religion: "religion",
+  registrationtype: "registrationType",
+  parentalivestatus: "parentAliveStatus",
+  parentfullname: "parentFullName",
+  parentphone: "parentPhone",
+  parentemail: "parentEmail",
+  parentaddress: "parentAddress",
+  guardianname: "guardianName",
+  guardianphone: "guardianPhone",
+  emergencycontactname: "emergencyContactName",
+  emergencycontactphone: "emergencyContactPhone",
+  boardingstatus: "boardingStatus",
+  status: "boardingStatus",
+  specialneeds: "specialNeeds",
+  residenceaddress: "residenceAddress",
+  medicalinfo: "medicalInfo",
+};
+
+function normalizeHeader(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function resolveHeader(raw: string): keyof Row | null {
+  const normalized = normalizeHeader(raw);
+  return HEADER_ALIASES[normalized] ?? null;
+}
 
 const requiredKeys: Array<keyof Row> = [
   "firstName",
@@ -109,10 +146,6 @@ function emptyRow(): Row {
     district: "",
     religion: "",
     registrationType: "first",
-    previousSchool: "",
-    previousSchoolLocation: "",
-    lastClassAttended: "",
-    lastTermYear: "",
 
     parentAliveStatus: "",
     parentFullName: "",
@@ -136,14 +169,34 @@ function csvToRows(text: string): Row[] {
     .map((l) => l.trim())
     .filter(Boolean);
   if (lines.length < 2) return [];
-  const cols = lines[0].split(",").map((h) => h.trim().toLowerCase());
+  const cols = lines[0].split(",").map((h) => resolveHeader(h.trim()));
   const out: Row[] = [];
   for (let i = 1; i < lines.length; i++) {
     const vals = lines[i].split(",").map((v) => v.trim().replace(/^"|"$/g, ""));
     const r = emptyRow();
     cols.forEach((c, idx) => {
       const v = vals[idx] ?? "";
-      if (c in r) {
+      if (c) {
+        (r as Record<string, string>)[c] = v;
+      }
+    });
+    out.push(r);
+  }
+  return out;
+}
+
+function sheetToRows(rows2d: string[][]): Row[] {
+  if (rows2d.length < 2) return [];
+  const cols = rows2d[0].map((h) => resolveHeader(String(h ?? "").trim()));
+  const out: Row[] = [];
+  for (let i = 1; i < rows2d.length; i++) {
+    const vals = rows2d[i].map((v) => String(v ?? "").trim());
+    // skip fully empty data rows
+    if (vals.every((v) => !v)) continue;
+    const r = emptyRow();
+    cols.forEach((c, idx) => {
+      const v = vals[idx] ?? "";
+      if (c) {
         (r as Record<string, string>)[c] = v;
       }
     });
@@ -176,26 +229,13 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
     ],
     [],
   );
-  const kindergatenRooms = useMemo(
-    () => rooms.filter((r) => /^KG[1-3]$/i.test(r.name.trim())),
-    [rooms],
-  );
-  const lowerPrimaryRooms = useMemo(
-    () => rooms.filter((r) => /^P[1-3]$/i.test(r.name.trim())),
-    [rooms],
-  );
-  const upperPrimaryRooms = useMemo(
-    () => rooms.filter((r) => /^P[4-7]$/i.test(r.name.trim())),
-    [rooms],
-  );
-  const otherRooms = useMemo(
+  const sortedRooms = useMemo(
     () =>
-      rooms.filter(
-        (r) =>
-          !/^KG[1-3]$/i.test(r.name.trim()) &&
-          !/^P[1-3]$/i.test(r.name.trim()) &&
-          !/^P[4-7]$/i.test(r.name.trim()),
-      ),
+      [...rooms]
+        .filter((r) => r.isActive !== false)
+        .sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+        ),
     [rooms],
   );
 
@@ -217,8 +257,32 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
   }, [t]);
 
   async function onImportFile(file: File) {
-    const text = await file.text();
-    const parsed = csvToRows(text);
+    const lower = file.name.toLowerCase();
+    let parsed: Row[] = [];
+
+    if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) {
+        setRows([]);
+        setError("No worksheet found in Excel file.");
+        setMessage(null);
+        return;
+      }
+      const sheet = workbook.Sheets[firstSheetName];
+      const rows2d = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(sheet, {
+        header: 1,
+        raw: false,
+      });
+      parsed = sheetToRows(
+        rows2d.map((row) => row.map((cell) => (cell == null ? "" : String(cell)))),
+      );
+    } else {
+      const text = await file.text();
+      parsed = csvToRows(text);
+    }
+
     setRows(parsed);
     setError(parsed.length === 0 ? "No rows found in file." : null);
     setMessage(parsed.length > 0 ? `Loaded ${parsed.length} row(s). Review and save.` : null);
@@ -242,25 +306,6 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(r.dateOfBirth.trim())) {
       return "dateOfBirth must be YYYY-MM-DD";
-    }
-    if (r.registrationType === "continuing") {
-      if (
-        r.previousSchool.trim() ||
-        r.previousSchoolLocation.trim() ||
-        r.lastClassAttended.trim() ||
-        r.lastTermYear.trim()
-      ) {
-        return "Omit previous school and grades columns for transfer-in (continuing)";
-      }
-    }
-    if (r.registrationType === "first") {
-      if (
-        !r.previousSchool.trim() ||
-        !r.lastClassAttended.trim() ||
-        !r.lastTermYear.trim()
-      ) {
-        return "New admissions require previousSchool, lastClassAttended, lastTermYear";
-      }
     }
     if (
       (r.parentAliveStatus === "both" || r.parentAliveStatus === "one") &&
@@ -297,6 +342,7 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
     setError(null);
     setMessage(null);
     let created = 0;
+    const assignedAdmissionNumbers: string[] = [];
     const failures: string[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -320,15 +366,6 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
           district: r.district.trim() || undefined,
           religion: r.religion.trim() || undefined,
           registrationType: r.registrationType,
-          previousSchool:
-            r.registrationType === "first" ? r.previousSchool.trim() : undefined,
-          previousSchoolLocation:
-            r.registrationType === "first" && r.previousSchoolLocation.trim()
-              ? r.previousSchoolLocation.trim()
-              : undefined,
-          lastClassAttended:
-            r.registrationType === "first" ? r.lastClassAttended.trim() : undefined,
-          lastTermYear: r.registrationType === "first" ? r.lastTermYear.trim() : undefined,
           parentAliveStatus: (r.parentAliveStatus || undefined) as
             | "both"
             | "one"
@@ -351,14 +388,26 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
           residenceAddress: r.residenceAddress.trim() || undefined,
           medicalInfo: r.medicalInfo.trim() || undefined,
         };
-        await createStudent(body);
+        const createdStudent = await createStudent(body);
+        const admissionNumber = createdStudent.admissionNumber?.trim();
+        if (!admissionNumber) {
+          failures.push(`Row ${i + 1}: admission number was not assigned`);
+          continue;
+        }
+        assignedAdmissionNumbers.push(admissionNumber);
         created += 1;
       } catch (e) {
         failures.push(`Row ${i + 1}: ${e instanceof Error ? e.message : "Failed"}`);
       }
     }
     setBusy(false);
-    setMessage(`Saved ${created} row(s).`);
+    const assignedPreview =
+      assignedAdmissionNumbers.length > 0
+        ? ` Admission numbers: ${assignedAdmissionNumbers.slice(0, 8).join(", ")}${
+            assignedAdmissionNumbers.length > 8 ? "..." : ""
+          }`
+        : "";
+    setMessage(`Saved ${created} row(s).${assignedPreview}`);
     setError(failures.length > 0 ? failures.slice(0, 8).join("\n") : null);
     if (created > 0) onDone();
   }
@@ -371,7 +420,7 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
       <div className="space-y-3 p-5">
         <p className="text-xs text-[#636e72]">{t("students.import.hint")}</p>
         <p className="text-[11px] text-[#636e72]">
-          Template headers: <code>{template}</code>
+          Template headers (for CSV/Excel first row): <code>{template}</code>
         </p>
         {message ? <p className="text-sm text-emerald-800">{message}</p> : null}
         {error ? <pre className="whitespace-pre-wrap text-xs text-rose-800">{error}</pre> : null}
@@ -380,7 +429,7 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
             {t("students.import.button")}
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -510,36 +559,10 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
                           className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
                         >
                           <option value="">Select</option>
-                          {kindergatenRooms.length > 0 ? (
-                            <optgroup label="Kindergaten (KG1-KG3)">
-                              {kindergatenRooms.map((rm) => (
-                                <option key={rm.id} value={String(rm.id)}>
-                                  {rm.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                          ) : null}
-                          {lowerPrimaryRooms.length > 0 ? (
-                            <optgroup label="Lower Primary (P1-P3)">
-                              {lowerPrimaryRooms.map((rm) => (
-                                <option key={rm.id} value={String(rm.id)}>
-                                  {rm.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                          ) : null}
-                          {upperPrimaryRooms.length > 0 ? (
-                            <optgroup label="Upper Primary (P4-P7)">
-                              {upperPrimaryRooms.map((rm) => (
-                                <option key={rm.id} value={String(rm.id)}>
-                                  {rm.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                          ) : null}
-                          {otherRooms.map((rm) => (
+                          {sortedRooms.map((rm) => (
                             <option key={rm.id} value={String(rm.id)}>
                               {rm.name}
+                              {rm.academicYear ? ` (${rm.academicYear})` : ""}
                             </option>
                           ))}
                         </select>

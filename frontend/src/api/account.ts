@@ -33,6 +33,8 @@ export type ManagedUser = {
   dateOfBirth: string | null;
   addressLine: string | null;
   role: string;
+  isActive: boolean;
+  isDeleted: boolean;
   createdAt: string;
 };
 
@@ -90,6 +92,68 @@ export async function updateManagedUserRole(
   }
   const data = await readJson<{ user: ManagedUser }>(res);
   return data.user;
+}
+
+export async function updateManagedUserProfile(
+  userId: number,
+  body: { name: string; email: string; role: string },
+): Promise<ManagedUser> {
+  const res = await fetch(apiUrl(`/api/me/users/${userId}/profile`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    throw new Error(await errorMessageFromResponse(res));
+  }
+  const data = await readJson<{ user: ManagedUser }>(res);
+  return data.user;
+}
+
+export async function updateManagedUserStatus(
+  userId: number,
+  active: boolean,
+): Promise<ManagedUser> {
+  const res = await fetch(apiUrl(`/api/me/users/${userId}/status`), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ active }),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    throw new Error(await errorMessageFromResponse(res));
+  }
+  const data = await readJson<{ user: ManagedUser }>(res);
+  return data.user;
+}
+
+export async function adminResetManagedUserPassword(
+  userId: number,
+  newPassword: string,
+): Promise<ManagedUser> {
+  const res = await fetch(apiUrl(`/api/me/users/${userId}/reset-password`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ newPassword }),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    throw new Error(await errorMessageFromResponse(res));
+  }
+  const data = await readJson<{ user: ManagedUser }>(res);
+  return data.user;
+}
+
+export async function deleteManagedUser(userId: number): Promise<void> {
+  const res = await fetch(apiUrl(`/api/me/users/${userId}`), {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    throw new Error(await errorMessageFromResponse(res));
+  }
 }
 
 export async function requestPasswordChangeOtp(): Promise<void> {

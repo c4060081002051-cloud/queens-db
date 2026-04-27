@@ -19,9 +19,11 @@ import { createMeFinancePaymentsRouter } from "./routes/meFinancePayments.js";
 import { createMeFinanceReportsRouter } from "./routes/meFinanceReports.js";
 import { createMeFinanceStatementsRouter } from "./routes/meFinanceStatements.js";
 import { createMeAcademicsRouter } from "./routes/meAcademics.js";
+import { createMeExamsRouter } from "./routes/meExams.js";
 import { createMeCommunicationNoticesRouter } from "./routes/meCommunicationNotices.js";
 import { createMeFinanceBurseryRouter } from "./routes/meFinanceBursery.js";
 import { createMeSettingsRouter } from "./routes/meSettings.js";
+import { createMeStaffRouter } from "./routes/meStaff.js";
 
 export function buildApp(config: Config) {
   const app = express();
@@ -112,6 +114,7 @@ export function buildApp(config: Config) {
   meRouter.use(createMeExpensesRouter());
   meRouter.use(createMeGeoRouter());
   meRouter.use(createMeStudentsRouter());
+  meRouter.use(createMeStaffRouter());
   meRouter.use(createMeFinanceDashboardRouter());
   meRouter.use(createMeFinanceLedgerRouter());
   meRouter.use(createMeFinancePaymentsRouter());
@@ -119,6 +122,7 @@ export function buildApp(config: Config) {
   meRouter.use(createMeFinanceStatementsRouter());
   meRouter.use(createMeFinanceBurseryRouter());
   meRouter.use(createMeAcademicsRouter());
+  meRouter.use(createMeExamsRouter());
   meRouter.use("/communication/notices", createMeCommunicationNoticesRouter());
   meRouter.use("/settings", createMeSettingsRouter());
   meRouter.use(createMeDashboardRouter(config));

@@ -8,6 +8,13 @@ import {
   StudentFeePayment,
 } from "../models/index.js";
 
+type StudentPaymentWithStudent = StudentFeePayment & {
+  student?: {
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null;
+};
+
 
 function ymd(d = new Date()): string {
   const y = d.getFullYear();
@@ -78,14 +85,20 @@ export function createMeFinanceDashboardRouter() {
       const payrollArrears = payrollRows.reduce((acc, r) => acc + (Number(r.arrearsUgx) || 0), 0);
 
       const recentTransactions = [
-        ...recentPayments.map(p => ({
+        ...recentPayments.map((payment) => {
+          const p = payment as StudentPaymentWithStudent;
+          const label = p.student
+            ? `${p.student.firstName ?? ""} ${p.student.lastName ?? ""}`.trim() || "Student Payment"
+            : "Student Payment";
+          return {
           id: `p-${p.id}`,
           type: "income" as const,
-          label: (p as any).student ? `${(p as any).student.firstName} ${(p as any).student.lastName}` : "Student Payment",
+          label,
           amount: Number(p.amountPaidUgx),
           method: p.paymentMethod,
           date: p.createdAt,
-        })),
+        };
+      }),
         ...recentExpenses.map(e => ({
           id: `e-${e.id}`,
           type: "expense" as const,

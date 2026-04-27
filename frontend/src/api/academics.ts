@@ -278,3 +278,105 @@ export async function saveStudentMarkEntry(body: {
   }
   return readJson<{ ok: boolean; saved: number }>(res);
 }
+
+export type UpcomingExamRow = {
+  id: number;
+  examKey: string;
+  className: string;
+  subject: string;
+  examDate: string;
+};
+
+export async function fetchUpcomingExams(): Promise<UpcomingExamRow[]> {
+  const res = await fetch(apiUrl("/api/me/exams/upcoming"), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ items: UpcomingExamRow[] }>(res);
+  return data.items;
+}
+
+export type ExamPerformanceSummaryRow = {
+  classRoomId: number;
+  className: string;
+  avgScore: string;
+};
+
+export async function fetchExamsPerformanceSummary(term: string): Promise<ExamPerformanceSummaryRow[]> {
+  const res = await fetch(apiUrl(`/api/me/exams/performance-summary?term=${term}`), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ items: ExamPerformanceSummaryRow[] }>(res);
+  return data.items;
+}
+
+export type GradingScaleRow = {
+  id: number;
+  name: string;
+  thresholds: any;
+};
+
+export async function fetchGradingScales(): Promise<GradingScaleRow[]> {
+  const res = await fetch(apiUrl("/api/me/exams/grading-scales"), {
+    headers: { ...authHeaders() },
+  });
+  return readJson<{ items: GradingScaleRow[] }>(res).then(d => d.items);
+}
+
+export async function saveGradingScale(body: any): Promise<GradingScaleRow> {
+  const res = await fetch(apiUrl("/api/me/exams/grading-scales"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  return readJson<{ item: GradingScaleRow }>(res).then(d => d.item);
+}
+
+export type ReportCommentRow = {
+  id: number;
+  studentId: number;
+  term: string;
+  comment: string;
+};
+
+export async function fetchReportComments(studentId: number): Promise<ReportCommentRow[]> {
+  const res = await fetch(apiUrl(`/api/me/exams/comments/${studentId}`), {
+    headers: { ...authHeaders() },
+  });
+  return readJson<{ items: ReportCommentRow[] }>(res).then(d => d.items);
+}
+
+export async function saveReportComment(body: any): Promise<ReportCommentRow> {
+  const res = await fetch(apiUrl("/api/me/exams/comments"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  return readJson<{ item: ReportCommentRow }>(res).then(d => d.item);
+}
+
+export async function fetchExams(classRoomId?: number): Promise<UpcomingExamRow[]> {
+  const q = classRoomId ? `?classRoomId=${classRoomId}` : "";
+  const res = await fetch(apiUrl(`/api/me/exams/list${q}`), {
+    headers: { ...authHeaders() },
+  });
+  return readJson<{ items: UpcomingExamRow[] }>(res).then(d => d.items);
+}
+
+export async function createExam(body: any): Promise<UpcomingExamRow> {
+  const res = await fetch(apiUrl("/api/me/exams/create"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  return readJson<{ item: UpcomingExamRow }>(res).then(d => d.item);
+}

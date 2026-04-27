@@ -209,7 +209,7 @@ export function StudentsSectionPage({
           ))}
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <section>
           <div className="neo-card overflow-hidden p-0">
             <div className="border-b border-[#ebe4d9]/80 bg-[#faf7f0]/40 px-5 py-4">
               <h2 className="text-sm font-bold uppercase tracking-wider text-[#2d3436]">
@@ -256,29 +256,6 @@ export function StudentsSectionPage({
             )}
           </div>
 
-          <div className="neo-card p-5">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-[#2d3436]">
-              Student Overview
-            </h2>
-            <div className="mt-4 space-y-3 text-sm text-[#636e72]">
-              <OverviewLine
-                label="Directory"
-                value="Browse and search all learners from the register."
-              />
-              <OverviewLine
-                label="Admissions"
-                value="Capture new enrolments with full parent and class details."
-              />
-              <OverviewLine
-                label="Profiles"
-                value="Open learner records for updates, photos, and history."
-              />
-              <OverviewLine
-                label="Parents"
-                value="Review linked guardians and child admission numbers."
-              />
-            </div>
-          </div>
         </section>
 
       </div>
@@ -339,11 +316,3 @@ function StudentStatCard({
   );
 }
 
-function OverviewLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-[#ebe4d9]/80 bg-white/40 px-4 py-3">
-      <p className="text-xs font-bold uppercase tracking-wider text-[#2d3436]">{label}</p>
-      <p className="mt-1 text-sm leading-relaxed text-[#636e72]">{value}</p>
-    </div>
-  );
-}

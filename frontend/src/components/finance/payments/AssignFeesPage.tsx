@@ -11,11 +11,6 @@ type AssignmentPreview = {
   creditAmount: number;
 };
 
-function hasP7Class(className: string | null): boolean {
-  if (!className) return false;
-  return /\bP7\b/i.test(className);
-}
-
 function suggestFeeStatus(
   student: StudentApiRow | null,
   rows: FeeStructureRow[],
@@ -27,7 +22,6 @@ function suggestFeeStatus(
   if (normalized === "boarding") {
     candidates.push("boarding");
   } else if (normalized === "day_full") {
-    if (hasP7Class(student.className)) candidates.push("day_full_p7");
     candidates.push("day_full");
   } else if (normalized === "day_half") {
     candidates.push("day_half");
@@ -39,9 +33,7 @@ function suggestFeeStatus(
   if (matchByStatus) {
     return {
       status: matchByStatus.status,
-      reason: `Suggested from status "${student.boardingStatus ?? "unknown"}"${
-        hasP7Class(student.className) ? " + class P7" : ""
-      }.`,
+      reason: `Suggested from status "${student.boardingStatus ?? "unknown"}".`,
     };
   }
 

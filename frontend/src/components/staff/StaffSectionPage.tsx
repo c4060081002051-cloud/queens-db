@@ -1,4 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  createStaffMember,
+  deleteStaffMember,
+  fetchClassrooms,
+  fetchStaffMembers,
+  updateStaffMember,
+  type ClassRoomOption,
+  type StaffMemberApiRow,
+} from "../../api/students";
 
 export type StaffNavSection = "teaching" | "nonTeaching";
 export type TeachingSection = "all" | "kindergarten" | "lower_primary" | "upper_primary";
@@ -11,7 +20,7 @@ export type NonTeachingCategory =
   | "operations";
 
 type Teacher = {
-  id: string;
+  id: number;
   name: string;
   section: Exclude<TeachingSection, "all">;
   subjects: string;
@@ -40,7 +49,7 @@ type TeachingStaffRecord = Teacher & {
 };
 
 type NonTeachingStaffRecord = {
-  id: string;
+  id: number;
   name: string;
   role: string;
   category: Exclude<NonTeachingCategory, "all">;
@@ -53,10 +62,6 @@ type NonTeachingStaffRecord = {
   nationalIdPhotoUrl?: string;
   nationalIdPhotoName?: string;
 };
-
-const TEACHERS: TeachingStaffRecord[] = [];
-
-const NON_TEACHING_STAFF: NonTeachingStaffRecord[] = [];
 
 const teachingSectionLabels: Record<TeachingSection, string> = {
   all: "All Teaching Staff",
@@ -74,14 +79,73 @@ const nonTeachingCategoryLabels: Record<NonTeachingCategory, string> = {
   operations: "Operations Staff",
 };
 
+function asTeachingSection(raw?: string | null): Exclude<TeachingSection, "all"> {
+  if (raw === "kindergarten" || raw === "lower_primary" || raw === "upper_primary") {
+    return raw;
+  }
+  return "kindergarten";
+}
+
+function asNonTeachingCategory(raw?: string | null): Exclude<NonTeachingCategory, "all"> {
+  if (
+    raw === "administration" ||
+    raw === "finance" ||
+    raw === "library" ||
+    raw === "health" ||
+    raw === "operations"
+  ) {
+    return raw;
+  }
+  return "administration";
+}
+
+function mapTeachingStaff(row: StaffMemberApiRow): TeachingStaffRecord {
+  return {
+    id: row.id,
+    name: row.displayName,
+    section: asTeachingSection(row.teachingSection),
+    subjects: row.staffRole,
+    phone: row.phone ?? undefined,
+    email: row.email ?? undefined,
+    address: row.address ?? undefined,
+    gender: row.gender ?? undefined,
+    dateOfBirth: row.dateOfBirth ?? undefined,
+    nationality: row.nationality ?? undefined,
+    maritalStatus: row.maritalStatus ?? undefined,
+    nationalId: row.nationalId ?? undefined,
+    qualification: row.qualification ?? undefined,
+    languages: row.languages ?? undefined,
+    dateOfJoining: row.dateOfJoining ?? undefined,
+    experience: row.experience ?? undefined,
+    emergencyContactName: row.emergencyContactName ?? undefined,
+    emergencyContactPhone: row.emergencyContactPhone ?? undefined,
+    refereeName: row.refereeName ?? undefined,
+    refereeContact: row.refereeContact ?? undefined,
+    staffPhotoUrl: row.staffPhotoUrl ?? undefined,
+    staffPhotoName: row.staffPhotoName ?? undefined,
+    assignedClass: row.assignedClass ?? undefined,
+  };
+}
+
+function mapNonTeachingStaff(row: StaffMemberApiRow): NonTeachingStaffRecord {
+  return {
+    id: row.id,
+    name: row.displayName,
+    role: row.staffRole,
+    category: asNonTeachingCategory(row.staffCategory),
+    email: row.email ?? undefined,
+    phone: row.phone ?? undefined,
+    address: row.address ?? undefined,
+    emergencyContactName: row.emergencyContactName ?? undefined,
+    emergencyContactPhone: row.emergencyContactPhone ?? undefined,
+    nationalIdNumber: row.nationalId ?? undefined,
+    nationalIdPhotoUrl: row.nationalIdPhotoUrl ?? undefined,
+    nationalIdPhotoName: row.nationalIdPhotoName ?? undefined,
+  };
+}
+
 const inputClassName =
   "neo-inset-field w-full rounded-xl px-3 py-2 text-sm text-[#2d3436] placeholder:text-[#636e72]/70";
-
-const classesByTeachingSection: Record<Exclude<TeachingSection, "all">, string[]> = {
-  kindergarten: ["KG1", "KG2", "KG3"],
-  lower_primary: ["P1", "P2", "P3"],
-  upper_primary: ["P4", "P5", "P6", "P7"],
-};
 
 function FieldLabel({
   htmlFor,
@@ -202,9 +266,13 @@ function StaffTableRowActionsMenu({
 function TeachingStaffForm({
   onCancel,
   onSave,
+  classOptions,
+  classOptionsLoading,
 }: {
   onCancel: () => void;
   onSave: (staff: TeachingStaffRecord) => void;
+  classOptions: Array<{ id: number; name: string; academicYear?: string | null }>;
+  classOptionsLoading: boolean;
 }) {
   const [submitted, setSubmitted] = useState(false);
   const [selectedSection, setSelectedSection] =
@@ -231,7 +299,7 @@ function TeachingStaffForm({
           const role = ((form.get("staff-role") as string) ?? "").trim();
           const staffPhotoUrl = staffPhotoFile ? URL.createObjectURL(staffPhotoFile) : undefined;
           onSave({
-            id: `T-${Math.floor(Math.random() * 9000 + 1000)}`,
+            id: Math.floor(Math.random() * 900000 + 100000),
             name: fullName,
             section,
             assignedClass,
@@ -405,9 +473,13 @@ function TeachingStaffForm({
                 defaultValue=""
               >
                 <option value="" disabled>Select class</option>
-                {classesByTeachingSection[selectedSection].map((className) => (
-                  <option key={className} value={className}>
-                    {className}
+                {classOptionsLoading ? (
+                  <option value="" disabled>Loading classes...</option>
+                ) : null}
+                {classOptions.map((classRow) => (
+                  <option key={classRow.id} value={classRow.name}>
+                    {classRow.name}
+                    {classRow.academicYear ? ` (${classRow.academicYear})` : ""}
                   </option>
                 ))}
               </select>
@@ -487,7 +559,7 @@ function NonTeachingStaffForm({
           e.preventDefault();
           const form = new FormData(e.currentTarget);
           onSave({
-            id: `N-${Math.floor(Math.random() * 9000 + 1000)}`,
+            id: Math.floor(Math.random() * 900000 + 100000),
             name: ((form.get("nonstaff-full-name") as string) ?? "").trim(),
             role: ((form.get("nonstaff-role") as string) ?? "").trim(),
             category: (form.get("nonstaff-category") as Exclude<NonTeachingCategory, "all">) ?? "administration",
@@ -608,39 +680,76 @@ export function StaffSectionPage({
 }) {
   const [showTeachingForm, setShowTeachingForm] = useState(false);
   const [showNonTeachingForm, setShowNonTeachingForm] = useState(false);
-  const [teachingStaff, setTeachingStaff] = useState<TeachingStaffRecord[]>(TEACHERS);
-  const [nonTeachingStaff, setNonTeachingStaff] =
-    useState<NonTeachingStaffRecord[]>(NON_TEACHING_STAFF);
+  const [teachingStaff, setTeachingStaff] = useState<TeachingStaffRecord[]>([]);
+  const [nonTeachingStaff, setNonTeachingStaff] = useState<NonTeachingStaffRecord[]>([]);
   const [selectedTeachingProfile, setSelectedTeachingProfile] =
     useState<TeachingStaffRecord | null>(null);
   const [selectedNonTeachingProfile, setSelectedNonTeachingProfile] =
     useState<NonTeachingStaffRecord | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<{
-    kind: "teaching" | "nonTeaching";
-    item: TeachingStaffRecord | NonTeachingStaffRecord;
-  } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{
     kind: "teaching" | "nonTeaching";
     item: TeachingStaffRecord | NonTeachingStaffRecord;
   } | null>(null);
   const [staffRowActionsMenuKey, setStaffRowActionsMenuKey] = useState<string | null>(null);
+  const [classRooms, setClassRooms] = useState<ClassRoomOption[]>([]);
+  const [classRoomsLoading, setClassRoomsLoading] = useState(false);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffError, setStaffError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!pendingDelete) return;
-    const timer = window.setTimeout(() => {
-      if (pendingDelete.kind === "teaching") {
-        const item = pendingDelete.item as TeachingStaffRecord;
-        setTeachingStaff((prev) => prev.filter((x) => x.id !== item.id));
-        setSelectedTeachingProfile((curr) => (curr?.id === item.id ? null : curr));
-      } else {
-        const item = pendingDelete.item as NonTeachingStaffRecord;
-        setNonTeachingStaff((prev) => prev.filter((x) => x.id !== item.id));
-        setSelectedNonTeachingProfile((curr) => (curr?.id === item.id ? null : curr));
-      }
-      setPendingDelete(null);
-    }, 10000);
-    return () => window.clearTimeout(timer);
-  }, [pendingDelete]);
+    let cancelled = false;
+    setClassRoomsLoading(true);
+    void fetchClassrooms()
+      .then((rows) => {
+        if (cancelled) return;
+        setClassRooms(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setClassRooms([]);
+      })
+      .finally(() => {
+        if (!cancelled) setClassRoomsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const classOptions = useMemo(
+    () =>
+      classRooms
+        .filter((row) => row.isActive !== false)
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })),
+    [classRooms],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setStaffLoading(true);
+    setStaffError(null);
+    void fetchStaffMembers()
+      .then((rows) => {
+        if (cancelled) return;
+        setTeachingStaff(rows.filter((x) => x.staffType === "teaching").map(mapTeachingStaff));
+        setNonTeachingStaff(
+          rows.filter((x) => x.staffType === "non_teaching").map(mapNonTeachingStaff),
+        );
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setStaffError(e instanceof Error ? e.message : "Failed to load staff");
+          setTeachingStaff([]);
+          setNonTeachingStaff([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setStaffLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const heading =
     section === "teaching"
       ? teachingSectionLabels[teachingSection]
@@ -648,7 +757,7 @@ export function StaffSectionPage({
 
   const intro =
     section === "teaching"
-      ? "Browse teachers by class section. Use the dropdown to switch between Kindergarten, Lower Primary, and Upper Primary teachers."
+      ? "Browse teachers by section and assign them to classes as saved by admin."
       : "School support teams and administrative staff.";
 
   const filteredTeachers = useMemo(() => {
@@ -659,6 +768,82 @@ export function StaffSectionPage({
     if (nonTeachingCategory === "all") return nonTeachingStaff;
     return nonTeachingStaff.filter((member) => member.category === nonTeachingCategory);
   }, [nonTeachingCategory, nonTeachingStaff]);
+
+  async function createTeachingStaff(staff: TeachingStaffRecord) {
+    setStaffError(null);
+    const created = await createStaffMember({
+      staffType: "teaching",
+      displayName: staff.name,
+      email: staff.email,
+      staffRole: staff.subjects,
+      phone: staff.phone,
+      address: staff.address,
+      gender: staff.gender,
+      dateOfBirth: staff.dateOfBirth,
+      nationality: staff.nationality,
+      maritalStatus: staff.maritalStatus,
+      nationalId: staff.nationalId,
+      qualification: staff.qualification,
+      languages: staff.languages,
+      dateOfJoining: staff.dateOfJoining,
+      experience: staff.experience,
+      emergencyContactName: staff.emergencyContactName,
+      emergencyContactPhone: staff.emergencyContactPhone,
+      refereeName: staff.refereeName,
+      refereeContact: staff.refereeContact,
+      staffPhotoName: staff.staffPhotoName,
+      assignedClass: staff.assignedClass,
+      teachingSection: staff.section,
+    });
+    const next = mapTeachingStaff(created);
+    setTeachingStaff((prev) => [next, ...prev]);
+    setSelectedTeachingProfile(next);
+    setShowTeachingForm(false);
+  }
+
+  async function createNonTeachingStaff(staff: NonTeachingStaffRecord) {
+    setStaffError(null);
+    const created = await createStaffMember({
+      staffType: "non_teaching",
+      displayName: staff.name,
+      email: staff.email,
+      staffRole: staff.role,
+      phone: staff.phone,
+      address: staff.address,
+      emergencyContactName: staff.emergencyContactName,
+      emergencyContactPhone: staff.emergencyContactPhone,
+      nationalId: staff.nationalIdNumber,
+      staffCategory: staff.category,
+      nationalIdPhotoName: staff.nationalIdPhotoName,
+    });
+    const next = mapNonTeachingStaff(created);
+    setNonTeachingStaff((prev) => [next, ...prev]);
+    setSelectedNonTeachingProfile(next);
+    setShowNonTeachingForm(false);
+  }
+
+  async function renameTeachingStaff(id: number, name: string) {
+    await updateStaffMember(id, { displayName: name });
+    setTeachingStaff((prev) => prev.map((x) => (x.id === id ? { ...x, name } : x)));
+    setSelectedTeachingProfile((curr) => (curr && curr.id === id ? { ...curr, name } : curr));
+  }
+
+  async function renameNonTeachingStaff(id: number, name: string) {
+    await updateStaffMember(id, { displayName: name });
+    setNonTeachingStaff((prev) => prev.map((x) => (x.id === id ? { ...x, name } : x)));
+    setSelectedNonTeachingProfile((curr) => (curr && curr.id === id ? { ...curr, name } : curr));
+  }
+
+  async function removeStaff(kind: "teaching" | "nonTeaching", id: number) {
+    await deleteStaffMember(id);
+    if (kind === "teaching") {
+      setTeachingStaff((prev) => prev.filter((x) => x.id !== id));
+      setSelectedTeachingProfile((curr) => (curr?.id === id ? null : curr));
+      return;
+    }
+    setNonTeachingStaff((prev) => prev.filter((x) => x.id !== id));
+    setSelectedNonTeachingProfile((curr) => (curr?.id === id ? null : curr));
+  }
 
   return (
     <div className="min-w-0 space-y-6">
@@ -686,8 +871,11 @@ export function StaffSectionPage({
               <button
                 type="button"
                 onClick={() => {
-                  setPendingDelete(confirmDelete);
-                  setConfirmDelete(null);
+                  void removeStaff(confirmDelete.kind, confirmDelete.item.id)
+                    .catch((e) =>
+                      setStaffError(e instanceof Error ? e.message : "Failed to delete staff"),
+                    )
+                    .finally(() => setConfirmDelete(null));
                 }}
                 className="rounded-full bg-[#fce8e5] px-4 py-1.5 text-xs font-bold text-[#a9332a]"
               >
@@ -719,18 +907,9 @@ export function StaffSectionPage({
         </div>
       </header>
 
-      {pendingDelete ? (
-        <div className="neo-card flex items-center justify-between gap-3 border border-[#f7d1cd] bg-[#fff7f5] px-4 py-3">
-          <p className="text-sm text-[#2d3436]">
-            Staff deleted. You can undo this action for 10 seconds.
-          </p>
-          <button
-            type="button"
-            onClick={() => setPendingDelete(null)}
-            className="rounded-full bg-[#2d3436] px-4 py-1.5 text-xs font-bold text-white"
-          >
-            Undo
-          </button>
+      {staffError ? (
+        <div className="neo-card border border-[#f7d1cd] bg-[#fff7f5] px-4 py-3 text-sm text-[#a9332a]">
+          {staffError}
         </div>
       ) : null}
       {section === "teaching" ? (
@@ -738,9 +917,12 @@ export function StaffSectionPage({
           {showTeachingForm ? (
             <TeachingStaffForm
               onCancel={() => setShowTeachingForm(false)}
+              classOptions={classOptions}
+              classOptionsLoading={classRoomsLoading}
               onSave={(staff) => {
-                setTeachingStaff((prev) => [staff, ...prev]);
-                setSelectedTeachingProfile(staff);
+                void createTeachingStaff(staff).catch((e) =>
+                  setStaffError(e instanceof Error ? e.message : "Failed to save staff"),
+                );
               }}
             />
           ) : null}
@@ -781,6 +963,13 @@ export function StaffSectionPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#ebe4d9]/70">
+                {staffLoading ? (
+                  <tr>
+                    <td className="px-4 py-4 text-sm text-[#636e72]" colSpan={4}>
+                      Loading staff...
+                    </td>
+                  </tr>
+                ) : null}
                 {filteredTeachers.map((teacher) => (
                   <tr key={teacher.id}>
                     <td className="px-4 py-3 font-semibold text-[#2d3436]">{teacher.name}</td>
@@ -794,8 +983,8 @@ export function StaffSectionPage({
                       onEdit={() => {
                         const next = window.prompt("Edit teacher name", teacher.name);
                         if (!next?.trim()) return;
-                        setTeachingStaff((prev) =>
-                          prev.map((x) => (x.id === teacher.id ? { ...x, name: next.trim() } : x)),
+                        void renameTeachingStaff(teacher.id, next.trim()).catch((e) =>
+                          setStaffError(e instanceof Error ? e.message : "Failed to update staff"),
                         );
                       }}
                       onDelete={() => setConfirmDelete({ kind: "teaching", item: teacher })}
@@ -857,13 +1046,8 @@ export function StaffSectionPage({
                   onClick={() => {
                     const next = window.prompt("Edit staff name", selectedTeachingProfile.name);
                     if (!next?.trim()) return;
-                    setTeachingStaff((prev) =>
-                      prev.map((x) =>
-                        x.id === selectedTeachingProfile.id ? { ...x, name: next.trim() } : x,
-                      ),
-                    );
-                    setSelectedTeachingProfile((curr) =>
-                      curr ? { ...curr, name: next.trim() } : curr,
+                    void renameTeachingStaff(selectedTeachingProfile.id, next.trim()).catch((e) =>
+                      setStaffError(e instanceof Error ? e.message : "Failed to update staff"),
                     );
                   }}
                   className="rounded-full bg-[#e8f2fa] px-4 py-1.5 text-xs font-semibold text-[#2d3436]"
@@ -890,8 +1074,9 @@ export function StaffSectionPage({
             <NonTeachingStaffForm
               onCancel={() => setShowNonTeachingForm(false)}
               onSave={(staff) => {
-                setNonTeachingStaff((prev) => [staff, ...prev]);
-                setSelectedNonTeachingProfile(staff);
+                void createNonTeachingStaff(staff).catch((e) =>
+                  setStaffError(e instanceof Error ? e.message : "Failed to save staff"),
+                );
               }}
             />
           ) : null}
@@ -935,6 +1120,13 @@ export function StaffSectionPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#ebe4d9]/70">
+                {staffLoading ? (
+                  <tr>
+                    <td className="px-4 py-4 text-sm text-[#636e72]" colSpan={4}>
+                      Loading staff...
+                    </td>
+                  </tr>
+                ) : null}
                 {filteredNonTeaching.map((member) => (
                   <tr key={member.id}>
                     <td className="px-4 py-3 font-semibold text-[#2d3436]">{member.name}</td>
@@ -948,8 +1140,8 @@ export function StaffSectionPage({
                       onEdit={() => {
                         const next = window.prompt("Edit staff name", member.name);
                         if (!next?.trim()) return;
-                        setNonTeachingStaff((prev) =>
-                          prev.map((x) => (x.id === member.id ? { ...x, name: next.trim() } : x)),
+                        void renameNonTeachingStaff(member.id, next.trim()).catch((e) =>
+                          setStaffError(e instanceof Error ? e.message : "Failed to update staff"),
                         );
                       }}
                       onDelete={() => setConfirmDelete({ kind: "nonTeaching", item: member })}
@@ -1001,13 +1193,8 @@ export function StaffSectionPage({
                   onClick={() => {
                     const next = window.prompt("Edit staff name", selectedNonTeachingProfile.name);
                     if (!next?.trim()) return;
-                    setNonTeachingStaff((prev) =>
-                      prev.map((x) =>
-                        x.id === selectedNonTeachingProfile.id ? { ...x, name: next.trim() } : x,
-                      ),
-                    );
-                    setSelectedNonTeachingProfile((curr) =>
-                      curr ? { ...curr, name: next.trim() } : curr,
+                    void renameNonTeachingStaff(selectedNonTeachingProfile.id, next.trim()).catch(
+                      (e) => setStaffError(e instanceof Error ? e.message : "Failed to update staff"),
                     );
                   }}
                   className="rounded-full bg-[#e8f2fa] px-4 py-1.5 text-xs font-semibold text-[#2d3436]"

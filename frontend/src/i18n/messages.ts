@@ -43,6 +43,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "nav.curriculum.tests.assessments": "Assessments",
     "nav.curriculum.resultsEntry": "Result entry",
     "nav.curriculum.blankPage": "Subjects & Exams",
+    "nav.curriculum.learnsReport": "Learner's Reports",
     "nav.curriculum.results": "Results",
     "nav.curriculum.promotion": "Pupil promotion",
     "nav.operations": "Finance",
@@ -50,6 +51,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "nav.operations.store": "Debtors report",
     "nav.operations.assignFees": "Assign fees",
     "nav.operations.accounts": "Record payment",
+    "nav.operations.receipts": "Receipt",
     "nav.operations.transport": "Record expences",
     "nav.operations.hostel": "Staff payment",
     "nav.operations.busery": "Busery",
@@ -70,6 +72,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "nav.settings.restore": "Restore data",
     "nav.settings.modes": "Display & modes",
     "nav.settings.feesStructure": "Fees structure",
+    "nav.settings.classStructure": "Class structure",
 
     "settings.modes.title": "Display & modes",
     "settings.modes.subtitle": "Choose how the dashboard looks and how much space content uses.",
@@ -78,12 +81,20 @@ export const messages: Record<Locale, Record<string, string>> = {
     "settings.modes.themeHint": "Light keeps the classic cream palette. Dark eases eye strain in low light. System follows your device.",
     "settings.modes.themeLight": "Light",
     "settings.modes.themeDark": "Dark",
+    "settings.modes.themeTintedDark": "Tinted Night",
     "settings.modes.themeSystem": "System",
     "settings.modes.resolved": "Using now:",
     "settings.modes.density": "Layout density",
     "settings.modes.densityHint": "Compact tightens spacing in the header and main area.",
     "settings.modes.densityComfortable": "Comfortable",
     "settings.modes.densityCompact": "Compact",
+    "settings.modes.font": "System typography",
+    "settings.modes.fontHint": "Choose a font that matches your preferred reading style and aesthetic.",
+    "settings.modes.fontInter": "Inter",
+    "settings.modes.fontOutfit": "Outfit",
+    "settings.modes.fontPoppins": "Poppins",
+    "settings.modes.fontManrope": "Manrope",
+    "settings.modes.fontJakarta": "Jakarta Sans",
 
     "brand.subtitle": "Nursery and Primary School, Bunamwaya",
 
@@ -438,7 +449,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "students.form.subtitle":
       "Admission number must be unique. Assign a class when homerooms exist in the system.",
     "students.form.subtitleAuto":
-      "Admission numbers are assigned automatically (e.g. QS/2026/P4/0001). You can add a passport photo now or later from the student profile.",
+      "Admission numbers are assigned automatically (e.g. QPS-2026-0001). You can add a passport photo now or later from the student profile.",
     "students.form.admissionNumber": "Admission number",
     "students.form.admissionNumberLabel": "Admission no.",
     "students.form.firstName": "First name",
@@ -490,7 +501,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "students.form.previousGradesRequiredAdmission":
       "Enter the previous grades / aggregates summary (required with subject marks).",
     "students.form.previousSchoolFieldsRequired":
-      "Previous school, last class attended, and last term / year are required for new admissions.",
+      "Complete required registration details before saving.",
     "students.form.previousGradesAdmissionHint":
       "Short summary (e.g. overall aggregates or remarks). Subject percentages are entered below.",
     "students.form.classGroupKindergarten": "Kindergarten (KG1-KG3)",
@@ -575,7 +586,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "students.photo.uploadError": "Photo upload failed.",
     "students.bulk.title": "Bulk import (CSV)",
     "students.bulk.hint":
-      "First row: headers. Columns: firstName, middleName, lastName, dateOfBirth (YYYY-MM-DD), parentAliveStatus (both|one|none), parentFullName, parentPhone, parentEmail, parentAddress, religion, specialNeeds, boardingStatus (boarding|day_half|day_full), residenceAddress, medicalInfo, guardianName, guardianPhone, emergencyContactName, emergencyContactPhone, gender, sectionName, classRoomId, nationality, countryCode, district, registrationType (first=new admission, continuing=transfer-in). For first only: previousSchool, previousSchoolLocation, lastClassAttended, lastTermYear, previousGrades (JSON with marks[] and aggregates). Omit all previous-* columns for continuing.",
+      "First row: headers. Columns: firstName, middleName, lastName, dateOfBirth (YYYY-MM-DD), parentAliveStatus (both|one|none), parentFullName, parentPhone, parentEmail, parentAddress, religion, specialNeeds, boardingStatus (boarding|day_half|day_full), residenceAddress, medicalInfo, guardianName, guardianPhone, emergencyContactName, emergencyContactPhone, gender, sectionName, classRoomId, nationality, countryCode, district, registrationType (first=new admission, continuing=transfer-in), previousGrades (JSON with marks[] and aggregates).",
     "students.bulk.noFile": "Choose a CSV file first.",
     "students.bulk.submit": "Upload CSV",
     "students.bulk.uploading": "Importing…",
@@ -656,6 +667,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "nav.curriculum.tests.assessments": "Tathmini",
     "nav.curriculum.resultsEntry": "Uingizaji wa matokeo",
     "nav.curriculum.blankPage": "Masomo na Mitihani",
+    "nav.curriculum.learnsReport": "Ripoti ya Wanafunzi",
     "nav.curriculum.results": "Matokeo",
     "nav.curriculum.promotion": "Kupandisha wanafunzi",
     "nav.operations": "Fedha",
@@ -663,6 +675,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "nav.operations.store": "Ripoti ya wadaiwa",
     "nav.operations.assignFees": "Panga ada",
     "nav.operations.accounts": "Kurekodi malipo",
+    "nav.operations.receipts": "Risiti",
     "nav.operations.transport": "Record expences",
     "nav.operations.hostel": "Malipo ya wafanyakazi",
     "nav.operations.busery": "Busery",
@@ -683,6 +696,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "nav.settings.restore": "Rejesha data",
     "nav.settings.modes": "Mwonekano na hali",
     "nav.settings.feesStructure": "Muundo wa ada",
+    "nav.settings.classStructure": "Muundo wa madarasa",
 
     "settings.modes.title": "Mwonekano na hali",
     "settings.modes.subtitle": "Chagua mandhari na nafasi ya maudhui kwenye dashibodi.",
@@ -692,12 +706,20 @@ export const messages: Record<Locale, Record<string, string>> = {
       "Mwanga unatumia rangi za kawaida. Giza hurahisisha macho gizani. Mfumo unafuata kifaa chako.",
     "settings.modes.themeLight": "Mwanga",
     "settings.modes.themeDark": "Giza",
+    "settings.modes.themeTintedDark": "Giza ya Bluu",
     "settings.modes.themeSystem": "Mfumo",
     "settings.modes.resolved": "Inatumika sasa:",
     "settings.modes.density": "Msongamano wa mpangilio",
     "settings.modes.densityHint": "Finyu hupunguza nafasi kichwa na sehemu kuu.",
     "settings.modes.densityComfortable": "Panana",
     "settings.modes.densityCompact": "Finyu",
+    "settings.modes.font": "Mwandiko wa mfumo",
+    "settings.modes.fontHint": "Chagua mwandiko unaofaa mtindo wako wa kusoma na mwonekano.",
+    "settings.modes.fontInter": "Inter",
+    "settings.modes.fontOutfit": "Outfit",
+    "settings.modes.fontPoppins": "Poppins",
+    "settings.modes.fontManrope": "Manrope",
+    "settings.modes.fontJakarta": "Jakarta Sans",
 
     "brand.subtitle": "Shule ya awali na msingi, Bunamwaya",
 
@@ -1052,7 +1074,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "students.form.subtitle":
       "Nambari ya kujiunga lazima iwe ya kipekee. Weka darasa wakati madarasa yapo kwenye mfumo.",
     "students.form.subtitleAuto":
-      "Nambari ya kujiunga hutengenezwa kiotomatiki (mfano QS/2026/P4/0001). Unaweza kuongeza picha ya pasipoti sasa au baadaye kwenye wasifu wa mwanafunzi.",
+      "Nambari ya kujiunga hutengenezwa kiotomatiki (mfano QPS-2026-0001). Unaweza kuongeza picha ya pasipoti sasa au baadaye kwenye wasifu wa mwanafunzi.",
     "students.form.admissionNumber": "Nambari ya kujiunga",
     "students.form.admissionNumberLabel": "Nambari ya kujiunga",
     "students.form.firstName": "Jina la kwanza",
@@ -1104,7 +1126,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "students.form.previousGradesRequiredAdmission":
       "Weka muhtasari wa alama / makusanyo ya awali (pamoja na alama za kila somo).",
     "students.form.previousSchoolFieldsRequired":
-      "Shule ya awali, darasa la mwisho, na muhula / mwaka wa mwisho vinahitajika kwa kujiunga mpya.",
+      "Kamilisha taarifa zinazohitajika za usajili kabla ya kuhifadhi.",
     "students.form.previousGradesAdmissionHint":
       "Muhtasari mfupi (mf. makusanyo au maelezo). Asilimia za kila somo ziko hapa chini.",
     "students.form.classGroupKindergarten": "Chekechea (KG1-KG3)",
@@ -1191,7 +1213,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "students.photo.uploadError": "Upakiaji wa picha umeshindwa.",
     "students.bulk.title": "Ingiza wingi (CSV)",
     "students.bulk.hint":
-      "Safu ya kwanza: vichwa. Safu: firstName, middleName, lastName, dateOfBirth (YYYY-MM-DD), parentAliveStatus (both|one|none), parentFullName, parentPhone, parentEmail, parentAddress, religion, specialNeeds, boardingStatus (boarding|day_half|day_full), residenceAddress, medicalInfo, guardianName, guardianPhone, emergencyContactName, emergencyContactPhone, gender, rollNumber, sectionName, classRoomId, nationality, countryCode, district, registrationType (first=kujiunga mpya, continuing=uhamisho). Kwa first pekee: previousSchool, previousSchoolLocation, lastClassAttended, lastTermYear, previousGrades (JSON yenye marks[] na aggregates). Usijumuishe safu za previous-* kwa continuing.",
+      "Safu ya kwanza: vichwa. Safu: firstName, middleName, lastName, dateOfBirth (YYYY-MM-DD), parentAliveStatus (both|one|none), parentFullName, parentPhone, parentEmail, parentAddress, religion, specialNeeds, boardingStatus (boarding|day_half|day_full), residenceAddress, medicalInfo, guardianName, guardianPhone, emergencyContactName, emergencyContactPhone, gender, rollNumber, sectionName, classRoomId, nationality, countryCode, district, registrationType (first=kujiunga mpya, continuing=uhamisho), previousGrades (JSON yenye marks[] na aggregates).",
     "students.bulk.noFile": "Chagua faili la CSV kwanza.",
     "students.bulk.submit": "Pakia CSV",
     "students.bulk.uploading": "Inaingiza…",

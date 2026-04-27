@@ -112,3 +112,41 @@ export async function fetchReceiptsByDate(date: string): Promise<
   }>(res);
   return data.items;
 }
+
+export type FinanceReceiptListItem = {
+  id: number;
+  receiptNo: string;
+  term: string;
+  amountPaid: number;
+  paymentMethod: string;
+  paidBy: string;
+  studentId: number;
+  issuedAt: string;
+  studentName: string;
+  className: string | null;
+};
+
+export async function fetchFinanceReceipts(limit = 200): Promise<FinanceReceiptListItem[]> {
+  const res = await fetch(apiUrl(`/api/me/finance/receipts?limit=${encodeURIComponent(String(limit))}`), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ items: FinanceReceiptListItem[] }>(res);
+  return data.items ?? [];
+}
+
+export async function deleteFinanceReceipt(id: number): Promise<void> {
+  const res = await fetch(apiUrl(`/api/me/finance/receipts/${id}`), {
+    method: "DELETE",
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+}

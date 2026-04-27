@@ -69,6 +69,24 @@ export async function ensureSecuritySchema(sequelize: Sequelize): Promise<void> 
       throw e;
     }
   }
+  try {
+    await sequelize.query("ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1");
+    console.info("[db] Added column users.is_active");
+  } catch (e: unknown) {
+    const errno = (e as { parent?: { errno?: number } })?.parent?.errno;
+    if (errno !== MYSQL_DUP_FIELDNAME) {
+      throw e;
+    }
+  }
+  try {
+    await sequelize.query("ALTER TABLE users ADD COLUMN is_deleted TINYINT(1) NOT NULL DEFAULT 0");
+    console.info("[db] Added column users.is_deleted");
+  } catch (e: unknown) {
+    const errno = (e as { parent?: { errno?: number } })?.parent?.errno;
+    if (errno !== MYSQL_DUP_FIELDNAME) {
+      throw e;
+    }
+  }
 
   await sequelize.query(`
     CREATE TABLE IF NOT EXISTS security_otp_challenges (

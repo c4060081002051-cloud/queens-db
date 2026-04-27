@@ -3,7 +3,7 @@ import { formatCurrencyUGX } from "./utils"; // we'll extract these
 
 const mockStaffPayments = [
   { id: 1, name: "Alice Administrator", role: "Head Teacher", month: "April 2026", baseSalary: 1500000, allowances: 200000, deductions: 50000, netPay: 1650000, status: "Paid" },
-  { id: 2, name: "Bob Teacher", role: "Class Teacher - P5", month: "April 2026", baseSalary: 800000, allowances: 100000, deductions: 0, netPay: 900000, status: "Pending" },
+  { id: 2, name: "Bob Teacher", role: "Class Teacher", month: "April 2026", baseSalary: 800000, allowances: 100000, deductions: 0, netPay: 900000, status: "Pending" },
   { id: 3, name: "Charlie Cashier", role: "Accounts/Bursar", month: "April 2026", baseSalary: 900000, allowances: 150000, deductions: 20000, netPay: 1030000, status: "Paid" },
   { id: 4, name: "Diana Support", role: "Librarian", month: "April 2026", baseSalary: 600000, allowances: 50000, deductions: 0, netPay: 650000, status: "Pending" },
 ];

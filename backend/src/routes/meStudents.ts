@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Router } from "express";
 import multer from "multer";
-import { Op, Sequelize, fn, col, type WhereOptions } from "sequelize";
+import { Op, Sequelize, fn, col, type Transaction, type WhereOptions } from "sequelize";
 import {
   studentCreateBodySchema,
   studentListQuerySchema,
@@ -194,13 +194,32 @@ function tempAdmissionKey(): string {
   return `T${hex}`.slice(0, 50);
 }
 
-function classTokenFromName(name: string | null | undefined): string {
-  const n = String(name ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "");
-  if (!n) return "GENERAL";
-  return n.replace(/[^A-Z0-9]/g, "") || "GENERAL";
+function parseAdmissionSequence(admissionNumber: string, year: number): number | null {
+  const m = new RegExp(`^QPS-${year}-(\\d{4})$`).exec(admissionNumber);
+  if (!m) return null;
+  const n = Number.parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function nextAdmissionNumber(tx: Transaction): Promise<string> {
+  const year = new Date().getFullYear();
+  const prefix = `QPS-${year}-`;
+  const lastRow = await Student.findOne({
+    where: {
+      admissionNumber: {
+        [Op.like]: `${prefix}%`,
+      },
+    },
+    attributes: ["admissionNumber"],
+    order: [["admission_number", "DESC"]],
+    transaction: tx,
+  });
+  const current = parseAdmissionSequence(lastRow?.admissionNumber ?? "", year) ?? 0;
+  const next = current + 1;
+  if (next > 9999) {
+    throw new Error(`Admission sequence exhausted for ${year}`);
+  }
+  return `${prefix}${String(next).padStart(4, "0")}`;
 }
 
 function hasP7Class(name: string | null | undefined): boolean {
@@ -230,8 +249,6 @@ async function createStudentRecord(fields: {
   countryCode: string | null;
   district: string | null;
   registrationType: "first" | "continuing";
-  previousSchool: string | null;
-  previousSchoolLocation: string | null;
   lastClassAttended: string | null;
   lastTermYear: string | null;
   previousReportCardFilename: string | null;
@@ -279,8 +296,6 @@ async function createStudentRecord(fields: {
         countryCode: fields.countryCode,
         district: fields.district,
         registrationType: fields.registrationType,
-        previousSchool: fields.previousSchool,
-        previousSchoolLocation: fields.previousSchoolLocation,
         lastClassAttended: fields.lastClassAttended,
         lastTermYear: fields.lastTermYear,
         previousReportCardFilename: fields.previousReportCardFilename,
@@ -302,19 +317,17 @@ async function createStudentRecord(fields: {
       },
       { transaction: t },
     );
-    const year = new Date().getFullYear();
-    let classToken = "GENERAL";
+    const admissionNumber = await nextAdmissionNumber(t);
     let className: string | null = null;
     if (fields.classRoomId != null) {
       const cls = await ClassRoom.findByPk(fields.classRoomId, {
         transaction: t,
       });
       className = cls?.name ?? null;
-      classToken = classTokenFromName(cls?.name);
     }
     await created.update(
       {
-        admissionNumber: `QS/${year}/${classToken}/${String(created.id).padStart(4, "0")}`,
+        admissionNumber,
       },
       { transaction: t },
     );
@@ -506,35 +519,7 @@ export function createMeStudentsRouter() {
   });
 
   r.post("/classrooms", async (req, res) => {
-    try {
-      const body = req.body as Record<string, unknown>;
-      const name = trimStr(body.name, 80);
-      const categoryId = parseOptionalId(body.categoryId);
-      const description = trimStr(body.description, 255);
-      const academicYear = trimStr(body.academicYear, 20) ?? currentAcademicYear();
-      if (!name) return res.status(400).json({ error: "Class name cannot be empty" });
-      if (!categoryId) return res.status(400).json({ error: "Class category is required" });
-      const category = await ClassCategory.findByPk(categoryId);
-      if (!category) return res.status(400).json({ error: "Invalid categoryId" });
-      const [row] = await ClassRoom.findOrCreate({
-        where: { name, academicYear },
-        defaults: { categoryId, description },
-      });
-      await row.update({ categoryId, description });
-      return res.status(201).json({
-        item: {
-          id: row.id,
-          name: row.name,
-          categoryId: (row.get("category_id") as number | null) ?? null,
-          description: (row.get("description") as string | null) ?? null,
-          isActive: ((row.get("is_active") as number | boolean | null) ?? 1) === 1 || row.get("is_active") === true,
-          academicYear: row.academicYear,
-        },
-      });
-    } catch (err) {
-      console.error(err);
-      return res.status(503).json({ error: "Database unavailable" });
-    }
+    return res.status(403).json({ error: "Creating classes is disabled." });
   });
 
   r.patch("/classrooms/:id(\\d+)", async (req, res) => {
@@ -888,12 +873,6 @@ export function createMeStudentsRouter() {
         }
         const district = csvVal(row, "district") || null;
         const regType = parseRegistrationType(csvVal(row, "registrationtype", "registration_type")) ?? "first";
-        const previousSchool = csvVal(row, "previousschool", "previous_school") || null;
-        const previousSchoolLocation =
-          csvVal(row, "previousschoollocation", "previous_school_location") || null;
-        const lastClassAttended =
-          csvVal(row, "lastclassattended", "last_class_attended") || null;
-        const lastTermYear = csvVal(row, "lasttermyear", "last_term_year") || null;
         const previousGrades = csvVal(row, "previousgrades", "previous_grades", "aggregates") || null;
         const transferReasonParsed = parseTransferReason(
           csvVal(row, "transferreason", "transfer_reason"),
@@ -936,13 +915,7 @@ export function createMeStudentsRouter() {
           continue;
         }
         if (regType === "continuing") {
-          if (
-            previousSchool ||
-            previousSchoolLocation ||
-            lastClassAttended ||
-            lastTermYear ||
-            previousGrades
-          ) {
+          if (previousGrades) {
             errors.push({
               line: lineNo,
               error:
@@ -952,16 +925,6 @@ export function createMeStudentsRouter() {
           }
         }
         let csvPreviousGradesStored: string | null = null;
-        if (regType === "first") {
-          if (!previousSchool || !lastClassAttended || !lastTermYear) {
-            errors.push({
-              line: lineNo,
-              error:
-                "previousSchool, lastClassAttended, and lastTermYear are required for new admissions",
-            });
-            continue;
-          }
-        }
         try {
           await createStudentRecord({
             firstName: firstName.slice(0, 100),
@@ -976,16 +939,8 @@ export function createMeStudentsRouter() {
             countryCode,
             district: district ? district.slice(0, 120) : null,
             registrationType: regType,
-            previousSchool:
-              regType === "first" && previousSchool ? previousSchool.slice(0, 200) : null,
-            previousSchoolLocation:
-              regType === "first" && previousSchoolLocation
-                ? previousSchoolLocation.slice(0, 200)
-                : null,
-            lastClassAttended:
-              regType === "first" && lastClassAttended ? lastClassAttended.slice(0, 120) : null,
-            lastTermYear:
-              regType === "first" && lastTermYear ? lastTermYear.slice(0, 40) : null,
+            lastClassAttended: null,
+            lastTermYear: null,
             previousReportCardFilename: null,
             previousGrades: csvPreviousGradesStored,
             transferReason,
@@ -1068,7 +1023,6 @@ export function createMeStudentsRouter() {
             { section_name: pattern },
             { nationality: pattern },
             { district: pattern },
-            { previous_school: pattern },
             { parent_full_name: pattern },
             { parent_phone: pattern },
             { parent_address: pattern },
@@ -1247,10 +1201,6 @@ export function createMeStudentsRouter() {
       const classRoomId = body.classRoomId ?? undefined;
       const nationality = body.nationality ?? null;
       const district = body.district ?? null;
-      const previousSchool = body.previousSchool ?? null;
-      const previousSchoolLocation = body.previousSchoolLocation ?? null;
-      const lastClassAttended = body.lastClassAttended ?? null;
-      const lastTermYear = body.lastTermYear ?? null;
       const previousGradesRaw = body.previousGrades ?? null;
       const transferReason = body.transferReason ?? null;
       const parentAliveStatus = body.parentAliveStatus;
@@ -1306,28 +1256,7 @@ export function createMeStudentsRouter() {
       if (!boardingStatus) {
         return res.status(400).json({ error: "boardingStatus is required" });
       }
-      if (regType === "continuing") {
-        if (
-          previousSchool ||
-          previousSchoolLocation ||
-          lastClassAttended ||
-          lastTermYear
-        ) {
-          return res.status(400).json({
-            error:
-              "Previous school fields apply only to new admissions — omit them for transfer-in",
-          });
-        }
-      }
       let previousGradesStored: string | null = null;
-      if (regType === "first") {
-        if (!previousSchool || !lastClassAttended || !lastTermYear) {
-          return res.status(400).json({
-            error:
-              "previousSchool, lastClassAttended, and lastTermYear are required for new admissions",
-          });
-        }
-      }
       if (
         (parentAliveStatus === "both" || parentAliveStatus === "one") &&
         (!parentFullName || !parentPhone || !parentAddress)
@@ -1381,10 +1310,8 @@ export function createMeStudentsRouter() {
         countryCode: countryCodeNorm,
         district,
         registrationType: regType,
-        previousSchool: regType === "first" ? previousSchool : null,
-        previousSchoolLocation: regType === "first" ? previousSchoolLocation : null,
-        lastClassAttended: regType === "first" ? lastClassAttended : null,
-        lastTermYear: regType === "first" ? lastTermYear : null,
+        lastClassAttended: null,
+        lastTermYear: null,
         previousReportCardFilename: null,
         previousGrades: previousGradesStored,
         transferReason: regType === "continuing" ? transferReason : null,
@@ -1443,9 +1370,6 @@ export function createMeStudentsRouter() {
       const sectionName = body.sectionName === undefined ? undefined : body.sectionName;
       const nationality = body.nationality === undefined ? undefined : body.nationality;
       const district = body.district === undefined ? undefined : body.district;
-      const previousSchoolPatch = body.previousSchool === undefined ? undefined : body.previousSchool;
-      const previousSchoolLocationPatch =
-        body.previousSchoolLocation === undefined ? undefined : body.previousSchoolLocation;
       const lastClassAttendedPatch =
         body.lastClassAttended === undefined ? undefined : body.lastClassAttended;
       const lastTermYearPatch = body.lastTermYear === undefined ? undefined : body.lastTermYear;
@@ -1518,18 +1442,6 @@ export function createMeStudentsRouter() {
         countryPatch !== undefined ? countryPatch : row.countryCode ?? null;
       const nextDistrict =
         district !== undefined ? district : row.district ?? null;
-      const nextPrev =
-        nextReg === "continuing"
-          ? null
-          : previousSchoolPatch !== undefined
-            ? previousSchoolPatch
-            : row.previousSchool ?? null;
-      const nextPrevLocation =
-        nextReg === "continuing"
-          ? null
-          : previousSchoolLocationPatch !== undefined
-            ? previousSchoolLocationPatch
-            : ((row.get("previous_school_location") as string | null) ?? null);
       const nextLastClass =
         nextReg === "continuing"
           ? null
@@ -1620,12 +1532,6 @@ export function createMeStudentsRouter() {
         ...(countryPatch !== undefined ? { countryCode: countryPatch } : {}),
         ...(district !== undefined ? { district } : {}),
         ...(regPatch !== undefined ? { registrationType: regPatch } : {}),
-        ...(regPatch !== undefined || previousSchoolPatch !== undefined
-          ? { previousSchool: nextPrev }
-          : {}),
-        ...(regPatch !== undefined || previousSchoolLocationPatch !== undefined
-          ? { previousSchoolLocation: nextPrevLocation }
-          : {}),
         ...(regPatch !== undefined || lastClassAttendedPatch !== undefined
           ? { lastClassAttended: nextLastClass }
           : {}),

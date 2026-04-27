@@ -13,6 +13,7 @@ import {
   type ClassRoomOption,
   type ClassSectionOption,
 } from "../../api/students";
+import { fetchGeneralSettings } from "../../api/settingsGeneral";
 import { useI18n } from "../../i18n/I18nProvider";
 
 type NewAdmissionFormProps = {
@@ -33,6 +34,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
   const [districtsLoading, setDistrictsLoading] = useState(false);
   const [sections, setSections] = useState<ClassSectionOption[]>([]);
   const [sectionsLoading, setSectionsLoading] = useState(false);
+  const [sectionsStreamsEnabled, setSectionsStreamsEnabled] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -45,10 +47,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
   const [countryCode, setCountryCode] = useState("");
   const [district, setDistrict] = useState("");
   const [registrationType, setRegistrationType] = useState<"first" | "continuing" | "">("");
-  const [previousSchool, setPreviousSchool] = useState("");
-  const [previousSchoolLocation, setPreviousSchoolLocation] = useState("");
-  const [lastClassAttended, setLastClassAttended] = useState("");
-  const [lastTermYear, setLastTermYear] = useState("");
   const [transferReason, setTransferReason] = useState<
     "" | "relocation" | "discipline" | "better_education"
   >("");
@@ -76,28 +74,18 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
     () => rooms.filter((r) => r.isActive !== false),
     [rooms],
   );
-  const kindergartenRooms = useMemo(
-    () => activeRooms.filter((r) => /^KG[1-3]$/i.test(r.name.trim())),
-    [activeRooms],
-  );
-  const lowerPrimaryRooms = useMemo(
-    () => activeRooms.filter((r) => /^P[1-3]$/i.test(r.name.trim())),
-    [activeRooms],
-  );
-  const upperPrimaryRooms = useMemo(
-    () => activeRooms.filter((r) => /^P[4-7]$/i.test(r.name.trim())),
-    [activeRooms],
-  );
-  const otherRooms = useMemo(
+  const sortedActiveRooms = useMemo(
     () =>
-      activeRooms.filter(
-        (r) =>
-          !/^KG[1-3]$/i.test(r.name.trim()) &&
-          !/^P[1-3]$/i.test(r.name.trim()) &&
-          !/^P[4-7]$/i.test(r.name.trim()),
+      [...activeRooms].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
       ),
     [activeRooms],
   );
+  const selectedClassRoom = useMemo(() => {
+    const id = Number.parseInt(classRoomId, 10);
+    if (!Number.isFinite(id) || id <= 0) return null;
+    return rooms.find((room) => room.id === id) ?? null;
+  }, [classRoomId, rooms]);
   const religions = [
     "Christian",
     "Muslim",
@@ -109,14 +97,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
     "Traditional",
     "Other",
   ];
-
-  const inferSectionFromClassroomName = (name: string): string => {
-    const n = name.trim().toUpperCase();
-    if (/^KG[1-3]$/.test(n)) return "Kindergarten";
-    if (/^P[1-3]$/.test(n)) return "Lower Primary";
-    if (/^P[4-7]$/.test(n)) return "Upper Primary";
-    return "";
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +111,21 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchGeneralSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        setSectionsStreamsEnabled((settings.classes_sections_streams_enabled ?? "yes") === "yes");
+      })
+      .catch(() => {
+        if (!cancelled) setSectionsStreamsEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -185,26 +180,32 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
   }, [countryCode, t]);
 
   useEffect(() => {
+    if (!sectionsStreamsEnabled) {
+      setSectionName("");
+      return;
+    }
     const id = Number.parseInt(classRoomId, 10);
     if (!Number.isFinite(id) || id <= 0) {
       setSectionName("");
       return;
     }
-    const room = rooms.find((r) => r.id === id);
-    if (!room) return;
-    const inferred = inferSectionFromClassroomName(room.name);
     if (sectionsLoading) {
-      setSectionName(inferred);
+      setSectionName("");
       return;
     }
     if (sections.length > 0) {
       setSectionName(sections[0].name);
     } else {
-      setSectionName(inferred);
+      setSectionName("");
     }
-  }, [classRoomId, rooms, sections, sectionsLoading]);
+  }, [classRoomId, sections, sectionsLoading, sectionsStreamsEnabled]);
 
   useEffect(() => {
+    if (!sectionsStreamsEnabled) {
+      setSections([]);
+      setSectionsLoading(false);
+      return;
+    }
     const id = Number.parseInt(classRoomId, 10);
     if (!Number.isFinite(id) || id <= 0) {
       setSections([]);
@@ -226,7 +227,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
     return () => {
       cancelled = true;
     };
-  }, [classRoomId]);
+  }, [classRoomId, sectionsStreamsEnabled]);
 
   const resetForm = () => {
     setFirstName("");
@@ -243,10 +244,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
     setDistrict("");
     setDistricts([]);
     setRegistrationType("");
-    setPreviousSchool("");
-    setPreviousSchoolLocation("");
-    setLastClassAttended("");
-    setLastTermYear("");
     setTransferReason("");
     setParentAliveStatus("");
     setSingleParentType("");
@@ -293,18 +290,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
         setSubmitting(false);
         return;
       }
-      if (registrationType === "first") {
-        if (
-          !previousSchool.trim() ||
-          !lastClassAttended.trim() ||
-          !lastTermYear.trim()
-        ) {
-          setFormError(t("students.form.previousSchoolFieldsRequired"));
-          setSubmitting(false);
-          return;
-        }
-      }
-
       const cc = countryCode.trim();
       const dist = district.trim();
       const created = await createStudent({
@@ -320,12 +305,6 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
         countryCode: cc ? cc : undefined,
         district: dist || undefined,
         registrationType,
-        previousSchool: registrationType === "first" ? previousSchool.trim() : undefined,
-        previousSchoolLocation:
-          registrationType === "first" ? previousSchoolLocation.trim() || undefined : undefined,
-        lastClassAttended:
-          registrationType === "first" ? lastClassAttended.trim() : undefined,
-        lastTermYear: registrationType === "first" ? lastTermYear.trim() : undefined,
         previousGrades: undefined,
         transferReason: registrationType === "continuing" && transferReason ? transferReason : undefined,
         parentAliveStatus: parentAliveStatus || undefined,
@@ -524,17 +503,9 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
                 const v = e.target.value as "first" | "continuing" | "";
                 setRegistrationType(v);
                 if (v === "continuing") {
-                  setPreviousSchool("");
-                  setPreviousSchoolLocation("");
-                  setLastClassAttended("");
-                  setLastTermYear("");
                 } else if (v === "first") {
                   setTransferReason("");
                 } else {
-                  setPreviousSchool("");
-                  setPreviousSchoolLocation("");
-                  setLastClassAttended("");
-                  setLastTermYear("");
                   setTransferReason("");
                 }
               }}
@@ -545,47 +516,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
               <option value="continuing">{t("students.form.registrationTransferIn")}</option>
             </select>
           </label>
-          {registrationType === "first" ? (
-            <>
-              <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
-                {t("students.form.previousSchool")} *
-                <input
-                  required
-                  value={previousSchool}
-                  onChange={(e) => setPreviousSchool(e.target.value)}
-                  className={`${fieldClass} mt-1`}
-                  autoComplete="organization"
-                />
-              </label>
-              <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
-                {t("students.form.previousSchoolLocation")}
-                <input
-                  value={previousSchoolLocation}
-                  onChange={(e) => setPreviousSchoolLocation(e.target.value)}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
-              <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
-                {t("students.form.lastClassAttended")} *
-                <input
-                  required
-                  value={lastClassAttended}
-                  onChange={(e) => setLastClassAttended(e.target.value)}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
-              <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
-                {t("students.form.lastTermYear")} *
-                <input
-                  required
-                  value={lastTermYear}
-                  onChange={(e) => setLastTermYear(e.target.value)}
-                  className={`${fieldClass} mt-1`}
-                  placeholder={t("students.form.lastTermYearPlaceholder")}
-                />
-              </label>
-            </>
-          ) : registrationType === "continuing" ? (
+          {registrationType === "continuing" ? (
             <label className="block min-w-0 text-xs font-semibold text-[#636e72] sm:col-span-2 lg:col-span-3">
               {t("students.form.transferReason")}
               <select
@@ -615,37 +546,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
               className={`${fieldClass} mt-1`}
             >
               <option value="">{t("students.form.classroomUnset")}</option>
-              {kindergartenRooms.length > 0 ? (
-                <optgroup label={t("students.form.classGroupKindergarten")}>
-                  {kindergartenRooms.map((r) => (
-                    <option key={r.id} value={String(r.id)}>
-                      {r.name}
-                      {r.academicYear ? ` (${r.academicYear})` : ""}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null}
-              {lowerPrimaryRooms.length > 0 ? (
-                <optgroup label={t("students.form.classGroupLowerPrimary")}>
-                  {lowerPrimaryRooms.map((r) => (
-                    <option key={r.id} value={String(r.id)}>
-                      {r.name}
-                      {r.academicYear ? ` (${r.academicYear})` : ""}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null}
-              {upperPrimaryRooms.length > 0 ? (
-                <optgroup label={t("students.form.classGroupUpperPrimary")}>
-                  {upperPrimaryRooms.map((r) => (
-                    <option key={r.id} value={String(r.id)}>
-                      {r.name}
-                      {r.academicYear ? ` (${r.academicYear})` : ""}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : null}
-              {otherRooms.map((r) => (
+              {sortedActiveRooms.map((r) => (
                 <option key={r.id} value={String(r.id)}>
                   {r.name}
                   {r.academicYear ? ` (${r.academicYear})` : ""}
@@ -654,21 +555,35 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
             </select>
           </label>
           <div className="block min-w-0 text-xs font-semibold text-[#636e72] sm:col-span-2 lg:col-span-3">
-            <span className="block">{t("students.form.section")}</span>
+            <span className="block">Category</span>
             <div
               className={`${fieldClass} mt-1 flex min-h-[42px] items-center text-sm font-medium text-[#2d3436]`}
               aria-live="polite"
             >
-              {!classRoomId
-                ? t("students.form.sectionPickClass")
-                : sectionsLoading
-                  ? t("students.form.sectionLoading")
-                  : sectionName || "—"}
+              {!classRoomId ? "Select class first" : selectedClassRoom?.categoryName || "No category assigned"}
             </div>
             <span className="mt-1 block text-[11px] font-normal text-[#636e72]">
-              {t("students.form.sectionAutoHint")}
+              Set automatically from the class you choose.
             </span>
           </div>
+          {sectionsStreamsEnabled ? (
+            <div className="block min-w-0 text-xs font-semibold text-[#636e72] sm:col-span-2 lg:col-span-3">
+              <span className="block">{t("students.form.section")}</span>
+              <div
+                className={`${fieldClass} mt-1 flex min-h-[42px] items-center text-sm font-medium text-[#2d3436]`}
+                aria-live="polite"
+              >
+                {!classRoomId
+                  ? t("students.form.sectionPickClass")
+                  : sectionsLoading
+                    ? t("students.form.sectionLoading")
+                    : sectionName || t("students.form.sectionNoData")}
+              </div>
+              <span className="mt-1 block text-[11px] font-normal text-[#636e72]">
+                {t("students.form.sectionAutoHint")}
+              </span>
+            </div>
+          ) : null}
 
           <label className="block min-w-0 text-xs font-semibold text-[#636e72]">
             {t("students.form.nationality")} *

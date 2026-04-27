@@ -16,6 +16,7 @@ import type { InboxItem } from "../components/admin/headerInboxDemo";
 import { SettingsModesPanel } from "../components/settings/SettingsModesPanel";
 import { SettingsGeneralPanel } from "../components/settings/SettingsGeneralPanel";
 import { SettingsFeesStructurePanel } from "../components/settings/SettingsFeesStructurePanel";
+import { SettingsClassStructurePanel } from "../components/settings/SettingsClassStructurePanel";
 import { SettingsUsersRolesPanel } from "../components/settings/SettingsUsersRolesPanel";
 import { ExpensesAllPage } from "../components/expenses/ExpensesAllPage";
 import {
@@ -139,6 +140,7 @@ function readPersistedViewState(userSub?: string | null): PersistedViewState | n
       parsed.financeSection === "debtors_report" ||
       parsed.financeSection === "assign_fees" ||
       parsed.financeSection === "record_payment" ||
+      parsed.financeSection === "receipts" ||
       parsed.financeSection === "bursery" ||
       parsed.financeSection === "busery" ||
       parsed.financeSection === "staff_payment" ||
@@ -162,6 +164,7 @@ function readPersistedViewState(userSub?: string | null): PersistedViewState | n
       parsed.curriculumSection === "exam_eot" ||
       parsed.curriculumSection === "assessment_tests" ||
       parsed.curriculumSection === "result_entry" ||
+      parsed.curriculumSection === "learns_report" ||
       parsed.curriculumSection === "blank_page" ||
       (typeof parsed.curriculumSection === "string" &&
         parsed.curriculumSection.startsWith("exam_type:"))
@@ -321,6 +324,7 @@ function canAccessSettingsPanel(
   if (panel === "general") return hasPermission(role, permissions, "settings_general");
   if (panel === "modes") return hasPermission(role, permissions, "settings_modes");
   if (panel === "fees_structure") return hasPermission(role, permissions, "settings_fees_structure");
+  if (panel === "class_structure") return hasPermission(role, permissions, "settings_general");
   if (panel === "backup") return hasPermission(role, permissions, "settings_backup");
   if (panel === "restore") return hasPermission(role, permissions, "settings_restore");
   if (panel) {
@@ -391,6 +395,7 @@ function requiredPermissionForCurriculumSection(section: CurriculumSection): str
   if (section.startsWith("exam_type:")) return "curriculum_exams_dashboard";
   if (section === "assessment_tests") return "curriculum_assessment_tests";
   if (section === "result_entry") return "curriculum_result_entry";
+  if (section === "learns_report") return "curriculum_result_entry";
   if (section === "blank_page") return "curriculum_subjects";
   return null;
 }
@@ -407,7 +412,7 @@ function canAccessCurriculumSection(
 
 function requiredPermissionForFinanceSection(section: FinanceSection): string | null {
   if (section === "assign_fees") return "finance_assign_fees";
-  if (section === "record_payment" || section === "bursery") return "finance_record_payments";
+  if (section === "record_payment" || section === "receipts" || section === "bursery") return "finance_record_payments";
   if (section === "busery" || section === "bursery_assignment") return "finance_bursary";
   if (section === "staff_payment") return "finance_staff_pay";
   if (section === "finance_summary") return "finance_summaries";
@@ -757,10 +762,12 @@ export function Dashboard({
         {settingsPanel === "general" ? <SettingsGeneralPanel /> : null}
         {settingsPanel === "modes" ? <SettingsModesPanel /> : null}
         {settingsPanel === "fees_structure" ? <SettingsFeesStructurePanel /> : null}
+        {settingsPanel === "class_structure" ? <SettingsClassStructurePanel /> : null}
         {settingsPanel === "users_roles" ? <SettingsUsersRolesPanel /> : null}
         {settingsPanel === "general" ||
         settingsPanel === "modes" ||
         settingsPanel === "fees_structure" ||
+        settingsPanel === "class_structure" ||
         settingsPanel === "users_roles" ? null : inboxScreen.screen !== "home" ? (
           inboxScreen.screen === "list" ? (
             <InboxListView

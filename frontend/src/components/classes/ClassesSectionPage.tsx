@@ -26,6 +26,7 @@ import {
 } from "../../api/students";
 import { useI18n } from "../../i18n/I18nProvider";
 import { StudentDetailModal } from "../students/StudentDetailModal";
+import { useTheme } from "../../theme/ThemeProvider";
 
 export type ClassesSection =
   | "all_classes"
@@ -44,21 +45,18 @@ type Props = {
   onCloseClassRoster?: () => void;
 };
 
-const cardClass = "rounded-2xl border border-[#ebe4d9] bg-[#fffcf7] p-5 shadow-[6px_8px_24px_rgba(45,52,54,0.08)]";
-const inputClass = "w-full rounded-lg border border-[#e0d8cc] bg-white px-3 py-2 text-sm outline-none focus:border-[#6a9570]/70";
-const rosterMoveSectionBtn =
-  "inline-flex items-center justify-center rounded-lg border border-[#d7e8ef] bg-gradient-to-br from-[#f2f7fb] to-[#e8f2f8] px-2.5 py-1.5 text-xs font-semibold text-[#2d5470] shadow-sm ring-1 ring-[#c5dce8]/40 transition hover:border-[#8bb8d4] hover:text-[#1a3d52] active:translate-y-px";
-
 function IconBtn({
   danger,
   label,
   onClick,
   icon,
+  isDarkUi,
 }: {
   danger?: boolean;
   label: string;
   onClick: () => void;
   icon: React.ReactNode;
+  isDarkUi?: boolean;
 }) {
   return (
     <button
@@ -66,10 +64,12 @@ function IconBtn({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={`inline-flex h-8 w-8 items-center justify-center rounded-md border ${
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition-all hover:scale-105 active:scale-95 ${
         danger
-          ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
-          : "border-[#d7d0c3] bg-[#fffdf9] text-[#5a8faf] hover:bg-[#f2f7fb]"
+          ? "border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:border-rose-200"
+          : isDarkUi
+            ? "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
+            : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700"
       }`}
     >
       {icon}
@@ -84,6 +84,16 @@ export function ClassesSectionPage({
   onCloseClassRoster,
 }: Props) {
   const { t } = useI18n();
+  const { resolvedTheme } = useTheme();
+  const isDarkUi = resolvedTheme === "dark" || resolvedTheme === "tinted-dark";
+
+  const cardClass = `neo-card overflow-hidden rounded-3xl border border-slate-100 p-8 shadow-sm ${isDarkUi ? "bg-slate-900/50" : "bg-white"}`;
+  const inputClass = `neo-inset-field w-full rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all outline-none focus:ring-2 ${
+    isDarkUi 
+      ? "bg-[#1e293b] border-slate-700 text-white focus:ring-sky-500/20 focus:border-sky-50" 
+      : "bg-white border-slate-200 text-slate-800 focus:ring-[#0c2340]/10 focus:border-[#0c2340]"
+  }`;
+
   const [rooms, setRooms] = useState<ClassRoomOption[]>([]);
   const [categories, setCategories] = useState<ClassCategoryOption[]>([]);
   const [sections, setSections] = useState<ClassSectionOption[]>([]);
@@ -521,470 +531,293 @@ export function ClassesSectionPage({
 
   return (
     <div className="min-w-0 space-y-6">
-      {error ? (
-        <div className="fixed inset-0 z-[70] bg-[#2d3436]/45 backdrop-blur-[1px]">
-          <div className="absolute left-1/2 top-6 w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border border-rose-200 bg-white p-3 shadow-[0_18px_40px_rgba(45,52,54,0.35)]">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-sm font-semibold text-rose-700">{error}</p>
+      {/* Redesigned content starts here */}
+
+      <header className={`neo-card relative overflow-hidden rounded-3xl p-8 shadow-xl mb-8 ${isDarkUi ? "bg-slate-900/50" : "bg-white"}`}>
+        <div className="absolute top-0 left-0 h-2 w-full bg-gradient-to-r from-teal-500 via-sky-500 to-indigo-600" />
+        
+        {section === "class_students_roster" ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
               <button
                 type="button"
-                aria-label="Dismiss error"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-700 hover:bg-rose-50"
-                onClick={() => setError(null)}
+                onClick={() => onCloseClassRoster?.()}
+                className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition-all hover:-translate-x-1 ${
+                  isDarkUi ? "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700" : "border-slate-100 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                }`}
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
-                  <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
+              <div>
+                <h1 className={`text-3xl font-black tracking-tight ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>
+                  {rosterRoom?.name ?? t("classes.classStudents.unknownClass")}
+                </h1>
+                <p className={`mt-1 text-sm font-medium ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>
+                  {t("classes.page.classStudentsRosterTitleSuffix")}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
-
-      {showAddClassForm ? (
-        <div className="fixed inset-0 z-40 bg-[#2d3436]/30 backdrop-blur-[2px]">
-          <div className="mx-auto mt-14 w-[min(92vw,520px)] lg:ml-[calc(14rem+((100vw-14rem-520px)/2))]">
-            <section className="rounded-2xl border border-[#ebe4d9] bg-[#fffdf9] p-5 shadow-[0_20px_50px_rgba(45,52,54,0.25)]">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-[#2d3436]">
-                  {editClassId ? "Update Class" : "Add New Class"}
-                </h2>
-                <button
-                  type="button"
-                  aria-label="Close add class form"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#ddd3c4] bg-white text-[#636e72] hover:bg-[#f6f1e8]"
-                  onClick={() => {
-                    setShowAddClassForm(false);
-                    setEditClassId(null);
-                  }}
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
-                    <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
-                  </svg>
-                </button>
-              </div>
-              <form
-                onSubmit={
-                  editClassId
-                    ? async (e) => {
-                        e.preventDefault();
-                        if (!className.trim()) {
-                          setError("Class name cannot be empty.");
-                          return;
-                        }
-                        if (!classCategoryId) {
-                          setError("Please select a class category.");
-                          return;
-                        }
-                        try {
-                          await updateClassroom(editClassId, {
-                            name: className.trim(),
-                            categoryId: Number(classCategoryId),
-                            description: classDesc.trim() || undefined,
-                          });
-                          setEditClassId(null);
-                          setClassName("");
-                          setClassDesc("");
-                          setClassCategoryId("");
-                          setShowAddClassForm(false);
-                          await loadDbData();
-                        } catch (err) {
-                          setError(err instanceof Error ? err.message : "Failed to update class");
-                        }
-                      }
-                    : handleCreateClass
-                }
-                className="mx-auto flex w-full max-w-[560px] flex-col gap-3"
-              >
-                <input value={className} onChange={(e) => setClassName(e.target.value)} className={inputClass} placeholder="Class name (required)" />
-                <select value={classCategoryId} onChange={(e) => setClassCategoryId(e.target.value)} className={inputClass}>
-                  <option value="">Category (required)</option>
-                  {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
-                </select>
-                <input value={classDesc} onChange={(e) => setClassDesc(e.target.value)} className={inputClass} placeholder="Description (optional)" />
-                <button type="submit" className="rounded-lg bg-[#6a9570] px-3 py-2 text-sm font-semibold text-white">
-                  {editClassId ? "Update class" : "Save class"}
-                </button>
-              </form>
-            </section>
-          </div>
-        </div>
-      ) : null}
-
-      {section === "sections_streams" && showAddSectionForm ? (
-        <div className="fixed inset-0 z-40 bg-[#2d3436]/30 backdrop-blur-[2px]">
-          <div className="mx-auto mt-14 w-[min(92vw,520px)] lg:ml-[calc(14rem+((100vw-14rem-520px)/2))]">
-            <section className="rounded-2xl border border-[#ebe4d9] bg-[#fffdf9] p-5 shadow-[0_20px_50px_rgba(45,52,54,0.25)]">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-[#2d3436]">
-                  {editSectionId ? t("classes.sections.formEditTitle") : t("classes.sections.formAddTitle")}
-                </h2>
-                <button
-                  type="button"
-                  aria-label="Close add section form"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#ddd3c4] bg-white text-[#636e72] hover:bg-[#f6f1e8]"
-                  onClick={() => {
-                    setShowAddSectionForm(false);
-                    setEditSectionId(null);
-                    setSectionName("");
-                    setSectionTeacher("");
-                  }}
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
-                    <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
-                  </svg>
-                </button>
-              </div>
-              <form onSubmit={handleCreateSection} className="mx-auto flex w-full max-w-[560px] flex-col gap-3">
-                <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-[#636e72]">
-                  {t("classes.sections.col.class")} *
-                  <select
-                    required
-                    value={classRoomId}
-                    onChange={(e) => setClassRoomId(e.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">{t("classes.sections.selectClass")}</option>
-                    {rooms.map((r) => (
-                      <option key={r.id} value={String(r.id)}>
-                        {r.name} ({r.academicYear})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-[#636e72]">
-                  {t("classes.sections.col.section")} *
-                  <input
-                    required
-                    value={sectionName}
-                    onChange={(e) => setSectionName(e.target.value)}
-                    className={inputClass}
-                    placeholder={t("classes.sections.placeholderName")}
-                  />
-                </label>
-                <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-[#636e72]">
-                  {t("classes.sections.col.teacher")}
-                  <select
-                    value={sectionTeacher}
-                    onChange={(e) => setSectionTeacher(e.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">{t("classes.sections.placeholderTeacher")}</option>
-                    {sectionTeacher && !teachers.some((x) => x.displayName === sectionTeacher) ? (
-                      <option value={sectionTeacher}>{sectionTeacher}</option>
-                    ) : null}
-                    {teachers.map((teacher) => (
-                      <option key={teacher.id} value={teacher.displayName}>
-                        {teacher.displayName}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-[#6a9570] px-3 py-2 text-sm font-semibold text-white"
-                >
-                  {editSectionId ? t("classes.sections.btnUpdate") : t("classes.sections.btnSave")}
-                </button>
-              </form>
-            </section>
-          </div>
-        </div>
-      ) : null}
-
-      {section === "class_categories" && showAddCategoryForm ? (
-        <div className="fixed inset-0 z-40 bg-[#2d3436]/35 backdrop-blur-[2px]">
-          <div className="mx-auto mt-10 w-[min(92vw,480px)] sm:mt-14 lg:ml-[calc(14rem+((100vw-14rem-480px)/2))]">
-            <section
-              className="overflow-hidden rounded-2xl border border-[#ebe4d9] bg-[#fffdf9] shadow-[0_24px_56px_rgba(45,52,54,0.28)]"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="category-modal-title"
-            >
-              <div className="border-b border-[#ebe4d9] bg-gradient-to-r from-[#f8faf6] to-[#eef6f9] px-5 py-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 id="category-modal-title" className="text-lg font-bold tracking-tight text-[#2d3436]">
-                      {editCategoryId ? t("classes.categories.formEditTitle") : t("classes.categories.formAddTitle")}
-                    </h2>
-                    <p className="mt-1 text-xs leading-relaxed text-[#636e72]">{t("classes.categories.subtitle")}</p>
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={t("classes.categories.closeForm")}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#ddd3c4] bg-white text-[#636e72] shadow-sm transition hover:bg-[#f6f1e8]"
-                    onClick={closeCategoryForm}
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
-                      <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <div className="p-5">
-                <form onSubmit={handleCategoryFormSubmit} className="flex flex-col gap-4">
-                  <label className="flex min-w-0 flex-col gap-1.5">
-                    <span className="text-xs font-bold uppercase tracking-wide text-[#636e72]">
-                      {t("classes.categories.fieldName")} <span className="text-rose-600">*</span>
-                    </span>
-                    <input
-                      required
-                      value={categoryName}
-                      onChange={(e) => setCategoryName(e.target.value)}
-                      className={inputClass}
-                      placeholder={t("classes.categories.placeholderName")}
-                      autoComplete="off"
-                    />
-                  </label>
-                  <label className="flex min-w-0 flex-col gap-1.5">
-                    <span className="text-xs font-bold uppercase tracking-wide text-[#636e72]">
-                      {t("classes.categories.fieldDescription")}
-                    </span>
-                    <input
-                      value={categoryDesc}
-                      onChange={(e) => setCategoryDesc(e.target.value)}
-                      className={inputClass}
-                      placeholder={t("classes.categories.placeholderDesc")}
-                      autoComplete="off"
-                    />
-                  </label>
-                  <div className="mt-1 flex flex-col-reverse gap-2 border-t border-[#f0ebe3] pt-4 sm:flex-row sm:justify-end">
-                    <button
-                      type="button"
-                      className="rounded-xl border border-[#e0d8cc] bg-white px-4 py-2.5 text-sm font-semibold text-[#2d3436] shadow-sm transition hover:bg-[#faf7f0]"
-                      onClick={closeCategoryForm}
-                    >
-                      {t("layout.profile.cancelAction")}
-                    </button>
-                    <button
-                      type="submit"
-                      className="rounded-xl bg-gradient-to-br from-[#6a9570] to-[#4a6b4e] px-4 py-2.5 text-sm font-bold text-white shadow-md ring-1 ring-[#5a855f]/25 transition hover:brightness-110"
-                    >
-                      {editCategoryId ? t("classes.categories.btnUpdate") : t("classes.categories.btnSave")}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </section>
-          </div>
-        </div>
-      ) : null}
-
-      <header className="border-b border-[#ebe4d9]/80 pb-4">
-        {section === "class_students_roster" ? (
-          <>
-            <button
-              type="button"
-              className="mb-3 inline-flex items-center gap-2 rounded-xl border border-[#e0d8cc] bg-white px-3 py-2 text-sm font-semibold text-[#2d3436] shadow-sm transition hover:bg-[#faf7f0]"
-              onClick={() => onCloseClassRoster?.()}
-            >
-              <span aria-hidden className="text-[#636e72]">
-                ←
-              </span>
-              {t("classes.classStudents.rosterBack")}
-            </button>
-            <h1 className="text-xl font-bold tracking-tight text-[#2d3436]">
-              {rosterRoom?.name ?? t("classes.classStudents.unknownClass")}
-              <span className="block text-base font-semibold text-[#636e72] sm:inline sm:before:content-['_·_']">
-                {t("classes.page.classStudentsRosterTitleSuffix")}
-              </span>
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#636e72]">{t(introKey)}</p>
-          </>
         ) : (
-          <>
-            <h1 className="text-xl font-bold tracking-tight text-[#2d3436]">{t(titleKey)}</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#636e72]">{t(introKey)}</p>
-          </>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0c2340] to-[#1a3a5c] text-3xl shadow-lg shadow-[#0c2340]/20">
+                {section === "class_reports" ? "📊" : section === "class_teachers" ? "👨‍🏫" : "🏫"}
+              </div>
+              <div>
+                <h1 className={`text-3xl font-black tracking-tight ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>
+                  {t(titleKey)}
+                </h1>
+                <p className={`mt-1 text-sm font-medium ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>
+                  {t(introKey)}
+                </p>
+              </div>
+            </div>
+            {section === "sections_streams" && (
+               <button
+                type="button"
+                onClick={() => {
+                  setEditSectionId(null);
+                  setSectionName("");
+                  setSectionTeacher("");
+                  setClassRoomId(sectionFilterClassId.trim() ? sectionFilterClassId : "");
+                  setShowAddSectionForm(true);
+                }}
+                className="flex items-center gap-2 rounded-xl bg-teal-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-teal-600/20 transition-all hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                {t("classes.action.addSection")}
+              </button>
+            )}
+            {section === "class_categories" && (
+               <button
+                type="button"
+                onClick={() => setShowAddCategoryForm(true)}
+                className="flex items-center gap-2 rounded-xl bg-amber-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-600/20 transition-all hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                {t("classes.action.addCategory")}
+              </button>
+            )}
+          </div>
         )}
       </header>
 
-      {loading ? <p className="text-sm text-[#636e72]">{t("students.form.sectionLoading")}</p> : null}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-teal-500 border-t-transparent" />
+        </div>
+      )}
 
       {section === "all_classes" ? (
-        <section className={cardClass}>
-          <div className="flex w-full flex-wrap items-end justify-end gap-3">
-            <div className="flex min-w-0 flex-col gap-1">
-              <label htmlFor="classes-filter-category" className="text-[10px] font-bold uppercase tracking-wide text-[#636e72]">
+        <div className={cardClass}>
+          <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6 -mx-8 -mt-8 mb-8">
+            <div>
+              <h2 className={`text-lg font-black ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>Class Registry</h2>
+              <p className={`text-xs font-medium ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>List of all active academic levels.</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <label htmlFor="classes-filter-category" className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>
                 {t("toolbar.filter")}
               </label>
               <select
                 id="classes-filter-category"
                 value={classFilterCategoryId}
                 onChange={(e) => setClassFilterCategoryId(e.target.value)}
-                className={`${inputClass} min-w-[min(100%,200px)] max-w-[280px] sm:w-[240px]`}
-                aria-label={t("classes.filter.categoryAria")}
+                className={`${inputClass} !py-1.5 !px-3 !w-auto min-w-[180px]`}
               >
                 <option value="">{t("classes.filter.allCategories")}</option>
                 {categories.map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </option>
+                  <option key={c.id} value={String(c.id)}>{c.name}</option>
                 ))}
               </select>
             </div>
-            <button
-              type="button"
-              aria-label={t("classes.action.addClass")}
-              title={t("classes.action.addClass")}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#6a9570] to-[#4a6b4e] text-white shadow-md ring-1 ring-[#5a855f]/30 transition hover:brightness-110 active:translate-y-px"
-              onClick={() => setShowAddClassForm((v) => !v)}
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden>
-                <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
           </div>
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="text-left text-[#636e72]">
-                <tr><th>Class name</th><th>Section count</th><th>Total students</th><th>Category</th><th>Actions</th></tr>
+
+          <div className="overflow-x-auto -mx-8">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className={`${isDarkUi ? "bg-slate-800/50" : "bg-slate-50/50"}`}>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Class Name</th>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Streams</th>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Total Students</th>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Category</th>
+                  <th className={`px-8 py-4 text-right text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Actions</th>
+                </tr>
               </thead>
               <tbody>
-                {classesViewRows.map(({ room, sectionCount, totalStudents }) => (
-                  <tr key={room.id} className="border-t border-[#ebe4d9]">
-                    <td className="py-2 font-semibold">
-                      {room.name}
-                      {room.isActive === false ? (
-                        <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                          Disabled
-                        </span>
-                      ) : null}
-                    </td>
-                    <td>{sectionCount}</td>
-                    <td>{totalStudents}</td>
-                    <td>{room.categoryName ?? "-"}</td>
-                    <td className="py-2">
-                      <div className="flex items-center gap-2">
-                        <IconBtn
-                          label="Edit class"
-                          onClick={() => {
-                            setEditClassId(room.id);
-                            setClassName(room.name);
-                            setClassDesc(room.description ?? "");
-                            setClassCategoryId(room.categoryId ? String(room.categoryId) : "");
-                            setShowAddClassForm(true);
-                          }}
-                          icon={
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
-                              <path stroke="currentColor" strokeWidth="1.8" d="M4 20h4l10-10-4-4L4 16v4zM13 7l4 4" />
-                            </svg>
-                          }
-                        />
-                        <IconBtn
-                          danger
-                          label="Delete class"
-                          onClick={async () => {
-                            if (!confirmDelete("class")) return;
-                            try {
-                              await deleteClassroom(room.id);
-                              await loadDbData();
-                            } catch (err) {
-                              const msg = err instanceof Error ? err.message : "Delete failed";
-                              if (/cannot be deleted|disable it instead|allocated/i.test(msg)) {
-                                const disableNow = window.confirm(
-                                  "This class has allocated students and cannot be deleted. Disable it instead?",
-                                );
-                                if (disableNow) {
-                                  await disableClassroom(room.id);
-                                  await loadDbData();
-                                  return;
-                                }
-                              }
-                              setError(msg);
-                            }
-                          }}
-                          icon={
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
-                              <path stroke="currentColor" strokeWidth="1.8" d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V5h6v2" />
-                            </svg>
-                          }
-                        />
-                      </div>
+                {classesViewRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-8 py-12 text-center text-slate-400 text-sm italic">
+                      No classes found for the selected filter.
                     </td>
                   </tr>
+                ) : (
+                  classesViewRows.map(({ room, sectionCount, totalStudents }) => (
+                    <tr key={room.id} className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-0">
+                      <td className="px-8 py-5">
+                        <div className="flex items-center gap-3">
+                          <span className={`text-sm font-bold ${isDarkUi ? "text-slate-200" : "text-[#0c2340]"}`}>{room.name}</span>
+                          {room.isActive === false && (
+                            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600 border border-rose-100">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-8 py-5">
+                        <span className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold ${
+                          isDarkUi ? "bg-slate-800 text-slate-300" : "bg-sky-50 text-sky-700"
+                        }`}>
+                          {sectionCount} {sectionCount === 1 ? 'Stream' : 'Streams'}
+                        </span>
+                      </td>
+                      <td className="px-8 py-5">
+                        <span className={`text-xs font-semibold ${isDarkUi ? "text-slate-400" : "text-slate-600"}`}>
+                          {totalStudents} {totalStudents === 1 ? 'Student' : 'Students'}
+                        </span>
+                      </td>
+                      <td className="px-8 py-5">
+                        <span className={`text-xs font-medium ${isDarkUi ? "text-teal-400" : "text-teal-600"}`}>
+                          {room.categoryName ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <IconBtn
+                            isDarkUi={isDarkUi}
+                            label="Edit class"
+                            onClick={() => {
+                              setEditClassId(room.id);
+                              setClassName(room.name);
+                              setClassDesc(room.description ?? "");
+                              setClassCategoryId(room.categoryId ? String(room.categoryId) : "");
+                              setShowAddClassForm(true);
+                            }}
+                            icon={
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            }
+                          />
+                          <IconBtn
+                            isDarkUi={isDarkUi}
+                            danger
+                            label="Delete class"
+                            onClick={async () => {
+                              if (!confirmDelete("class")) return;
+                              try {
+                                await deleteClassroom(room.id);
+                                await loadDbData();
+                              } catch (err) {
+                                const msg = err instanceof Error ? err.message : "Delete failed";
+                                if (/cannot be deleted|disable it instead|allocated/i.test(msg)) {
+                                  const disableNow = window.confirm(
+                                    "This class has allocated students and cannot be deleted. Disable it instead?",
+                                  );
+                                  if (disableNow) {
+                                    await disableClassroom(room.id);
+                                    await loadDbData();
+                                    return;
+                                  }
+                                }
+                                setError(msg);
+                              }
+                            }}
+                            icon={
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            }
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  )
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
+        </div>
       ) : null}
 
       {section === "sections_streams" ? (
-        <section className={cardClass}>
-          <div className="flex w-full flex-wrap items-end justify-end gap-3">
-            <div className="flex min-w-0 flex-col gap-1">
-              <label htmlFor="sections-filter-class" className="text-[10px] font-bold uppercase tracking-wide text-[#636e72]">
+        <div className={cardClass}>
+           <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6 -mx-8 -mt-8 mb-8">
+            <div>
+              <h2 className={`text-lg font-black ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>Streams & Sections</h2>
+              <p className={`text-xs font-medium ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Manage individual classroom divisions.</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <label htmlFor="sections-filter-class" className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>
                 {t("toolbar.filter")}
               </label>
               <select
                 id="sections-filter-class"
                 value={sectionFilterClassId}
                 onChange={(e) => setSectionFilterClassId(e.target.value)}
-                className={`${inputClass} min-w-[min(100%,200px)] max-w-[280px] sm:w-[240px]`}
-                aria-label={t("classes.filter.byClassAria")}
+                className={`${inputClass} !py-1.5 !px-3 !w-auto min-w-[200px]`}
               >
                 <option value="">{t("classes.filter.classAll")}</option>
                 {rooms.map((r) => (
-                  <option key={r.id} value={String(r.id)}>
-                    {r.name} ({r.academicYear})
-                  </option>
+                  <option key={r.id} value={String(r.id)}>{r.name} ({r.academicYear})</option>
                 ))}
               </select>
             </div>
-            <button
-              type="button"
-              aria-label={t("classes.action.addSection")}
-              title={t("classes.action.addSection")}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#6a9570] to-[#4a6b4e] text-white shadow-md ring-1 ring-[#5a855f]/30 transition hover:brightness-110 active:translate-y-px"
-              onClick={() => {
-                setEditSectionId(null);
-                setSectionName("");
-                setSectionTeacher("");
-                setClassRoomId(sectionFilterClassId.trim() ? sectionFilterClassId : "");
-                setShowAddSectionForm(true);
-              }}
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden>
-                <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
           </div>
 
-          <div className="mt-4 min-w-0 overflow-hidden">
-            <table className="table-fixed w-full text-left text-sm">
-              <thead className="border-b border-[#ebe4d9] text-left text-[10px] font-bold uppercase tracking-wide text-[#636e72] sm:text-[11px]">
-                <tr>
-                  <th className="min-w-0 py-2 pr-2">{t("classes.sections.col.section")}</th>
-                  <th className="min-w-0 py-2 pr-2">{t("classes.sections.col.class")}</th>
-                  <th className="hidden min-w-0 py-2 pr-2 sm:table-cell">{t("classes.sections.col.category")}</th>
-                  <th className="w-16 py-2 pr-2 text-center tabular-nums sm:w-20">{t("classes.sections.col.students")}</th>
-                  <th className="hidden min-w-0 py-2 pr-2 md:table-cell">{t("classes.sections.col.teacher")}</th>
-                  <th className="w-20 py-2 text-right sm:w-24">{t("students.col.actions")}</th>
+          <div className="overflow-x-auto -mx-8">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className={`${isDarkUi ? "bg-slate-800/50" : "bg-slate-50/50"}`}>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.sections.col.section")}</th>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.sections.col.class")}</th>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.sections.col.students")}</th>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.sections.col.teacher")}</th>
+                  <th className={`px-8 py-4 text-right text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#f0ebe3]">
+              <tbody>
                 {sectionsViewRows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-sm text-[#636e72]">
+                    <td colSpan={5} className="px-8 py-12 text-center text-slate-400 text-sm italic">
                       {rooms.length === 0 ? t("classes.sections.emptyNeedClasses") : t("classes.sections.emptyFiltered")}
                     </td>
                   </tr>
                 ) : (
                   sectionsViewRows.map(({ sec, room, studentCount }) => (
-                    <tr key={sec.id} className="transition-colors hover:bg-[#f0f7f4]/90">
-                      <td className="min-w-0 truncate py-2 pr-2 font-semibold text-[#2d3436]">{sec.name}</td>
-                      <td className="min-w-0 truncate py-2 pr-2 text-[#2d3436]">{room?.name ?? "—"}</td>
-                      <td className="hidden min-w-0 truncate py-2 pr-2 text-[#636e72] sm:table-cell">
-                        {room?.categoryName ?? "—"}
+                    <tr key={sec.id} className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-0">
+                      <td className="px-8 py-5">
+                        <span className={`text-sm font-bold ${isDarkUi ? "text-slate-200" : "text-[#0c2340]"}`}>{sec.name}</span>
                       </td>
-                      <td className="py-2 pr-2 text-center tabular-nums text-[#2d3436]">{studentCount}</td>
-                      <td className="hidden min-w-0 truncate py-2 pr-2 text-[#636e72] md:table-cell">
-                        {sec.classTeacherName ?? "—"}
+                      <td className="px-8 py-5">
+                        <div className="flex flex-col">
+                          <span className={`text-xs font-semibold ${isDarkUi ? "text-slate-300" : "text-slate-700"}`}>{room?.name ?? "—"}</span>
+                          <span className="text-[10px] font-medium text-slate-400">{room?.categoryName}</span>
+                        </div>
                       </td>
-                      <td className="py-2 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <IconBtn
+                      <td className="px-8 py-5">
+                        <span className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold ${
+                          isDarkUi ? "bg-slate-800 text-slate-300" : "bg-teal-50 text-teal-700"
+                        }`}>
+                          {studentCount} Students
+                        </span>
+                      </td>
+                      <td className="px-8 py-5">
+                        <span className={`text-xs font-medium ${isDarkUi ? "text-slate-400" : "text-slate-600"}`}>
+                          {sec.classTeacherName ?? "Unassigned"}
+                        </span>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                           <IconBtn
+                            isDarkUi={isDarkUi}
                             label="Edit section"
                             onClick={() => {
                               setEditSectionId(sec.id);
@@ -994,12 +827,13 @@ export function ClassesSectionPage({
                               setShowAddSectionForm(true);
                             }}
                             icon={
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
-                                <path stroke="currentColor" strokeWidth="1.8" d="M4 20h4l10-10-4-4L4 16v4zM13 7l4 4" />
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                               </svg>
                             }
                           />
                           <IconBtn
+                            isDarkUi={isDarkUi}
                             danger
                             label="Delete section"
                             onClick={async () => {
@@ -1018,8 +852,8 @@ export function ClassesSectionPage({
                               }
                             }}
                             icon={
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
-                                <path stroke="currentColor" strokeWidth="1.8" d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V5h6v2" />
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
                             }
                           />
@@ -1031,103 +865,119 @@ export function ClassesSectionPage({
               </tbody>
             </table>
           </div>
-        </section>
+        </div>
       ) : null}
 
       {section === "class_students" ? (
-        <section className={cardClass}>
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[#636e72]">
-            {t("classes.classStudents.summaryTableTitle")}
-          </h2>
-          <div className="mt-3 min-w-0 overflow-hidden">
-            <table className="table-fixed w-full text-left text-sm">
-              <thead className="border-b border-[#ebe4d9] text-[10px] font-bold uppercase tracking-wide text-[#636e72] sm:text-[11px]">
-                <tr>
-                  <th className="min-w-0 py-2 pr-2">{t("classes.classStudents.col.class")}</th>
-                  <th className="w-16 py-2 pr-2 text-center sm:w-20">{t("classes.classStudents.col.total")}</th>
-                  <th className="min-w-0 py-2 pr-2">{t("classes.classStudents.col.streams")}</th>
-                  <th className="w-28 py-2 text-right sm:w-32">{t("students.col.actions")}</th>
+        <div className={cardClass}>
+           <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6 -mx-8 -mt-8 mb-8">
+            <div>
+              <h2 className={`text-lg font-black ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>Class Enrollments</h2>
+              <p className={`text-xs font-medium ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Summary of students per class and stream.</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto -mx-8">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className={`${isDarkUi ? "bg-slate-800/50" : "bg-slate-50/50"}`}>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.classStudents.col.class")}</th>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.classStudents.col.total")}</th>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.classStudents.col.streams")}</th>
+                  <th className={`px-8 py-4 text-right text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("students.col.actions")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#f0ebe3]">
+              <tbody>
                 {classStudentsSummaryRows.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-8 text-center text-[#636e72]">
-                      {t("classes.sections.emptyNeedClasses")}
+                    <td colSpan={4} className="px-8 py-12 text-center text-slate-400 text-sm italic">
+                       {t("classes.sections.emptyNeedClasses")}
                     </td>
                   </tr>
                 ) : (
-                  classStudentsSummaryRows.map(({ room, streamCounts, totalInClass }) => {
-                    const streamLabel =
-                      streamCounts.length === 0
-                        ? "—"
-                        : streamCounts.map((x) => `${x.name}: ${x.count}`).join(" · ");
-                    return (
-                      <tr key={room.id} className="transition-colors hover:bg-[#f0f7f4]/90">
-                        <td className="min-w-0 truncate py-2 pr-2 font-semibold text-[#2d3436]">{room.name}</td>
-                        <td className="py-2 pr-2 text-center tabular-nums font-medium text-[#2d3436]">
-                          {totalInClass}
-                        </td>
-                        <td className="min-w-0 py-2 pr-2 text-xs leading-snug text-[#636e72] sm:text-sm">
-                          {streamLabel}
-                        </td>
-                        <td className="py-2 text-right">
-                          <button
+                  classStudentsSummaryRows.map(({ room, streamCounts, totalInClass }) => (
+                    <tr key={room.id} className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-0">
+                      <td className="px-8 py-5">
+                         <span className={`text-sm font-bold ${isDarkUi ? "text-slate-200" : "text-[#0c2340]"}`}>{room.name}</span>
+                      </td>
+                      <td className="px-8 py-5">
+                        <span className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold ${
+                          isDarkUi ? "bg-slate-800 text-slate-300" : "bg-indigo-50 text-indigo-700"
+                        }`}>
+                          {totalInClass} Students
+                        </span>
+                      </td>
+                      <td className="px-8 py-5">
+                        <div className="flex flex-wrap gap-1.5">
+                          {streamCounts.length > 0 ? (
+                            streamCounts.map(s => (
+                              <span key={s.name} className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                                isDarkUi ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500"
+                              }`}>
+                                {s.name}: {s.count}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] font-medium text-slate-400 italic">No streams</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                         <button
                             type="button"
-                            className="rounded-lg bg-gradient-to-br from-[#5a8faf] to-[#3d6f8a] px-3 py-1.5 text-xs font-bold text-white shadow-sm transition hover:brightness-110 sm:text-sm"
+                            className="rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-teal-600/20 transition-all hover:-translate-y-0.5"
                             onClick={() => onOpenClassRoster?.(room.id)}
                           >
                             {t("classes.classStudents.viewAll")}
                           </button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
           </div>
-
-          <p className="mt-4 text-sm leading-relaxed text-[#636e72]">{t("classes.classStudents.hintViewAll")}</p>
-          <p className="mt-2 rounded-lg border border-dashed border-[#d9cfbf] bg-[#fffaf2] px-3 py-2 text-xs text-[#636e72]">
-            Bulk upload (Excel) can continue via admissions import.
-          </p>
-        </section>
+          
+          <div className={`mt-8 rounded-2xl p-4 border border-dashed flex items-center gap-4 ${isDarkUi ? "bg-slate-800/30 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+            <span className="text-xl">💡</span>
+            <p className="text-xs font-medium text-slate-500 leading-relaxed">
+              {t("classes.classStudents.hintViewAll")} Bulk upload can be handled via the Admissions Import tool.
+            </p>
+          </div>
+        </div>
       ) : null}
 
       {section === "class_students_roster" ? (
-        <section className={cardClass}>
+        <div className={cardClass}>
           {!rosterClassId || rosterClassId < 1 ? (
-            <p className="text-sm text-[#636e72]">{t("classes.classStudents.rosterInvalid")}</p>
+             <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="text-4xl mb-4">⚠️</div>
+                <h3 className={`text-base font-bold ${isDarkUi ? "text-slate-300" : "text-slate-600"}`}>{t("classes.classStudents.rosterInvalid")}</h3>
+             </div>
           ) : !rosterRoom ? (
-            <p className="text-sm text-[#636e72]">{t("classes.classStudents.rosterMissingClass")}</p>
+             <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="text-4xl mb-4">❓</div>
+                <h3 className={`text-base font-bold ${isDarkUi ? "text-slate-300" : "text-slate-600"}`}>{t("classes.classStudents.rosterMissingClass")}</h3>
+             </div>
           ) : (
             <>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="flex flex-col gap-1 lg:col-span-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-[#636e72]">
-                    {t("toolbar.filter")} · {t("classes.classStudents.sortByStream")}
-                  </span>
+              <div className="flex flex-wrap items-center gap-6 mb-8 border-b border-slate-100 pb-8 -mx-8 px-8 -mt-8">
+                <div className="flex-1 min-w-[200px] space-y-1.5">
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>Filter by Stream</span>
                   <select
                     value={rosterSectionFilter}
                     onChange={(e) => setRosterSectionFilter(e.target.value)}
                     className={inputClass}
-                    aria-label={t("classes.classStudents.sortByStream")}
                   >
                     <option value="">{t("classes.classStudents.allStreams")}</option>
                     {sections
                       .filter((x) => x.classRoomId === rosterClassId)
-                      .map((s) => (
-                        <option key={s.id} value={s.name}>
-                          {s.name}
-                        </option>
-                      ))}
+                      .map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
                   </select>
                 </div>
-                <div className="flex flex-wrap items-end gap-3 sm:col-span-2 lg:col-span-2">
-                  <div className="flex min-w-[140px] flex-1 flex-col gap-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-[#636e72]">{t("toolbar.sort")}</span>
-                    <select
+                <div className="flex-1 min-w-[200px] space-y-1.5">
+                   <span className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>Sort Criteria</span>
+                   <select
                       value={rosterSortBy}
                       onChange={(e) => setRosterSortBy(e.target.value as "name" | "stream")}
                       className={inputClass}
@@ -1135,64 +985,63 @@ export function ClassesSectionPage({
                       <option value="name">{t("classes.classStudents.sortByName")}</option>
                       <option value="stream">{t("classes.classStudents.sortByStream")}</option>
                     </select>
-                  </div>
-                  <div className="flex min-w-[140px] flex-1 flex-col gap-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-[#636e72]">
-                      {t("dashboard.expense.sortDirection")}
-                    </span>
+                </div>
+                 <div className="flex-1 min-w-[200px] space-y-1.5">
+                   <span className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>Direction</span>
                     <select
                       value={rosterSortDir}
                       onChange={(e) => setRosterSortDir(e.target.value as "asc" | "desc")}
                       className={inputClass}
                     >
-                      <option value="asc">{t("dashboard.expense.sort.az")}</option>
-                      <option value="desc">{t("dashboard.expense.sort.za")}</option>
+                      <option value="asc">A to Z</option>
+                      <option value="desc">Z to A</option>
                     </select>
-                  </div>
-                  <p className="w-full text-xs text-[#636e72] sm:w-auto sm:self-center">
-                    {classRosterRows.length} {classRosterRows.length === 1 ? "student" : "students"}
-                  </p>
                 </div>
               </div>
 
-              <div className="mt-4 min-w-0 overflow-hidden">
-                <table className="table-fixed w-full text-left text-sm">
-                  <thead className="border-b border-[#ebe4d9] text-[10px] font-bold uppercase tracking-wide text-[#636e72] sm:text-[11px]">
-                    <tr>
-                      <th className="min-w-0 py-2 pr-2">{t("students.col.name")}</th>
-                      <th className="hidden w-[28%] min-w-0 py-2 pr-2 sm:table-cell">{t("students.col.class")}</th>
-                      <th className="w-[22%] min-w-0 py-2 pr-2">{t("students.col.section")}</th>
-                      <th className="min-w-[11rem] py-2 pl-2 text-right sm:min-w-[13rem]">
-                        {t("students.col.actions")}
-                      </th>
+              <div className="overflow-x-auto -mx-8">
+                 <table className="w-full border-collapse text-left">
+                  <thead>
+                    <tr className={`${isDarkUi ? "bg-slate-800/50" : "bg-slate-50/50"}`}>
+                      <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("students.col.name")}</th>
+                      <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("students.col.class")}</th>
+                      <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("students.col.section")}</th>
+                      <th className={`px-8 py-4 text-right text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#f0ebe3]">
+                  <tbody>
                     {classRosterRows.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="py-8 text-center text-[#636e72]">
+                        <td colSpan={4} className="px-8 py-12 text-center text-slate-400 text-sm italic">
                           {t("students.noMatches")}
                         </td>
                       </tr>
                     ) : (
                       classRosterRows.map((s) => (
-                        <tr key={s.id} className="transition-colors hover:bg-[#f0f7f4]/90">
-                          <td className="min-w-0 truncate py-2 pr-2 font-medium text-[#2d3436]">{s.fullName}</td>
-                          <td className="hidden min-w-0 truncate py-2 pr-2 sm:table-cell">{s.className ?? "—"}</td>
-                          <td className="min-w-0 truncate py-2 pr-2 text-[#636e72]">{s.sectionName ?? "—"}</td>
-                          <td className="py-2 pl-2 text-right">
-                            <div className="flex flex-wrap items-center justify-end gap-1.5">
-                              <button
+                        <tr key={s.id} className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-0">
+                          <td className="px-8 py-5">
+                             <span className={`text-sm font-bold ${isDarkUi ? "text-slate-200" : "text-[#0c2340]"}`}>{s.fullName}</span>
+                          </td>
+                           <td className="px-8 py-5">
+                             <span className={`text-xs font-semibold ${isDarkUi ? "text-slate-400" : "text-slate-600"}`}>{s.className ?? "—"}</span>
+                          </td>
+                           <td className="px-8 py-5">
+                             <span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                                isDarkUi ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500"
+                              }`}>
+                                {s.sectionName ?? "Unassigned"}
+                              </span>
+                          </td>
+                          <td className="px-8 py-5 text-right">
+                             <button
                                 type="button"
-                                className={rosterMoveSectionBtn}
-                                title={t("classes.classStudents.moveSectionHint")}
-                                onClick={() =>
-                                  setRosterStudentModal({ studentId: s.id, focusSection: true })
-                                }
+                                className={`rounded-xl border px-4 py-1.5 text-xs font-bold transition-all hover:-translate-y-0.5 ${
+                                  isDarkUi ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-[#0c2340] text-[#0c2340] hover:bg-slate-50"
+                                }`}
+                                onClick={() => setRosterStudentModal({ studentId: s.id, focusSection: true })}
                               >
                                 {t("classes.classStudents.moveSection")}
                               </button>
-                            </div>
                           </td>
                         </tr>
                       ))
@@ -1202,199 +1051,419 @@ export function ClassesSectionPage({
               </div>
             </>
           )}
-        </section>
+        </div>
       ) : null}
 
       {section === "class_teachers" ? (
-        <section className={cardClass}>
-          <h2 className="text-base font-bold text-[#2d3436]">Class Teachers</h2>
-          <p className="mt-2 text-sm text-[#636e72]">Assign teachers at section level.</p>
-          <div className="mt-3 grid gap-2">{sections.map((s) => (
-            <div key={s.id} className="rounded-lg border border-[#ebe4d9] bg-white p-3 text-sm">
-              <div className="font-semibold">{rooms.find((r) => r.id === s.classRoomId)?.name} - {s.name}</div>
-              <div className="mt-1 text-[#636e72]">{s.classTeacherName ?? "Unassigned"}</div>
+        <div className={cardClass}>
+           <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6 -mx-8 -mt-8 mb-8">
+            <div>
+              <h2 className={`text-lg font-black ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>Teacher Assignments</h2>
+              <p className={`text-xs font-medium ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Link academic staff to specific streams.</p>
             </div>
-          ))}</div>
-        </section>
+          </div>
+          
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {sections.map((s) => {
+              const room = rooms.find((r) => r.id === s.classRoomId);
+              return (
+                <div key={s.id} className={`rounded-2xl border p-5 transition-all hover:shadow-md ${isDarkUi ? "bg-slate-800/40 border-slate-700" : "bg-slate-50/50 border-slate-100"}`}>
+                  <div className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isDarkUi ? "text-teal-400" : "text-teal-600"}`}>
+                    {room?.name} · {s.name}
+                  </div>
+                  <div className={`text-sm font-bold ${isDarkUi ? "text-slate-200" : "text-[#0c2340]"}`}>
+                    {s.classTeacherName ?? "Unassigned"}
+                  </div>
+                   <button
+                    type="button"
+                    className="mt-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-sky-500 transition-colors"
+                    onClick={() => {
+                      setEditSectionId(s.id);
+                      setSectionName(s.name);
+                      setSectionTeacher(s.classTeacherName ?? "");
+                      setClassRoomId(String(s.classRoomId));
+                      setShowAddSectionForm(true);
+                    }}
+                  >
+                    Change Teacher →
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       ) : null}
 
       {section === "class_categories" ? (
-        <section className={cardClass}>
-          <div className="flex w-full flex-wrap items-end justify-end gap-3">
-            <button
-              type="button"
-              aria-label={t("classes.action.addCategory")}
-              title={t("classes.action.addCategory")}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#6a9570] to-[#4a6b4e] text-white shadow-md ring-1 ring-[#5a855f]/30 transition hover:brightness-110 active:translate-y-px"
-              onClick={() => {
-                setEditCategoryId(null);
-                setCategoryName("");
-                setCategoryDesc("");
-                setShowAddCategoryForm(true);
-              }}
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden>
-                <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
+        <div className={cardClass}>
+           <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6 -mx-8 -mt-8 mb-8">
+            <div>
+              <h2 className={`text-lg font-black ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>Level Categories</h2>
+              <p className={`text-xs font-medium ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Organizational stages for your school hierarchy.</p>
+            </div>
           </div>
-          <div className="mt-4 min-w-0 overflow-hidden">
-            <table className="table-fixed w-full text-sm">
-              <thead className="border-b border-[#ebe4d9] text-left text-[10px] font-bold uppercase tracking-wide text-[#636e72] sm:text-[11px]">
-                <tr>
-                  <th className="min-w-0 py-2 pr-2">Category</th>
-                  <th className="hidden min-w-0 py-2 pr-2 sm:table-cell">Description</th>
-                  <th className="w-20 py-2 pr-2 text-center sm:w-24">Classes</th>
-                  <th className="w-24 py-2 text-right sm:w-28">{t("students.col.actions")}</th>
+
+           <div className="overflow-x-auto -mx-8">
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className={`${isDarkUi ? "bg-slate-800/50" : "bg-slate-50/50"}`}>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Category</th>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Description</th>
+                  <th className={`px-8 py-4 text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Classes</th>
+                  <th className={`px-8 py-4 text-right text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#f0ebe3]">
+              <tbody>
                 {categories.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="py-10 text-center text-sm text-[#636e72]">
-                      {t("classes.categories.empty")}
+                    <td colSpan={4} className="px-8 py-12 text-center text-slate-400 text-sm italic">
+                      No categories defined yet.
                     </td>
                   </tr>
-                ) : null}
-                {categories.map((c) => (
-                  <tr key={c.id} className="transition-colors hover:bg-[#f0f7f4]/90">
-                    <td className="min-w-0 truncate py-2 pr-2 font-semibold text-[#2d3436]">{c.name}</td>
-                    <td className="hidden min-w-0 truncate py-2 pr-2 text-[#636e72] sm:table-cell">
-                      {c.description ?? "—"}
-                    </td>
-                    <td className="py-2 pr-2 text-center tabular-nums text-[#2d3436]">{c.classesCount ?? 0}</td>
-                    <td className="py-2 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <IconBtn
-                          label="Edit category"
-                          onClick={() => {
-                            setEditCategoryId(c.id);
-                            setCategoryName(c.name);
-                            setCategoryDesc(c.description ?? "");
-                            setShowAddCategoryForm(true);
-                          }}
-                          icon={
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
-                              <path stroke="currentColor" strokeWidth="1.8" d="M4 20h4l10-10-4-4L4 16v4zM13 7l4 4" />
-                            </svg>
-                          }
-                        />
-                        <IconBtn
-                          danger
-                          label="Delete category"
-                          onClick={async () => {
-                            try {
-                              if (!confirmDelete("category")) return;
-                              await deleteClassCategory(c.id);
-                              if (editCategoryId === c.id) closeCategoryForm();
-                              await loadDbData();
-                            } catch (err) {
-                              setError(err instanceof Error ? err.message : "Delete failed");
+                ) : (
+                  categories.map((c) => (
+                    <tr key={c.id} className="group border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-0">
+                      <td className="px-8 py-5">
+                         <span className={`text-sm font-bold ${isDarkUi ? "text-slate-200" : "text-[#0c2340]"}`}>{c.name}</span>
+                      </td>
+                       <td className="px-8 py-5">
+                         <span className={`text-xs font-medium ${isDarkUi ? "text-slate-400" : "text-slate-600"}`}>{c.description ?? "—"}</span>
+                      </td>
+                       <td className="px-8 py-5">
+                         <span className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold ${
+                            isDarkUi ? "bg-slate-800 text-slate-300" : "bg-amber-50 text-amber-700"
+                          }`}>
+                            {c.classesCount ?? 0} Levels
+                          </span>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                           <IconBtn
+                            isDarkUi={isDarkUi}
+                            label="Edit category"
+                            onClick={() => {
+                              setEditCategoryId(c.id);
+                              setCategoryName(c.name);
+                              setCategoryDesc(c.description ?? "");
+                              setShowAddCategoryForm(true);
+                            }}
+                            icon={
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
                             }
-                          }}
-                          icon={
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden>
-                              <path stroke="currentColor" strokeWidth="1.8" d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V5h6v2" />
-                            </svg>
-                          }
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          />
+                          <IconBtn
+                            isDarkUi={isDarkUi}
+                            danger
+                            label="Delete category"
+                            onClick={async () => {
+                              if (!confirmDelete("category")) return;
+                              try {
+                                await deleteClassCategory(c.id);
+                                if (editCategoryId === c.id) closeCategoryForm();
+                                await loadDbData();
+                              } catch (err) {
+                                setError(err instanceof Error ? err.message : "Delete failed");
+                              }
+                            }}
+                            icon={
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            }
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-        </section>
+        </div>
       ) : null}
 
       {section === "class_reports" ? (
-        <section className={cardClass}>
-          <h2 className="text-base font-bold text-[#2d3436]">{t("classes.reports.cardTitle")}</h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-[#636e72]">
-              {t("classes.reports.fieldClass")} *
+        <div className={cardClass}>
+           <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6 -mx-8 -mt-8 mb-8">
+            <div>
+              <h2 className={`text-lg font-black ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>{t("classes.reports.cardTitle")}</h2>
+              <p className={`text-xs font-medium ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Generate academic rosters and statistical records.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-6 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>{t("classes.reports.fieldClass")} *</label>
               <select
                 value={reportClassId}
                 onChange={(e) => setReportClassId(e.target.value)}
                 className={inputClass}
-                aria-label={t("classes.reports.fieldClass")}
               >
                 <option value="">{t("classes.reports.classPlaceholder")}</option>
+                {rooms.map((r) => (
+                  <option key={r.id} value={String(r.id)}>{r.name} ({r.academicYear})</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>{t("classes.reports.fieldTerm")}</label>
+              <input
+                value={reportTerm}
+                onChange={(e) => setReportTerm(e.target.value)}
+                className={inputClass}
+                placeholder="e.g. Term 1"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>{t("classes.reports.fieldFormat")}</label>
+              <select
+                value={reportType}
+                onChange={(e) => setReportType(e.target.value as "PDF" | "Excel")}
+                className={inputClass}
+              >
+                <option value="PDF">Standard PDF</option>
+                <option value="Excel">Data Sheet (Excel)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-8 flex flex-col sm:flex-row gap-8">
+            <div className="flex-1">
+              <h4 className={`text-sm font-black mb-4 uppercase tracking-widest ${isDarkUi ? "text-slate-500" : "text-slate-400"}`}>Live Preview</h4>
+              <div className={`rounded-[2rem] border p-8 relative overflow-hidden ${isDarkUi ? "bg-slate-800/30 border-slate-700" : "bg-slate-50 border-slate-100"}`}>
+                {!selectedReportRoom ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <div className="text-3xl mb-3">📄</div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t("classes.reports.helperSelectClass")}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex justify-between border-b border-slate-200/50 pb-2">
+                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Target Level</span>
+                       <span className={`text-xs font-bold ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>{selectedReportRoom.name}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-200/50 pb-2">
+                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Year / Term</span>
+                       <span className={`text-xs font-bold ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>{selectedReportRoom.academicYear} · {reportTerm || 'All'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-200/50 pb-2">
+                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Records</span>
+                       <span className={`text-xs font-bold ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>{reportStats.students} Students</span>
+                    </div>
+                     <div className="flex justify-between">
+                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Output Format</span>
+                       <span className="text-xs font-bold text-teal-600">{reportType} Document</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="sm:w-64 flex flex-col justify-end">
+               <button
+                type="button"
+                disabled={!selectedReportRoom}
+                onClick={handleGenerateReport}
+                className="w-full rounded-2xl bg-gradient-to-r from-[#0c2340] to-[#1a3a5c] py-4 text-sm font-black text-white shadow-xl shadow-[#0c2340]/20 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {t("classes.reports.btnGenerate")}
+              </button>
+              <p className="mt-4 text-[10px] font-medium text-slate-500 text-center px-4 leading-relaxed">
+                The generated document will contain admission numbers, full names, and stream assignments.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Modals */}
+      {showAddClassForm && (
+        <Modal 
+          title={editClassId ? "Update Class" : "Add New Class"} 
+          onClose={() => {
+            setShowAddClassForm(false);
+            setEditClassId(null);
+          }}
+          isDarkUi={isDarkUi}
+        >
+          <form
+            onSubmit={
+              editClassId
+                ? async (e) => {
+                    e.preventDefault();
+                    if (!className.trim()) {
+                      setError("Class name cannot be empty.");
+                      return;
+                    }
+                    if (!classCategoryId) {
+                      setError("Please select a class category.");
+                      return;
+                    }
+                    try {
+                      await updateClassroom(editClassId, {
+                        name: className.trim(),
+                        categoryId: Number(classCategoryId),
+                        description: classDesc.trim() || undefined,
+                      });
+                      setEditClassId(null);
+                      setClassName("");
+                      setClassDesc("");
+                      setClassCategoryId("");
+                      setShowAddClassForm(false);
+                      await loadDbData();
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Failed to update class");
+                    }
+                  }
+                : handleCreateClass
+            }
+            className="space-y-4"
+          >
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Class Name</label>
+              <input value={className} onChange={(e) => setClassName(e.target.value)} className={inputClass} placeholder="e.g. Primary 1" />
+            </div>
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Category</label>
+              <select value={classCategoryId} onChange={(e) => setClassCategoryId(e.target.value)} className={inputClass}>
+                <option value="">Select Category</option>
+                {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>Description</label>
+              <input value={classDesc} onChange={(e) => setClassDesc(e.target.value)} className={inputClass} placeholder="Optional" />
+            </div>
+            <ModalFooter 
+               onCancel={() => { setShowAddClassForm(false); setEditClassId(null); }} 
+               isDarkUi={isDarkUi}
+               confirmLabel={editClassId ? "Update Class" : "Save Class"}
+            />
+          </form>
+        </Modal>
+      )}
+
+      {showAddSectionForm && (
+        <Modal 
+          title={editSectionId ? t("classes.sections.formEditTitle") : t("classes.sections.formAddTitle")} 
+          onClose={() => {
+            setShowAddSectionForm(false);
+            setEditSectionId(null);
+            setSectionName("");
+            setSectionTeacher("");
+          }}
+          isDarkUi={isDarkUi}
+        >
+          <form onSubmit={handleCreateSection} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.sections.col.class")}</label>
+              <select
+                required
+                value={classRoomId}
+                onChange={(e) => setClassRoomId(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">{t("classes.sections.selectClass")}</option>
                 {rooms.map((r) => (
                   <option key={r.id} value={String(r.id)}>
                     {r.name} ({r.academicYear})
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-[#636e72]">
-              {t("classes.reports.fieldTerm")}
+            </div>
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.sections.col.section")}</label>
               <input
-                value={reportTerm}
-                onChange={(e) => setReportTerm(e.target.value)}
+                required
+                value={sectionName}
+                onChange={(e) => setSectionName(e.target.value)}
                 className={inputClass}
-                placeholder={t("classes.reports.termPlaceholder")}
+                placeholder={t("classes.sections.placeholderName")}
               />
-            </label>
-            <label className="flex min-w-0 flex-col gap-1 text-xs font-semibold text-[#636e72]">
-              {t("classes.reports.fieldFormat")}
+            </div>
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.sections.col.teacher")}</label>
               <select
-                value={reportType}
-                onChange={(e) => setReportType(e.target.value as "PDF" | "Excel")}
+                value={sectionTeacher}
+                onChange={(e) => setSectionTeacher(e.target.value)}
                 className={inputClass}
-                aria-label={t("classes.reports.fieldFormat")}
               >
-                <option value="PDF">PDF</option>
-                <option value="Excel">Excel</option>
+                <option value="">{t("classes.sections.placeholderTeacher")}</option>
+                {sectionTeacher && !teachers.some((x) => x.displayName === sectionTeacher) ? (
+                  <option value={sectionTeacher}>{sectionTeacher}</option>
+                ) : null}
+                {teachers.map((teacher) => (
+                  <option key={teacher.id} value={teacher.displayName}>
+                    {teacher.displayName}
+                  </option>
+                ))}
               </select>
-            </label>
-          </div>
+            </div>
+             <ModalFooter 
+               onCancel={() => { setShowAddSectionForm(false); setEditSectionId(null); }} 
+               isDarkUi={isDarkUi}
+               confirmLabel={editSectionId ? t("classes.sections.btnUpdate") : t("classes.sections.btnSave")}
+            />
+          </form>
+        </Modal>
+      )}
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-[#636e72]">
-              {reportClassId ? t("classes.reports.previewReady") : t("classes.reports.helperSelectClass")}
-            </p>
-            <button
-              type="button"
-              disabled={!selectedReportRoom}
-              onClick={handleGenerateReport}
-              className="rounded-lg bg-[#6a9570] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {t("classes.reports.btnGenerate")}
-            </button>
-          </div>
+      {showAddCategoryForm && (
+        <Modal 
+          title={editCategoryId ? t("classes.categories.formEditTitle") : t("classes.categories.formAddTitle")} 
+          onClose={closeCategoryForm}
+          isDarkUi={isDarkUi}
+        >
+          <form onSubmit={handleCategoryFormSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.categories.fieldName")}</label>
+              <input
+                required
+                value={categoryName}
+                onChange={(e) => setCategoryName(e.target.value)}
+                className={inputClass}
+                placeholder={t("classes.categories.placeholderName")}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={`text-[10px] font-black uppercase tracking-widest ${isDarkUi ? "text-slate-400" : "text-slate-500"}`}>{t("classes.categories.fieldDescription")}</label>
+              <input
+                value={categoryDesc}
+                onChange={(e) => setCategoryDesc(e.target.value)}
+                className={inputClass}
+                placeholder={t("classes.categories.placeholderDesc")}
+              />
+            </div>
+             <ModalFooter 
+               onCancel={closeCategoryForm} 
+               isDarkUi={isDarkUi}
+               confirmLabel={editCategoryId ? t("classes.categories.btnUpdate") : t("classes.categories.btnSave")}
+            />
+          </form>
+        </Modal>
+      )}
 
-          <div className="mt-3 rounded-lg border border-[#ebe4d9] bg-[#f8f6f1] px-4 py-3 text-sm text-[#636e72]">
-            <p className="font-semibold text-[#2d3436]">{t("classes.reports.previewTitle")}</p>
-            {!selectedReportRoom ? (
-              <p className="mt-2">{t("classes.reports.previewMissingClass")}</p>
-            ) : (
-              <div className="mt-2 grid gap-1 sm:grid-cols-2">
-                <p>
-                  <span className="font-semibold text-[#2d3436]">{t("classes.reports.previewClass")}:</span>{" "}
-                  {selectedReportRoom.name}
-                </p>
-                <p>
-                  <span className="font-semibold text-[#2d3436]">{t("classes.reports.previewTerm")}:</span>{" "}
-                  {reportTerm.trim() || t("classes.reports.termAny")}
-                </p>
-                <p>
-                  <span className="font-semibold text-[#2d3436]">{t("classes.reports.previewFormat")}:</span> {reportType}
-                </p>
-                <p>
-                  <span className="font-semibold text-[#2d3436]">{t("classes.reports.previewStudents")}:</span>{" "}
-                  {reportStats.students}
-                </p>
-                <p>
-                  <span className="font-semibold text-[#2d3436]">{t("classes.reports.previewStreams")}:</span>{" "}
-                  {reportStats.streams}
-                </p>
+      {/* Standard Error Modal */}
+      {error && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setError(null)} />
+           <div className={`relative w-full max-w-sm rounded-[2rem] p-8 shadow-2xl border ${isDarkUi ? "bg-slate-900 border-rose-500/30" : "bg-white border-rose-100"}`}>
+              <div className="flex flex-col items-center text-center">
+                 <div className="h-16 w-16 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center text-3xl mb-4">⚠️</div>
+                 <h3 className={`text-lg font-black mb-2 ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>Something went wrong</h3>
+                 <p className="text-sm font-medium text-slate-500 leading-relaxed mb-8">{error}</p>
+                 <button 
+                  onClick={() => setError(null)}
+                  className="w-full py-3 rounded-xl bg-rose-500 text-white font-bold shadow-lg shadow-rose-500/20 transition-all hover:brightness-105"
+                 >
+                   Dismiss
+                 </button>
               </div>
-            )}
-          </div>
-        </section>
-      ) : null}
+           </div>
+        </div>
+      )}
 
       <StudentDetailModal
         studentId={rosterStudentModal?.studentId ?? null}
@@ -1406,6 +1475,58 @@ export function ClassesSectionPage({
         onClose={() => setRosterStudentModal(null)}
         onChanged={() => void loadDbData()}
       />
+    </div>
+  );
+}
+
+function Modal({ title, children, onClose, isDarkUi }: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+  isDarkUi: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300" onClick={onClose} />
+      <div className={`relative w-full max-w-lg animate-in zoom-in-95 fade-in duration-300 rounded-[2.5rem] p-8 shadow-2xl ${
+        isDarkUi ? "bg-slate-900 border border-slate-700" : "bg-white"
+      }`}>
+        <div className="flex items-center justify-between mb-8">
+          <h3 className={`text-xl font-black tracking-tight ${isDarkUi ? "text-white" : "text-[#0c2340]"}`}>{title}</h3>
+          <button onClick={onClose} className="rounded-full p-2 hover:bg-slate-100 transition-colors">
+            <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ModalFooter({ onCancel, isDarkUi, confirmLabel }: {
+  onCancel: () => void;
+  isDarkUi: boolean;
+  confirmLabel: string;
+}) {
+  return (
+    <div className="mt-10 flex gap-4">
+      <button
+        type="button"
+        onClick={onCancel}
+        className={`flex-1 rounded-2xl py-3 text-sm font-bold transition-all ${
+          isDarkUi ? "bg-slate-800 text-slate-300 hover:bg-slate-700" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+        }`}
+      >
+        Cancel
+      </button>
+      <button
+        type="submit"
+        className="flex-1 rounded-2xl bg-gradient-to-r from-[#0c2340] to-[#1a3a5c] py-3 text-sm font-bold text-white shadow-lg shadow-[#0c2340]/20 transition-all hover:shadow-xl"
+      >
+        {confirmLabel}
+      </button>
     </div>
   );
 }

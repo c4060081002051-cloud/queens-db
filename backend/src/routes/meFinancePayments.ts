@@ -34,6 +34,13 @@ function ymd(d = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+function ymdFromValue(v: Date | string | null | undefined): string {
+  if (!v) return ymd();
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) return ymd();
+  return ymd(d);
+}
+
 function isAdminRole(role: string | null | undefined): boolean {
   const normalized = String(role ?? "").trim().toLowerCase();
   return normalized === "admin" || normalized === "super_admin";
@@ -306,23 +313,37 @@ export function createMeFinancePaymentsRouter() {
       if (termRaw) where.term = termRaw;
       const rows = await StudentFeeReceipt.findAll({
         where,
+        include: [
+          {
+            model: Student,
+            as: "student",
+            required: false,
+            include: [{ model: ClassRoom, as: "classRoom", required: false }],
+          },
+        ],
         order: [["created_at", "DESC"]],
         limit,
       });
       return res.json({
-        items: rows.map((x) => ({
-          id: x.id,
-          receiptNo: x.receiptNo,
-          issuedAt:
-            x.createdAt ??
-            (x.get("created_at") as Date | string | undefined) ??
-            new Date().toISOString(),
-          studentId: x.studentId,
-          term: x.term,
-          amountPaid: Number(x.amountPaidUgx),
-          paymentMethod: x.paymentMethod,
-          paidBy: x.paidBy,
-        })),
+        items: rows.map((x) => {
+          const student = x.get("student") as Student | null | undefined;
+          const studentRow = student ? studentToApiRow(student) : null;
+          return {
+            id: x.id,
+            receiptNo: x.receiptNo,
+            issuedAt:
+              x.createdAt ??
+              (x.get("created_at") as Date | string | undefined) ??
+              new Date().toISOString(),
+            studentId: x.studentId,
+            term: x.term,
+            amountPaid: Number(x.amountPaidUgx),
+            paymentMethod: x.paymentMethod,
+            paidBy: x.paidBy,
+            studentName: studentRow?.fullName ?? "Unknown student",
+            className: studentRow?.className ?? "—",
+          };
+        }),
       });
     } catch (err) {
       console.error(err);
@@ -359,6 +380,46 @@ export function createMeFinancePaymentsRouter() {
             new Date().toISOString(),
         })),
       });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.delete("/finance/receipts/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isFinite(id) || id < 1) {
+        return res.status(400).json({ error: "Invalid id" });
+      }
+
+      const receipt = await StudentFeeReceipt.findByPk(id);
+      if (!receipt) return res.status(404).json({ error: "Not found" });
+
+      const receiptDate = ymdFromValue(
+        receipt.createdAt ??
+          (receipt.get("created_at") as Date | string | undefined) ??
+          null,
+      );
+      const canWrite = await canWriteFinanceEntriesForDate(req.userId, receiptDate);
+      if (!canWrite) {
+        return res.status(403).json({
+          error:
+            "This daily report has already been submitted. Only admin can edit or delete entries now.",
+        });
+      }
+
+      const sequelize = StudentFeeReceipt.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
+      }
+
+      await sequelize.transaction(async (t) => {
+        await StudentFeePayment.destroy({ where: { receiptId: id }, transaction: t });
+        await StudentFeeReceipt.destroy({ where: { id }, transaction: t });
+      });
+
+      return res.status(204).send();
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });

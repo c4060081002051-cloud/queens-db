@@ -4,6 +4,7 @@ import { DailyExpensesPage } from "./expenses/DailyExpensesPage";
 import { DailyLedgerPage } from "./ledger/DailyLedgerPage";
 import { FinanceOverviewPage } from "./overview/FinanceOverviewPage";
 import { AssignFeesPage } from "./payments/AssignFeesPage";
+import { ReceiptsHistoryPage } from "./payments/ReceiptsHistoryPage";
 import { RecordStudentPaymentPage } from "./payments/RecordStudentPaymentPage";
 import { PayrollSummaryPage } from "./payroll/PayrollSummaryPage";
 import { AdminDailyReportsPage } from "./reports/AdminDailyReportsPage";
@@ -16,6 +17,7 @@ export type FinanceSection =
   | "debtors_report"
   | "assign_fees"
   | "record_payment"
+  | "receipts"
   | "bursery"
   | "busery"
   | "bursery_assignment"
@@ -30,7 +32,7 @@ function hasFinancePermission(user: any, permissionKey: string): boolean {
 
 function requiredPermissionForSection(section: FinanceSection): string | null {
   if (section === "assign_fees") return "finance_assign_fees";
-  if (section === "record_payment" || section === "bursery") return "finance_record_payments";
+  if (section === "record_payment" || section === "receipts" || section === "bursery") return "finance_record_payments";
   if (section === "busery" || section === "bursery_assignment") return "finance_bursary";
   if (section === "staff_payment") return "finance_staff_pay";
   if (section === "finance_summary") return "finance_summaries";
@@ -44,6 +46,7 @@ const sectionTitle: Record<FinanceSection, string> = {
   debtors_report: "Debtors Report",
   assign_fees: "Assign Fees",
   record_payment: "Record Student Payment",
+  receipts: "Receipts",
   bursery: "Record expences",
   busery: "Busery",
   bursery_assignment: "Assign Student Bursary",
@@ -70,6 +73,7 @@ export function FinanceSectionPage({
 
   const cards: Array<{ key: FinanceSection; desc: string; icon: string; color: string }> = [
     { key: "record_payment", desc: "Record payments and print DB-backed receipts.", icon: "💳", color: "from-[#eef2f7] to-[#e0e7f1]" },
+    { key: "receipts", desc: "View, reopen, and print all saved receipts.", icon: "🧾", color: "from-[#f8fbff] to-[#e8f0ff]" },
     { key: "assign_fees", desc: "Assign and adjust student term fees for accountants.", icon: "🧮", color: "from-[#eef7ff] to-[#dcecff]" },
     { key: "daily_report", desc: "Track ledger entries for the selected day.", icon: "📚", color: "from-[#fdfcfb] to-[#f4f1ee]" },
     { key: "finance_summary", desc: "Run daily report submission and review flow.", icon: "📑", color: "from-[#f5fbf8] to-[#e8f5ed]" },
@@ -131,6 +135,15 @@ export function FinanceSectionPage({
       <div className="min-w-0 space-y-4">
         {renderHeader(sectionTitle.assign_fees, "Search students and assign term fee amounts.")}
         <AssignFeesPage />
+      </div>
+    );
+  }
+
+  if (section === "receipts") {
+    return (
+      <div className="min-w-0 space-y-4">
+        {renderHeader(sectionTitle.receipts, "Review all generated receipts and reprint when needed.")}
+        <ReceiptsHistoryPage />
       </div>
     );
   }

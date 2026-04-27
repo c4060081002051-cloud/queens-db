@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { type DashboardPayload } from "../api/dashboard";
 import { fetchFinanceDashboard } from "../api/financeDashboard";
 import { fetchMessages, type InboxMessageApiItem } from "../api/inbox";
@@ -7,64 +7,126 @@ import { formatCurrencyUGX } from "../components/finance/shared/financeFormat";
 import { EventScheduleCard, StatCard } from "./OverviewShared";
 
 function TreasuryFlowChart({ transactions, net }: { transactions: FinanceDashboardPayload["recentTransactions"]; net: number }) {
-  let current = net;
+  const { earningsSeries, expenditureSeries, earningsTotal, expenditureTotal } = useMemo(() => {
+    const ordered = [...transactions].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
 
-  const history = [current];
-  [...transactions].forEach((t) => {
-    const diff = t.type === "income" ? -t.amount : t.amount;
-    current += diff;
-    history.push(current);
-  });
-  history.reverse();
-  if (history.length < 2) history.push(...[net, net, net, net]);
+    const earnings: number[] = [0];
+    const expenditures: number[] = [0];
+    let runningEarnings = 0;
+    let runningExpenditure = 0;
 
-  const min = Math.min(...history) * 0.95;
-  const max = Math.max(...history) * 1.05;
+    for (const item of ordered) {
+      if (item.type === "income") {
+        runningEarnings += item.amount;
+      } else {
+        runningExpenditure += item.amount;
+      }
+      earnings.push(runningEarnings);
+      expenditures.push(runningExpenditure);
+    }
+
+    if (earnings.length < 2) {
+      earnings.push(0, 0, 0, 0);
+      expenditures.push(0, 0, 0, 0);
+    }
+
+    return {
+      earningsSeries: earnings,
+      expenditureSeries: expenditures,
+      earningsTotal: runningEarnings,
+      expenditureTotal: runningExpenditure,
+    };
+  }, [transactions]);
+
+  const max = Math.max(...earningsSeries, ...expenditureSeries, 1) * 1.1;
+  const min = 0;
   const range = max - min || 1;
   const width = 800;
   const height = 240;
 
-  const stepX = width / (history.length - 1);
-  const coords = history.map((val, i) => [i * stepX, height - ((val - min) / range) * height]);
+  const stepX = width / Math.max(earningsSeries.length - 1, 1);
+  const earningsCoords = earningsSeries.map((val, i) => [
+    i * stepX,
+    height - ((val - min) / range) * height,
+  ]);
+  const expenditureCoords = expenditureSeries.map((val, i) => [
+    i * stepX,
+    height - ((val - min) / range) * height,
+  ]);
 
-  const linePath = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x} ${y}`).join(" ");
-  const areaPath = `${linePath} L ${width} ${height} L 0 ${height} Z`;
+  const earningsLinePath = earningsCoords
+    .map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x} ${y}`)
+    .join(" ");
+  const expenditureLinePath = expenditureCoords
+    .map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x} ${y}`)
+    .join(" ");
+  const earningsAreaPath = `${earningsLinePath} L ${width} ${height} L 0 ${height} Z`;
+  const expenditureAreaPath = `${expenditureLinePath} L ${width} ${height} L 0 ${height} Z`;
 
-  const isUp = history[history.length - 1] >= history[0];
-  const color = isUp ? "#6a9570" : "#e67e22";
+  const netDelta = earningsTotal - expenditureTotal;
+  const isUp = netDelta >= 0;
+  const trendPct = Math.abs((netDelta / Math.max(earningsTotal, 1)) * 100);
 
   return (
     <section className="neo-card flex h-full flex-col p-4 sm:p-5">
       <div className="flex justify-between items-start mb-2">
         <div>
           <h2 className="border-b border-[#ebe4d9] pb-2 text-sm font-semibold text-[#2d3436]">Treasury Flow</h2>
-          <p className="mt-2 text-2xl font-black text-[#2d3436] tracking-tight">{formatCurrencyUGX(history[history.length - 1])}</p>
+          <p className="mt-2 text-2xl font-black text-[#2d3436] tracking-tight">{formatCurrencyUGX(net)}</p>
+          <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wide">
+            <span className="rounded-full bg-[#e8f4e9] px-2.5 py-1 text-[#3d7a46]">
+              Earnings: {formatCurrencyUGX(earningsTotal)}
+            </span>
+            <span className="rounded-full bg-[#fce8e5] px-2.5 py-1 text-[#b4463d]">
+              Expenditures: {formatCurrencyUGX(expenditureTotal)}
+            </span>
+          </div>
         </div>
         <div className={`text-xs font-bold ${isUp ? "text-[#6a9570]" : "text-[#e67e22]"}`}>
-          {isUp ? "▲+" : "▼-"}{Math.abs(((history[history.length - 1] - history[0]) / (history[0] || 1)) * 100).toFixed(1)}%
+          {isUp ? "▲+" : "▼-"}
+          {trendPct.toFixed(1)}%
         </div>
       </div>
 
       <div className="neo-inset-field mt-4 flex min-h-[160px] flex-1 items-end justify-center rounded-2xl p-4 overflow-hidden relative">
         <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full h-[180px] mt-auto">
           <defs>
-            <linearGradient id="glow-line-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-              <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+            <linearGradient id="earnings-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#6a9570" stopOpacity="0.2" />
+              <stop offset="100%" stopColor="#6a9570" stopOpacity="0.02" />
+            </linearGradient>
+            <linearGradient id="expenses-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#e67e22" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#e67e22" stopOpacity="0.02" />
             </linearGradient>
           </defs>
-          <path d={areaPath} fill="url(#glow-line-fill)" />
+          <path d={earningsAreaPath} fill="url(#earnings-fill)" />
+          <path d={expenditureAreaPath} fill="url(#expenses-fill)" />
           <path
-            d={linePath}
+            d={earningsLinePath}
             fill="none"
-            stroke={color}
-            strokeWidth="3.5"
+            stroke="#6a9570"
+            strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
             className="drop-shadow-[0_4px_4px_rgba(0,0,0,0.05)] transition-all duration-300"
           />
-          {coords.map(([x, y], i) => (
-            <circle key={i} cx={x} cy={y} r="4" fill="#faf7f0" stroke={color} strokeWidth="2" />
+          <path
+            d={expenditureLinePath}
+            fill="none"
+            stroke="#e67e22"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="drop-shadow-[0_4px_4px_rgba(0,0,0,0.05)] transition-all duration-300"
+          />
+          {earningsCoords.map(([x, y], i) => (
+            <circle key={`e-${i}`} cx={x} cy={y} r="3.5" fill="#faf7f0" stroke="#6a9570" strokeWidth="2" />
+          ))}
+          {expenditureCoords.map(([x, y], i) => (
+            <circle key={`x-${i}`} cx={x} cy={y} r="3.5" fill="#faf7f0" stroke="#e67e22" strokeWidth="2" />
           ))}
         </svg>
       </div>

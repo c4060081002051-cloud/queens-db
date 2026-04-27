@@ -179,6 +179,12 @@ export function createAuthRouter(config: Config) {
     if (!ok || !user) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
+    if (user.isDeleted) {
+      return res.status(403).json({ error: "Account is no longer available." });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ error: "Account is deactivated. Contact an administrator." });
+    }
 
     if (user.role === "pending_assignment") {
       return res.status(403).json({
@@ -244,6 +250,8 @@ export function createAuthRouter(config: Config) {
         addressLine: addressLine.trim(),
         role: "pending_assignment",
         passwordHash,
+        isActive: true,
+        isDeleted: false,
       });
 
       const admins = await User.findAll({
@@ -318,6 +326,12 @@ export function createAuthRouter(config: Config) {
       if (!row || row.email !== payload.email) {
         return res.status(400).json({ error: "Invalid sign-in session." });
       }
+      if (row.isDeleted) {
+        return res.status(403).json({ error: "Account is no longer available." });
+      }
+      if (!row.isActive) {
+        return res.status(403).json({ error: "Account is deactivated. Contact an administrator." });
+      }
 
       const expiresIn = payload.remember ? "30d" : "7d";
       const token = jwt.sign(
@@ -346,6 +360,10 @@ export function createAuthRouter(config: Config) {
       };
       const id = Number.parseInt(payload.sub, 10);
       if (!Number.isFinite(id)) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const authUser = await User.findByPk(id, { attributes: ["id", "isActive", "isDeleted"] });
+      if (!authUser || authUser.isDeleted || !authUser.isActive) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       const jwtFallback = {

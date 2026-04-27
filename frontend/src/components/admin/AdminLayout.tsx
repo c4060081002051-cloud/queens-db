@@ -6,6 +6,7 @@ import {
   requestTwoFactorOtp,
 } from "../../api/account";
 import { fetchExamTypeConfigs, type ExamTypeConfigRow } from "../../api/academics";
+import { fetchGeneralSettings } from "../../api/settingsGeneral";
 import { useI18n } from "../../i18n/I18nProvider";
 import { localeLabels, type Locale } from "../../i18n/messages";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -58,6 +59,7 @@ type AdminLayoutProps = {
       | "debtors_report"
       | "assign_fees"
       | "record_payment"
+      | "receipts"
       | "bursery"
       | "busery"
       | "staff_payment"
@@ -347,6 +349,7 @@ type NavLeaf = {
     | "debtors_report"
     | "assign_fees"
     | "record_payment"
+    | "receipts"
     | "bursery"
     | "busery"
     | "staff_payment"
@@ -359,7 +362,12 @@ type NavLeaf = {
 
 type NavGroup = { id: string; title: string; icon: NavIcon; items: NavLeaf[] };
 
-function buildNavGroups(t: (key: string) => string, role: string, permissions: string[]): NavGroup[] {
+function buildNavGroups(
+  t: (key: string) => string,
+  role: string,
+  permissions: string[],
+  sectionsStreamsEnabled: boolean,
+): NavGroup[] {
   const r = role.toLowerCase();
   const hasPerm = (key?: string) =>
     !key || r === "super_admin" || r === "admin" || permissions.includes(key);
@@ -382,7 +390,16 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
       icon: IconGrid,
       items: [
         { icon: IconGrid, label: t("nav.classes.allClasses"), classSection: "all_classes", requiredPermission: "classes_all" },
-        { icon: IconLayers, label: t("nav.classes.sectionsStreams"), classSection: "sections_streams", requiredPermission: "classes_sections_streams" },
+        ...(sectionsStreamsEnabled
+          ? [
+              {
+                icon: IconLayers,
+                label: t("nav.classes.sectionsStreams"),
+                classSection: "sections_streams" as const,
+                requiredPermission: "classes_sections_streams",
+              },
+            ]
+          : []),
         { icon: IconUsers, label: t("nav.classes.classStudents"), classSection: "class_students", requiredPermission: "classes_students" },
         { icon: IconGradCap, label: t("nav.classes.classTeachers"), classSection: "class_teachers", requiredPermission: "classes_teachers" },
         { icon: IconClipboard, label: t("nav.classes.classCategories"), classSection: "class_categories", requiredPermission: "classes_categories" },
@@ -408,20 +425,42 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
           label: t("nav.curriculum.examsDashboard"),
           curriculumSection: "exams_dashboard",
         },
-        { icon: IconGradCap, label: t("nav.curriculum.exam.bot"), curriculumSection: "exam_bot" },
-        { icon: IconGradCap, label: t("nav.curriculum.exam.mid"), curriculumSection: "exam_mid" },
-        { icon: IconGradCap, label: t("nav.curriculum.exam.eot"), curriculumSection: "exam_eot" },
         {
-          icon: IconClipboard,
-          label: t("nav.curriculum.tests.assessments"),
-          curriculumSection: "assessment_tests",
+          icon: IconChartBars,
+          label: "Exam Scheduling",
+          curriculumSection: "exam_schedule",
+        },
+        {
+          icon: IconGradCap,
+          label: "Exam Performance",
+          // This will be a header for sub-items like BOT, MID, EOT
+          curriculumSection: "exam_bot", 
         },
         {
           icon: IconClipboard,
           label: t("nav.curriculum.resultsEntry"),
           curriculumSection: "result_entry",
         },
-        { icon: IconPromotion, label: t("nav.curriculum.blankPage"), curriculumSection: "blank_page" },
+        {
+          icon: IconClipboard,
+          label: "Report Remarks",
+          curriculumSection: "report_remarks",
+        },
+        {
+          icon: IconSettings,
+          label: "Grading Standards",
+          curriculumSection: "grading_standards",
+        },
+        { 
+          icon: IconGrid, 
+          label: "Subjects & Settings", 
+          curriculumSection: "blank_page" 
+        },
+        {
+          icon: IconPromotion,
+          label: "Promotion & Graduation",
+          curriculumSection: "promotion_engine",
+        },
       ],
     },
     {
@@ -433,6 +472,7 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
         { icon: IconBook, label: t("nav.operations.store"), financeSection: "debtors_report", requiredPermission: "finance_reports" },
         { icon: IconWallet, label: t("nav.operations.assignFees"), financeSection: "assign_fees", requiredPermission: "finance_assign_fees" },
         { icon: IconWallet, label: t("nav.operations.accounts"), financeSection: "record_payment", requiredPermission: "finance_record_payments" },
+        { icon: IconClipboard, label: t("nav.operations.receipts"), financeSection: "receipts", requiredPermission: "finance_record_payments" },
         { icon: IconBus, label: t("nav.operations.transport"), financeSection: "bursery", requiredPermission: "finance_record_payments" },
         { icon: IconUsers, label: t("nav.operations.hostel"), financeSection: "staff_payment", requiredPermission: "finance_staff_pay" },
         { icon: IconClipboard, label: t("nav.operations.busery"), financeSection: "busery", requiredPermission: "finance_bursary" },
@@ -482,6 +522,12 @@ function buildNavGroups(t: (key: string) => string, role: string, permissions: s
           label: t("nav.settings.feesStructure"),
           settingsPanel: "fees_structure",
           requiredPermission: "settings_fees_structure",
+        },
+        {
+          icon: IconLayers,
+          label: t("nav.settings.classStructure"),
+          settingsPanel: "class_structure",
+          requiredPermission: "settings_general",
         },
         { icon: IconGrid, label: t("nav.settings.general"), settingsPanel: "general", requiredPermission: "settings_general" },
         { icon: IconBell, label: t("nav.settings.notifications") },
@@ -578,9 +624,16 @@ export function AdminLayout({
 }: AdminLayoutProps) {
   const { t, locale, setLocale } = useI18n();
   const { resolvedTheme, density } = useTheme();
+  const [sectionsStreamsEnabled, setSectionsStreamsEnabled] = useState(true);
   const navGroups = useMemo(
-    () => buildNavGroups(t, user?.role ?? "admin", user?.permissions ?? []),
-    [t, user?.role, user?.permissions],
+    () =>
+      buildNavGroups(
+        t,
+        user?.role ?? "admin",
+        user?.permissions ?? [],
+        sectionsStreamsEnabled,
+      ),
+    [t, user?.role, user?.permissions, sectionsStreamsEnabled],
   );
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -644,6 +697,38 @@ export function AdminLayout({
     if (role === "admin" || role === "super_admin") return true;
     return Boolean(user?.permissions?.includes(permissionKey));
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    const applySectionsStreamsSetting = (settings: Record<string, string>) => {
+      const enabled = (settings.classes_sections_streams_enabled ?? "yes") === "yes";
+      setSectionsStreamsEnabled(enabled);
+    };
+    const loadSettings = async () => {
+      try {
+        const settings = await fetchGeneralSettings();
+        if (cancelled) return;
+        applySectionsStreamsSetting(settings);
+      } catch {
+        if (!cancelled) setSectionsStreamsEnabled(true);
+      }
+    };
+    void loadSettings();
+
+    const handleGeneralSettingsUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<Record<string, string>>;
+      if (customEvent.detail && typeof customEvent.detail === "object") {
+        applySectionsStreamsSetting(customEvent.detail);
+        return;
+      }
+      void loadSettings();
+    };
+    window.addEventListener("settings:general-updated", handleGeneralSettingsUpdated);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("settings:general-updated", handleGeneralSettingsUpdated);
+    };
+  }, []);
 
   useEffect(() => {
     async function loadExamTypes() {
@@ -751,7 +836,7 @@ export function AdminLayout({
     setUserMenuProfile(false);
   }
 
-  const themeClass = resolvedTheme === "dark" ? "theme-dark" : "";
+  const themeClass = resolvedTheme === "tinted-dark" ? "theme-tinted-dark" : resolvedTheme === "dark" ? "theme-dark" : "";
 
   return (
     <div
@@ -772,31 +857,26 @@ export function AdminLayout({
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex h-11 items-center gap-1.5 border-b border-white/30 px-2 sm:px-2.5">
+        <div className="relative flex flex-col items-center justify-center gap-2 border-b border-white/30 px-3 py-4 text-center">
           <button
             type="button"
-            className="neo-icon-btn rounded-lg p-1.5 text-[#636e72] lg:hidden"
+            className="neo-icon-btn absolute left-2 top-2 rounded-lg p-1.5 text-[#636e72] lg:hidden"
             onClick={() => setSidebarOpen(false)}
             aria-label={t("layout.closeSidebar")}
           >
             <MenuIcon />
           </button>
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="neo-logo flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg">
-              <img
-                src="/school-badge-v2.png"
-                alt="School badge"
-                className="h-full w-full object-contain"
-              />
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-xs font-bold tracking-tight text-[#2d3436]">
-                Queens Nursery and Primary School, Bunamwaya
-              </p>
-              <p className="truncate text-[9px] font-semibold uppercase tracking-[0.14em] text-[#636e72]">
-                {t("brand.subtitle")}
-              </p>
-            </div>
+          <div className="neo-logo flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/70 shadow-[inset_1px_1px_3px_rgba(0,0,0,0.08)]">
+            <img
+              src="/school-badge-v2.png"
+              alt="School badge"
+              className="h-full w-full object-contain"
+            />
+          </div>
+          <div className="min-w-0">
+            <p className="text-center text-[15px] font-bold leading-tight text-[#2f37a4] [font-size:clamp(16px,1.5vw,15px)]">
+              Queens School Nursery & Primary School
+            </p>
           </div>
         </div>
 
@@ -986,6 +1066,21 @@ export function AdminLayout({
                           >
                             <IconPromotion className="h-3.5 w-3.5 shrink-0 text-[#5a8faf] opacity-90" />
                             <span className="min-w-0 flex-1 truncate">{t("nav.curriculum.blankPage")}</span>
+                          </button>
+                        </li>
+                        ) : null}
+                        {canAccess("curriculum_result_entry") ? (
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectCurriculumSection?.("learns_report");
+                              setSidebarOpen(false);
+                            }}
+                            className="neo-nav-item flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] font-medium leading-snug text-[#636e72]"
+                          >
+                            <IconChartBars className="h-3.5 w-3.5 shrink-0 text-[#5a8faf] opacity-90" />
+                            <span className="min-w-0 flex-1 truncate">{t("nav.curriculum.learnsReport")}</span>
                           </button>
                         </li>
                         ) : null}

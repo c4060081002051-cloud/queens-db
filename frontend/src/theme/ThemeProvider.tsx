@@ -8,18 +8,23 @@ import {
   type ReactNode,
 } from "react";
 
-export type ThemePreference = "light" | "dark" | "system";
+export type ThemePreference = "light" | "dark" | "tinted-dark" | "system";
 export type Density = "comfortable" | "compact";
 
 const THEME_KEY = "junior_school_theme_pref";
 const DENSITY_KEY = "junior_school_density";
+const FONT_KEY = "junior_school_font_family";
+
+export type FontPreference = "Inter" | "Outfit" | "Poppins" | "Manrope" | "Plus Jakarta Sans";
 
 type ThemeContextValue = {
   themePreference: ThemePreference;
   setThemePreference: (v: ThemePreference) => void;
-  resolvedTheme: "light" | "dark";
+  resolvedTheme: "light" | "dark" | "tinted-dark";
   density: Density;
   setDensity: (v: Density) => void;
+  fontFamily: FontPreference;
+  setFontFamily: (v: FontPreference) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -27,7 +32,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 function readStoredTheme(): ThemePreference {
   try {
     const v = localStorage.getItem(THEME_KEY);
-    if (v === "light" || v === "dark" || v === "system") return v;
+    if (v === "light" || v === "dark" || v === "tinted-dark" || v === "system") return v as ThemePreference;
   } catch {
     /* ignore */
   }
@@ -44,10 +49,21 @@ function readStoredDensity(): Density {
   return "comfortable";
 }
 
+function readStoredFont(): FontPreference {
+  try {
+    const v = localStorage.getItem(FONT_KEY);
+    if (v === "Inter" || v === "Outfit" || v === "Poppins" || v === "Manrope" || v === "Plus Jakarta Sans") return v as FontPreference;
+  } catch {
+    /* ignore */
+  }
+  return "Inter";
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themePreference, setThemePreferenceState] =
     useState<ThemePreference>(readStoredTheme);
   const [density, setDensityState] = useState<Density>(readStoredDensity);
+  const [fontFamily, setFontFamilyState] = useState<FontPreference>(readStoredFont);
   const [systemDark, setSystemDark] = useState(() =>
     typeof window === "undefined"
       ? false
@@ -61,7 +77,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  const resolvedTheme: "light" | "dark" =
+  useEffect(() => {
+    document.body.style.fontFamily = `'${fontFamily}', sans-serif`;
+  }, [fontFamily]);
+
+  const resolvedTheme: "light" | "dark" | "tinted-dark" =
     themePreference === "system"
       ? systemDark
         ? "dark"
@@ -86,6 +106,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setFontFamily = useCallback((v: FontPreference) => {
+    setFontFamilyState(v);
+    try {
+      localStorage.setItem(FONT_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const value = useMemo(
     () => ({
       themePreference,
@@ -93,6 +122,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       resolvedTheme,
       density,
       setDensity,
+      fontFamily,
+      setFontFamily,
     }),
     [
       themePreference,
@@ -100,6 +131,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       resolvedTheme,
       density,
       setDensity,
+      fontFamily,
+      setFontFamily,
     ],
   );
 

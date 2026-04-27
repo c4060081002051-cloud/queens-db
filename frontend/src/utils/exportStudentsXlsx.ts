@@ -15,7 +15,6 @@ export function exportStudentsToXlsx(
     country: string;
     district: string;
     registrationType: string;
-    previousSchool: string;
   },
 ): void {
   const headers = [
@@ -29,7 +28,6 @@ export function exportStudentsToXlsx(
     columnLabels.country,
     columnLabels.district,
     columnLabels.registrationType,
-    columnLabels.previousSchool,
   ];
   const data = rows.map((r) => [
     r.admissionNumber,
@@ -42,7 +40,6 @@ export function exportStudentsToXlsx(
     r.countryName ?? r.countryCode ?? "",
     r.district ?? "",
     r.registrationType ?? "",
-    r.previousSchool ?? "",
   ]);
   const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
   const wb = XLSX.utils.book_new();

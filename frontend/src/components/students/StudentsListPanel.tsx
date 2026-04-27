@@ -242,7 +242,6 @@ export function StudentsListPanel({
       country: t("students.col.country"),
       district: t("students.col.district"),
       registrationType: t("students.col.registrationType"),
-      previousSchool: t("students.col.previousSchool"),
     });
   };
 
@@ -611,7 +610,6 @@ export function StudentsListPanel({
             <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.country")}:</span> {profileCard.countryName ?? profileCard.countryCode ?? "—"}</p>
             <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.district")}:</span> {profileCard.district ?? "—"}</p>
             <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.registrationType")}:</span> {profileCard.registrationType}</p>
-            <p className="rounded-xl bg-white/80 px-3 py-2 sm:col-span-2"><span className="font-semibold text-[#636e72]">{t("students.col.previousSchool")}:</span> {profileCard.previousSchool ?? "—"}</p>
           </div>
           <div className="mt-4 flex flex-wrap gap-2 border-t border-[#dce6f2] pt-3">
             <button

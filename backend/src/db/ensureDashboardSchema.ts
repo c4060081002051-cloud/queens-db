@@ -214,16 +214,161 @@ export async function ensureDashboardSchema(sequelize: Sequelize): Promise<void>
     CREATE TABLE IF NOT EXISTS staff_members (
       id INT UNSIGNED NOT NULL AUTO_INCREMENT,
       user_id INT UNSIGNED NULL,
+      staff_type VARCHAR(20) NOT NULL DEFAULT 'teaching',
       display_name VARCHAR(120) NOT NULL,
       email VARCHAR(255) NULL,
       staff_role VARCHAR(40) NOT NULL,
+      phone VARCHAR(32) NULL,
+      address VARCHAR(255) NULL,
+      gender VARCHAR(20) NULL,
+      date_of_birth VARCHAR(20) NULL,
+      nationality VARCHAR(100) NULL,
+      marital_status VARCHAR(40) NULL,
+      national_id VARCHAR(60) NULL,
+      qualification VARCHAR(120) NULL,
+      languages VARCHAR(255) NULL,
+      date_of_joining VARCHAR(20) NULL,
+      experience TEXT NULL,
+      emergency_contact_name VARCHAR(120) NULL,
+      emergency_contact_phone VARCHAR(32) NULL,
+      referee_name VARCHAR(120) NULL,
+      referee_contact VARCHAR(120) NULL,
+      staff_photo_url VARCHAR(255) NULL,
+      staff_photo_name VARCHAR(255) NULL,
+      assigned_class VARCHAR(80) NULL,
+      teaching_section VARCHAR(32) NULL,
+      staff_category VARCHAR(32) NULL,
+      national_id_photo_url VARCHAR(255) NULL,
+      national_id_photo_name VARCHAR(255) NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
       KEY staff_members_role_idx (staff_role),
+      KEY staff_members_type_idx (staff_type),
       KEY staff_members_user_idx (user_id),
       CONSTRAINT fk_staff_members_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN staff_type VARCHAR(20) NOT NULL DEFAULT 'teaching'",
+    "staff_members.staff_type",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN phone VARCHAR(32) NULL",
+    "staff_members.phone",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN address VARCHAR(255) NULL",
+    "staff_members.address",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN gender VARCHAR(20) NULL",
+    "staff_members.gender",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN date_of_birth VARCHAR(20) NULL",
+    "staff_members.date_of_birth",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN nationality VARCHAR(100) NULL",
+    "staff_members.nationality",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN marital_status VARCHAR(40) NULL",
+    "staff_members.marital_status",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN national_id VARCHAR(60) NULL",
+    "staff_members.national_id",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN qualification VARCHAR(120) NULL",
+    "staff_members.qualification",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN languages VARCHAR(255) NULL",
+    "staff_members.languages",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN date_of_joining VARCHAR(20) NULL",
+    "staff_members.date_of_joining",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN experience TEXT NULL",
+    "staff_members.experience",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN emergency_contact_name VARCHAR(120) NULL",
+    "staff_members.emergency_contact_name",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN emergency_contact_phone VARCHAR(32) NULL",
+    "staff_members.emergency_contact_phone",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN referee_name VARCHAR(120) NULL",
+    "staff_members.referee_name",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN referee_contact VARCHAR(120) NULL",
+    "staff_members.referee_contact",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN staff_photo_url VARCHAR(255) NULL",
+    "staff_members.staff_photo_url",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN staff_photo_name VARCHAR(255) NULL",
+    "staff_members.staff_photo_name",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN assigned_class VARCHAR(80) NULL",
+    "staff_members.assigned_class",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN teaching_section VARCHAR(32) NULL",
+    "staff_members.teaching_section",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN staff_category VARCHAR(32) NULL",
+    "staff_members.staff_category",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN national_id_photo_url VARCHAR(255) NULL",
+    "staff_members.national_id_photo_url",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN national_id_photo_name VARCHAR(255) NULL",
+    "staff_members.national_id_photo_name",
+  );
+  await addColumnIfMissing(
+    sequelize,
+    "ALTER TABLE staff_members ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+    "staff_members.updated_at",
+  );
 
   await sequelize.query(`
     CREATE TABLE IF NOT EXISTS enquiries (
@@ -473,6 +618,64 @@ export async function ensureDashboardSchema(sequelize: Sequelize): Promise<void>
       UNIQUE KEY uq_subject_assignment_category_section_subject (class_category_id, section_name, subject_name),
       KEY idx_subject_assignment_category (class_category_id),
       CONSTRAINT fk_subject_assignment_category FOREIGN KEY (class_category_id) REFERENCES class_categories (id) ON DELETE CASCADE ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS grading_scale (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      name VARCHAR(80) NOT NULL,
+      thresholds JSON NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_grading_scale_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS report_comments (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      student_id INT UNSIGNED NOT NULL,
+      term VARCHAR(20) NOT NULL,
+      comment TEXT NOT NULL,
+      created_by_user_id INT UNSIGNED NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY report_comments_student_idx (student_id),
+      KEY report_comments_term_idx (term),
+      CONSTRAINT fk_report_comments_student FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT fk_report_comments_user FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id INT UNSIGNED NULL,
+      action VARCHAR(120) NOT NULL,
+      entity VARCHAR(80) NOT NULL,
+      entity_id INT UNSIGNED NULL,
+      details JSON NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY audit_logs_user_idx (user_id),
+      KEY audit_logs_entity_idx (entity, entity_id),
+      CONSTRAINT fk_audit_logs_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS exams (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      exam_key VARCHAR(40) NOT NULL,
+      class_room_id INT UNSIGNED NOT NULL,
+      subject VARCHAR(120) NOT NULL,
+      exam_date DATE NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY exams_classroom_idx (class_room_id),
+      KEY exams_date_idx (exam_date),
+      CONSTRAINT fk_exams_classroom FOREIGN KEY (class_room_id) REFERENCES classrooms (id) ON DELETE CASCADE ON UPDATE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 }

@@ -1,28 +1,6 @@
-/** Subject list for prior/entry marks, keyed by standard class name (KG1–P7). */
+/** Default subject list for prior/entry marks. */
 export function subjectsForClassRoom(className: string): string[] {
-  const n = className.trim().toUpperCase();
-  /* Kindergarten: KG1–KG3 — five learning areas */
-  if (/^KG[1-3]$/.test(n)) {
-    return [
-      "Learning Area (LA) 1",
-      "Learning Area (LA) 2",
-      "Learning Area (LA) 3",
-      "Learning Area (LA) 4",
-      "Learning Area (LA) 5",
-    ];
-  }
-  /* Lower primary: P1–P3 */
-  if (/^P[1-3]$/.test(n)) {
-    return [
-      "English",
-      "Mathematics",
-      "Literacy A",
-      "Literacy B",
-      "Luganda",
-      "Religious Education",
-    ];
-  }
-  /* Upper primary (P4–P7) and default for any unclassified class */
+  void className;
   return ["English", "Mathematics", "Social Studies", "Science"];
 }
 

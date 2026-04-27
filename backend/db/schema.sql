@@ -1,12 +1,30 @@
 -- Run in phpMyAdmin or: mysql -u root queensdb < db/schema.sql
 -- Create database first if needed: CREATE DATABASE queensdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 --
--- Tables match Sequelize models in src/models/index.ts
+-- Tables align with Sequelize models in src/models/index.ts.
+-- Other tables (exams, fees, …) may be created by API sync (npm run db:sync).
 --
--- Alternative: with NODE_ENV=development the API runs Sequelize sync on startup by default.
--- Or run manually: cd backend && npm run db:sync
+-- TABLE GROUPS (phpMyAdmin: expand queensdb in this order mentally)
+--   1) users              — accounts
+--   2) class_categories   — stream / level lookup
+--   3) classrooms         — class units (links to category)
+--   4) class_sections     — sections within a class
+--   5) user_class_authorizations — which user may access which class
+--   6) students           — pupils (optional link to classroom)
+--   7) password_reset_otps, security_otp_challenges — auth flows
+--   8) user_notifications, user_messages — inbox
+--   9) role_permissions, user_permission_overrides — RBAC
+--  10) staff_members … dashboard_kpis — dashboard
+--  11) academic_exam_types, academic_subject_assignments — curriculum
+--
+-- Alternative: NODE_ENV=development runs Sequelize sync on startup by default.
+-- Or: cd backend && npm run db:sync
 
 USE queensdb;
+
+-- =============================================================================
+-- 1) Core: users
+-- =============================================================================
 
 CREATE TABLE IF NOT EXISTS users (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -19,9 +37,33 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(50) NOT NULL DEFAULT 'admin',
   two_factor_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_users_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Default admin: admin@gmail.com / admin@123 (bcrypt cost 12; run npm run seed:admin to reset)
+INSERT INTO users (email, password_hash, role) VALUES
+(
+  'admin@gmail.com',
+  '$2b$12$YnyOYoR6II6QgyMXi3ewg.WnHd.mwAdBPNddOZOQnWdi39zcTsTZK',
+  'admin'
+)
+ON DUPLICATE KEY UPDATE email = email;
+
+-- =============================================================================
+-- 2) Classes & access (dependency: class_categories → classrooms → sections)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS class_categories (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(80) NOT NULL,
+  description VARCHAR(255) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_class_categories_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS classrooms (
@@ -32,16 +74,9 @@ CREATE TABLE IF NOT EXISTS classrooms (
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   academic_year VARCHAR(20) NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS class_categories (
-  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  name VARCHAR(80) NOT NULL,
-  description VARCHAR(255) NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_class_categories_name (name)
+  KEY classrooms_category_idx (category_id),
+  CONSTRAINT fk_classrooms_category FOREIGN KEY (category_id) REFERENCES class_categories (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS class_sections (
@@ -56,6 +91,24 @@ CREATE TABLE IF NOT EXISTS class_sections (
   KEY class_sections_class_idx (class_room_id),
   CONSTRAINT fk_class_sections_classroom FOREIGN KEY (class_room_id) REFERENCES classrooms (id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Sequelize: UserClassAuthorization — links admin users to classes they may manage
+CREATE TABLE IF NOT EXISTS user_class_authorizations (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id INT UNSIGNED NOT NULL,
+  class_room_id INT UNSIGNED NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_user_class_authorizations_user_class (user_id, class_room_id),
+  KEY user_class_auth_user_idx (user_id),
+  KEY user_class_auth_class_idx (class_room_id),
+  CONSTRAINT fk_user_class_auth_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_user_class_auth_classroom FOREIGN KEY (class_room_id) REFERENCES classrooms (id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================================
+-- 3) Students
+-- =============================================================================
 
 CREATE TABLE IF NOT EXISTS students (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -104,14 +157,9 @@ CREATE TABLE IF NOT EXISTS students (
   CONSTRAINT fk_students_classroom FOREIGN KEY (class_room_id) REFERENCES classrooms (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Default admin: admin@gmail.com / admin@123 (bcrypt cost 12; run npm run seed:admin to reset)
-INSERT INTO users (email, password_hash, role) VALUES
-(
-  'admin@gmail.com',
-  '$2b$12$YnyOYoR6II6QgyMXi3ewg.WnHd.mwAdBPNddOZOQnWdi39zcTsTZK',
-  'admin'
-)
-ON DUPLICATE KEY UPDATE email = email;
+-- =============================================================================
+-- 4) Auth helpers (password_reset_otps is email-based; no FK to users)
+-- =============================================================================
 
 CREATE TABLE IF NOT EXISTS password_reset_otps (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -123,7 +171,6 @@ CREATE TABLE IF NOT EXISTS password_reset_otps (
   KEY password_reset_otps_email_idx (email_lower)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Email OTP for login 2FA, password change, 2FA toggle (Sequelize: SecurityOtpChallenge)
 CREATE TABLE IF NOT EXISTS security_otp_challenges (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id INT UNSIGNED NOT NULL,
@@ -137,7 +184,10 @@ CREATE TABLE IF NOT EXISTS security_otp_challenges (
   CONSTRAINT fk_security_otp_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Header bell: per-user notifications (Sequelize: UserNotification)
+-- =============================================================================
+-- 5) In-app messaging (Sequelize: UserNotification, UserMessage)
+-- =============================================================================
+
 CREATE TABLE IF NOT EXISTS user_notifications (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id INT UNSIGNED NOT NULL,
@@ -151,7 +201,6 @@ CREATE TABLE IF NOT EXISTS user_notifications (
   CONSTRAINT fk_user_notifications_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Header mail: per-user messages (Sequelize: UserMessage)
 CREATE TABLE IF NOT EXISTS user_messages (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   recipient_user_id INT UNSIGNED NOT NULL,
@@ -166,6 +215,10 @@ CREATE TABLE IF NOT EXISTS user_messages (
   CONSTRAINT fk_user_messages_recipient FOREIGN KEY (recipient_user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT fk_user_messages_sender FOREIGN KEY (sender_user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================================
+-- 6) RBAC
+-- =============================================================================
 
 CREATE TABLE IF NOT EXISTS role_permissions (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -187,20 +240,44 @@ CREATE TABLE IF NOT EXISTS user_permission_overrides (
   CONSTRAINT fk_user_permission_overrides_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Existing databases: add 2FA column if missing
--- ALTER TABLE users ADD COLUMN two_factor_enabled TINYINT(1) NOT NULL DEFAULT 0;
+-- =============================================================================
+-- 7) Dashboard (StaffMember, Enquiry, NoticeBoardEntry, …)
+-- =============================================================================
 
--- Dashboard (Sequelize: StaffMember, Enquiry, NoticeBoardEntry, SchoolExpense, SchoolEvent,
--- DashboardChartPoint, SocialPlatformStat, AttendanceRecord, DashboardKpi)
 CREATE TABLE IF NOT EXISTS staff_members (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id INT UNSIGNED NULL,
+  staff_type VARCHAR(20) NOT NULL DEFAULT 'teaching',
   display_name VARCHAR(120) NOT NULL,
   email VARCHAR(255) NULL,
   staff_role VARCHAR(40) NOT NULL,
+  phone VARCHAR(32) NULL,
+  address VARCHAR(255) NULL,
+  gender VARCHAR(20) NULL,
+  date_of_birth VARCHAR(20) NULL,
+  nationality VARCHAR(100) NULL,
+  marital_status VARCHAR(40) NULL,
+  national_id VARCHAR(60) NULL,
+  qualification VARCHAR(120) NULL,
+  languages VARCHAR(255) NULL,
+  date_of_joining VARCHAR(20) NULL,
+  experience TEXT NULL,
+  emergency_contact_name VARCHAR(120) NULL,
+  emergency_contact_phone VARCHAR(32) NULL,
+  referee_name VARCHAR(120) NULL,
+  referee_contact VARCHAR(120) NULL,
+  staff_photo_url VARCHAR(255) NULL,
+  staff_photo_name VARCHAR(255) NULL,
+  assigned_class VARCHAR(80) NULL,
+  teaching_section VARCHAR(32) NULL,
+  staff_category VARCHAR(32) NULL,
+  national_id_photo_url VARCHAR(255) NULL,
+  national_id_photo_name VARCHAR(255) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY staff_members_role_idx (staff_role),
+  KEY staff_members_type_idx (staff_type),
   KEY staff_members_user_idx (user_id),
   CONSTRAINT fk_staff_members_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -289,6 +366,10 @@ CREATE TABLE IF NOT EXISTS dashboard_kpis (
   PRIMARY KEY (kpi_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =============================================================================
+-- 8) Academics (depends on class_categories)
+-- =============================================================================
+
 CREATE TABLE IF NOT EXISTS academic_exam_types (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   exam_key VARCHAR(40) NOT NULL,
@@ -311,3 +392,15 @@ CREATE TABLE IF NOT EXISTS academic_subject_assignments (
   KEY idx_subject_assignment_category (class_category_id),
   CONSTRAINT fk_subject_assignment_category FOREIGN KEY (class_category_id) REFERENCES class_categories (id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Existing DBs (tables created before this file): add missing links manually.
+--
+-- Link classrooms to categories (fix invalid category_id first if ALTER fails):
+--   ALTER TABLE classrooms
+--     ADD KEY classrooms_category_idx (category_id),
+--     ADD CONSTRAINT fk_classrooms_category FOREIGN KEY (category_id)
+--       REFERENCES class_categories (id) ON DELETE SET NULL ON UPDATE CASCADE;
+--
+-- Legacy column removal is handled in ensureDashboardSchema.ts (students.roll_number).
+-- -----------------------------------------------------------------------------

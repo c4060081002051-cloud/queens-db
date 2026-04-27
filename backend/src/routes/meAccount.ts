@@ -38,6 +38,25 @@ const updateUserRoleSchema = z.object({
   role: z.string().trim().min(2, "Enter a role").max(50),
 });
 
+const updateUserStatusSchema = z.object({
+  active: z.boolean(),
+});
+
+const adminResetUserPasswordSchema = z
+  .object({
+    newPassword: z.string().min(8, "Password must be at least 8 characters"),
+  })
+  .superRefine((value, ctx) => {
+    if (!STRONG_PASSWORD_REGEX.test(value.newPassword)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Password must include uppercase, lowercase, number, and symbol characters",
+        path: ["newPassword"],
+      });
+    }
+  });
+
 const permissionOverrideItemSchema = z.object({
   permissionKey: z.enum(PERMISSION_KEYS),
   allowed: z.boolean(),
@@ -73,6 +92,12 @@ const createUserSchema = z
     }
   });
 
+const updateManagedUserProfileSchema = z.object({
+  name: z.string().trim().min(2, "Enter the user's full name").max(120),
+  email: z.string().trim().email("Enter a valid email").max(255),
+  role: z.string().trim().min(2, "Enter a role").max(50),
+});
+
 function normalizeRole(value: string): string {
   return value
     .trim()
@@ -84,6 +109,22 @@ function normalizeRole(value: string): string {
 
 function isAdminRole(role: string): boolean {
   return role === "admin" || role === "super_admin";
+}
+
+function toManagedUser(row: User) {
+  return {
+    id: row.id,
+    name: row.fullName?.trim() || row.email.split("@")[0],
+    email: row.email,
+    phoneNumber: row.phoneNumber ?? null,
+    gender: row.gender ?? null,
+    dateOfBirth: row.dateOfBirth ?? null,
+    addressLine: row.addressLine ?? null,
+    role: row.role,
+    isActive: Boolean(row.isActive),
+    isDeleted: Boolean(row.isDeleted),
+    createdAt: row.createdAt,
+  };
 }
 
 function effectivePermissionKeys(
@@ -279,23 +320,16 @@ export function createMeAccountRouter(config: Config) {
           "dateOfBirth",
           "addressLine",
           "role",
+          "isActive",
+          "isDeleted",
           "createdAt",
         ],
+        where: { isDeleted: false },
         order: [["id", "DESC"]],
       });
 
       return res.json({
-        users: users.map((row) => ({
-          id: row.id,
-          name: row.fullName?.trim() || row.email.split("@")[0],
-          email: row.email,
-          phoneNumber: row.phoneNumber ?? null,
-          gender: row.gender ?? null,
-          dateOfBirth: row.dateOfBirth ?? null,
-          addressLine: row.addressLine ?? null,
-          role: row.role,
-          createdAt: row.createdAt,
-        })),
+        users: users.map((row) => toManagedUser(row)),
       });
     } catch (err) {
       console.error(err);
@@ -334,21 +368,62 @@ export function createMeAccountRouter(config: Config) {
         email: email.trim(),
         role: normalizedRole,
         passwordHash,
+        isActive: true,
+        isDeleted: false,
       });
 
       return res.status(201).json({
-        user: {
-          id: created.id,
-          name: created.fullName?.trim() || created.email.split("@")[0],
-          email: created.email,
-          phoneNumber: created.phoneNumber ?? null,
-          gender: created.gender ?? null,
-          dateOfBirth: created.dateOfBirth ?? null,
-          addressLine: created.addressLine ?? null,
-          role: created.role,
-          createdAt: created.createdAt,
-        },
+        user: toManagedUser(created),
       });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.patch("/users/:id/profile", async (req, res) => {
+    const userId = req.userId!;
+    const targetUserId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetUserId)) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    const parsed = updateManagedUserProfileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Invalid body";
+      return res.status(400).json({ error: msg });
+    }
+
+    const normalizedRole = normalizeRole(parsed.data.role);
+    if (!normalizedRole || normalizedRole === "pending_assignment") {
+      return res.status(400).json({ error: "Enter a valid assigned role" });
+    }
+
+    try {
+      const actor = await User.findByPk(userId);
+      if (!actor || !isAdminRole(actor.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const target = await User.findByPk(targetUserId);
+      if (!target) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      if (target.isDeleted) {
+        return res.status(400).json({ error: "Cannot update profile for deleted user" });
+      }
+
+      const normalizedEmail = parsed.data.email.trim().toLowerCase();
+      const existing = await User.findOne({ where: { email: normalizedEmail } });
+      if (existing && existing.id !== target.id) {
+        return res.status(409).json({ error: "An account with this email already exists." });
+      }
+
+      await target.update({
+        fullName: parsed.data.name.trim(),
+        email: normalizedEmail,
+        role: normalizedRole,
+      });
+      return res.json({ user: toManagedUser(target) });
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });
@@ -379,20 +454,117 @@ export function createMeAccountRouter(config: Config) {
       if (!target) {
         return res.status(404).json({ error: "User not found" });
       }
+      if (target.isDeleted) {
+        return res.status(400).json({ error: "Cannot update role for deleted user" });
+      }
       await target.update({ role: normalizedRole });
       return res.json({
-        user: {
-          id: target.id,
-          name: target.fullName?.trim() || target.email.split("@")[0],
-          email: target.email,
-          phoneNumber: target.phoneNumber ?? null,
-          gender: target.gender ?? null,
-          dateOfBirth: target.dateOfBirth ?? null,
-          addressLine: target.addressLine ?? null,
-          role: target.role,
-          createdAt: target.createdAt,
-        },
+        user: toManagedUser(target),
       });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.patch("/users/:id/status", async (req, res) => {
+    const userId = req.userId!;
+    const targetUserId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetUserId)) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    const parsed = updateUserStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Invalid body";
+      return res.status(400).json({ error: msg });
+    }
+    try {
+      const actor = await User.findByPk(userId);
+      if (!actor || !isAdminRole(actor.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      if (actor.id === targetUserId && !parsed.data.active) {
+        return res.status(400).json({ error: "You cannot deactivate your own account." });
+      }
+      const target = await User.findByPk(targetUserId);
+      if (!target) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      if (target.isDeleted) {
+        return res.status(400).json({ error: "Cannot update status for deleted user" });
+      }
+      await target.update({ isActive: parsed.data.active });
+      return res.json({ user: toManagedUser(target) });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/users/:id/reset-password", async (req, res) => {
+    const userId = req.userId!;
+    const targetUserId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetUserId)) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    const parsed = adminResetUserPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Invalid body";
+      return res.status(400).json({ error: msg });
+    }
+    try {
+      const actor = await User.findByPk(userId);
+      if (!actor || !isAdminRole(actor.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const target = await User.findByPk(targetUserId);
+      if (!target) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      if (target.isDeleted) {
+        return res.status(400).json({ error: "Cannot reset password for deleted user" });
+      }
+      const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+      await target.update({ passwordHash, isActive: true });
+      return res.json({ message: "Password reset successfully.", user: toManagedUser(target) });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.delete("/users/:id", async (req, res) => {
+    const userId = req.userId!;
+    const targetUserId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetUserId)) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    try {
+      const actor = await User.findByPk(userId);
+      if (!actor || !isAdminRole(actor.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      if (actor.id === targetUserId) {
+        return res.status(400).json({ error: "You cannot delete your own account." });
+      }
+      const target = await User.findByPk(targetUserId);
+      if (!target) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      if (target.isDeleted) {
+        return res.json({ message: "User already deleted." });
+      }
+
+      const local = target.email.split("@")[0].replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 24) || "user";
+      const tombstoneEmail = `${local}.deleted.${target.id}.${Date.now()}@archived.local`;
+      await target.update({
+        isDeleted: true,
+        isActive: false,
+        role: "deleted_user",
+        email: tombstoneEmail,
+        fullName: target.fullName ? `[DELETED] ${target.fullName}`.slice(0, 120) : "[DELETED]",
+      });
+      return res.json({ message: "User deleted successfully." });
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });

@@ -16,6 +16,7 @@ import type { InboxItem } from "./components/admin/headerInboxDemo";
 import { SettingsModesPanel } from "./components/settings/SettingsModesPanel";
 import { SettingsGeneralPanel } from "./components/settings/SettingsGeneralPanel";
 import { SettingsFeesStructurePanel } from "./components/settings/SettingsFeesStructurePanel";
+import { SettingsClassStructurePanel } from "./components/settings/SettingsClassStructurePanel";
 import { SettingsUsersRolesPanel } from "./components/settings/SettingsUsersRolesPanel";
 import { ExpensesAllPage } from "./components/expenses/ExpensesAllPage";
 import {
@@ -132,6 +133,7 @@ function readPersistedViewState(): PersistedViewState | null {
       parsed.financeSection === "debtors_report" ||
       parsed.financeSection === "assign_fees" ||
       parsed.financeSection === "record_payment" ||
+      parsed.financeSection === "receipts" ||
       parsed.financeSection === "bursery" ||
       parsed.financeSection === "busery" ||
       parsed.financeSection === "staff_payment" ||
@@ -260,7 +262,7 @@ function hasPermission(
 
 function requiredPermissionForFinanceSection(section: FinanceSection): string | null {
   if (section === "assign_fees") return "finance_assign_fees";
-  if (section === "record_payment" || section === "bursery") return "finance_record_payments";
+  if (section === "record_payment" || section === "receipts" || section === "bursery") return "finance_record_payments";
   if (section === "busery" || section === "bursery_assignment") return "finance_bursary";
   if (section === "staff_payment") return "finance_staff_pay";
   if (section === "finance_summary") return "finance_summaries";
@@ -318,6 +320,7 @@ function requiredPermissionForSettingsPanel(panel: string | null): string | null
   if (!panel) return null;
   if (panel === "modes") return "settings_modes";
   if (panel === "fees_structure") return "settings_fees_structure";
+  if (panel === "class_structure") return "settings_general";
   if (panel === "general") return "settings_general";
   if (panel === "users_roles") return "settings_users_roles";
   if (panel === "backup") return "settings_backup";
@@ -595,10 +598,12 @@ export function Dashboard({
         {settingsPanel === "general" ? <SettingsGeneralPanel /> : null}
         {settingsPanel === "modes" ? <SettingsModesPanel /> : null}
         {settingsPanel === "fees_structure" ? <SettingsFeesStructurePanel /> : null}
+        {settingsPanel === "class_structure" ? <SettingsClassStructurePanel /> : null}
         {settingsPanel === "users_roles" ? <SettingsUsersRolesPanel /> : null}
         {settingsPanel === "general" ||
         settingsPanel === "modes" ||
         settingsPanel === "fees_structure" ||
+        settingsPanel === "class_structure" ||
         settingsPanel === "users_roles" ? null : inboxScreen.screen !== "home" ? (
           inboxScreen.screen === "list" ? (
             <InboxListView

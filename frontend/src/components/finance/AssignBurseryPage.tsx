@@ -344,7 +344,7 @@ export function AssignBurseryPage({
               <div className="neo-card p-4 bg-[#f1fcf8] border-[#10b981]/20">
                 <p style={{ fontSize: "0.7rem", fontWeight: 800, color: "#059669", textTransform: "uppercase" }}>Current Bursary</p>
                 <p style={{ fontSize: "1.25rem", fontWeight: 900, color: "#059669", margin: "4px 0 0" }}>
-                  {(selectedStudent as any).bursaryPercentage || 0}%
+                  {selectedStudent.bursaryPercentage || 0}%
                 </p>
               </div>
             </div>
@@ -511,7 +511,7 @@ export function AssignBurseryPage({
                 {submitting ? "Processing..." : t("finance.bursery.btn.apply")}
               </button>
               <button
-                disabled={submitting || Number((selectedStudent as any).bursaryPercentage || 0) === 0}
+                disabled={submitting || Number(selectedStudent.bursaryPercentage || 0) === 0}
                 onClick={handleRevoke}
                 style={{
                   flex: 1,
@@ -522,8 +522,8 @@ export function AssignBurseryPage({
                   borderRadius: 16,
                   fontWeight: 800,
                   fontSize: "1rem",
-                  cursor: (submitting || Number((selectedStudent as any).bursaryPercentage || 0) === 0) ? "not-allowed" : "pointer",
-                  opacity: (submitting || Number((selectedStudent as any).bursaryPercentage || 0) === 0) ? 0.5 : 1
+                  cursor: (submitting || Number(selectedStudent.bursaryPercentage || 0) === 0) ? "not-allowed" : "pointer",
+                  opacity: (submitting || Number(selectedStudent.bursaryPercentage || 0) === 0) ? 0.5 : 1
                 }}
               >
                 {t("finance.bursery.btn.revoke")}
