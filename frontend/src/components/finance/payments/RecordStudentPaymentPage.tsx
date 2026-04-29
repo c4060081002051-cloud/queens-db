@@ -62,12 +62,69 @@ export function RecordStudentPaymentPage() {
     }
     let cancelled = false;
     setSearchLoading(true);
+    // #region agent log
+    void fetch("http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "b215a2",
+      },
+      body: JSON.stringify({
+        sessionId: "b215a2",
+        runId: "pre_debug",
+        hypothesisId: "H1_studentSearchFetchResultShape",
+        location: "RecordStudentPaymentPage.tsx:studentSearch:beforeFetch",
+        message: "About to fetch students for search",
+        data: { qLen: studentSearch.trim().length },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     void fetchStudents({ q: studentSearch.trim(), sortBy: "name", sortDir: "asc", limit: 8 })
-      .then((rows) => {
-        if (!cancelled) setStudentMatches(rows);
+      .then((result) => {
+        if (!cancelled) setStudentMatches(result.items);
+        // #region agent log
+        void fetch("http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "b215a2",
+          },
+          body: JSON.stringify({
+            sessionId: "b215a2",
+            runId: "pre_debug",
+            hypothesisId: "H2_studentSearchItemsCount",
+            location: "RecordStudentPaymentPage.tsx:studentSearch:afterFetch",
+            message: "Fetched student search results",
+            data: {
+              itemsCount: result.items.length,
+              firstId: result.items[0]?.id ?? null,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
       })
       .catch(() => {
         if (!cancelled) setStudentMatches([]);
+        // #region agent log
+        void fetch("http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "b215a2",
+          },
+          body: JSON.stringify({
+            sessionId: "b215a2",
+            runId: "pre_debug",
+            hypothesisId: "H3_studentSearchFetchError",
+            location: "RecordStudentPaymentPage.tsx:studentSearch:catch",
+            message: "Student search fetch failed",
+            data: {},
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
       })
       .finally(() => {
         if (!cancelled) setSearchLoading(false);
@@ -107,6 +164,11 @@ export function RecordStudentPaymentPage() {
     setFormError(null);
     if (!selectedStudent) {
       setFormError("Select a student from the search results.");
+      return;
+    }
+    // Even if UI input is allowed for searching, recording payments must be blocked when the daily report is locked.
+    if (reportStatus?.isLocked && !reportStatus?.isReopened) {
+      setFormError("Data entry is locked for today. Ask an admin to reopen the report before saving payments.");
       return;
     }
     if (parsedAmount <= 0) {
@@ -365,6 +427,9 @@ export function RecordStudentPaymentPage() {
               background: "rgba(255,255,255,0.75)",
               backdropFilter: "blur(3px)",
               zIndex: 50,
+              // Allow the operator to still type into the search input while locked,
+              // but block saving via disabled buttons + createReceipt guard.
+              pointerEvents: "none",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -1001,7 +1066,13 @@ export function RecordStudentPaymentPage() {
           <button
             type="button"
             onClick={() => void createReceipt(false)}
-            disabled={submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim())}
+            disabled={
+              submitting ||
+              isLocked ||
+              !selectedStudent ||
+              parsedAmount <= 0 ||
+              (isReopened && !changeReason.trim())
+            }
             style={{
               height: 56,
               background: "#fff",
@@ -1010,10 +1081,10 @@ export function RecordStudentPaymentPage() {
               borderRadius: 14,
               fontSize: "1rem",
               fontWeight: 800,
-              cursor: submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? "not-allowed" : "pointer",
+              cursor: submitting || isLocked || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? "not-allowed" : "pointer",
               transition: "all 0.2s",
               boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
-              opacity: submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? 0.6 : 1,
+              opacity: submitting || isLocked || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? 0.6 : 1,
             }}
             onMouseOver={(e) => {
               if (selectedStudent && parsedAmount > 0 && (!isReopened || changeReason.trim())) e.currentTarget.style.background = "rgba(12,35,64,0.04)";
@@ -1027,7 +1098,13 @@ export function RecordStudentPaymentPage() {
           <button
             type="button"
             onClick={() => void createReceipt(true)}
-            disabled={submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim())}
+            disabled={
+              submitting ||
+              isLocked ||
+              !selectedStudent ||
+              parsedAmount <= 0 ||
+              (isReopened && !changeReason.trim())
+            }
             style={{
               height: 56,
               borderRadius: 14,
@@ -1036,8 +1113,8 @@ export function RecordStudentPaymentPage() {
               background: "linear-gradient(135deg, #0c2340, #1a3a5c)",
               color: "#fff",
               fontSize: "1rem",
-              cursor: submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? "not-allowed" : "pointer",
-              opacity: submitting || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? 0.6 : 1,
+              cursor: submitting || isLocked || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? "not-allowed" : "pointer",
+              opacity: submitting || isLocked || !selectedStudent || parsedAmount <= 0 || (isReopened && !changeReason.trim()) ? 0.6 : 1,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",

@@ -13,10 +13,10 @@ import { AuthenticatedStudentPhoto } from "./AuthenticatedStudentPhoto";
 import { StudentDetailModal } from "./StudentDetailModal";
 
 const selectClass =
-  "rounded-lg border border-[#e0d8cc] bg-[#faf9f7] px-2.5 py-2 text-sm text-[#2d3436] shadow-[inset_1px_1px_2px_rgba(0,0,0,0.05)]";
+  "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 hover:border-slate-300";
 
 const iconBtn =
-  "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#e8e2d8] bg-gradient-to-br from-[#fffcf9] to-[#f2ebe4] text-[#5a8faf] shadow-[2px_2px_5px_rgba(200,188,170,0.25)] transition hover:border-[#b9d9eb] hover:text-[#2d3436] active:translate-y-px";
+  "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 active:scale-95";
 
 type StudentsListPanelProps = {
   limit: number;
@@ -143,6 +143,8 @@ export function StudentsListPanel({
   const [customSortColumn, setCustomSortColumn] = useState<CustomSortColumn>("fullName");
   const [customSortValue, setCustomSortValue] = useState("");
   const [items, setItems] = useState<StudentApiRow[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalId, setModalId] = useState<number | null>(null);
@@ -166,15 +168,17 @@ export function StudentsListPanel({
     setError(null);
     const q = classNameFilter ? `${classNameFilter} ${applied}`.trim() : applied;
     const apiSortBy: StudentSortBy = sortBy === "custom" ? "date" : sortBy;
-    void fetchStudents({ q, sortBy: apiSortBy, sortDir, limit })
-      .then((rows) => {
+    void fetchStudents({ q, sortBy: apiSortBy, sortDir, limit, offset })
+      .then((data) => {
         if (!cancelled) {
           const filtered = classNameFilter
-            ? rows.filter(
+            ? data.items.filter(
                 (r) => (r.className ?? "").trim().toLowerCase() === classNameFilter.trim().toLowerCase(),
               )
-            : rows;
-          setItems(filtered);
+            : data.items;
+          
+          setItems(offset === 0 ? filtered : [...items, ...filtered]);
+          setTotalItems(data.total);
         }
       })
       .catch((err) => {
@@ -189,7 +193,7 @@ export function StudentsListPanel({
     return () => {
       cancelled = true;
     };
-  }, [applied, sortBy, sortDir, limit, refreshKey, classNameFilter]);
+  }, [applied, sortBy, sortDir, limit, offset, refreshKey, classNameFilter]);
 
   const runSearch = () => {
     setApplied(draft.trim());
@@ -212,13 +216,15 @@ export function StudentsListPanel({
     const q = classNameFilter ? `${classNameFilter} ${applied}`.trim() : applied;
     try {
       const apiSortBy: StudentSortBy = sortBy === "custom" ? "date" : sortBy;
-      const rows = await fetchStudents({ q, sortBy: apiSortBy, sortDir, limit });
+      const data = await fetchStudents({ q, sortBy: apiSortBy, sortDir, limit, offset: 0 });
       const filtered = classNameFilter
-          ? rows.filter(
+          ? data.items.filter(
               (r) => (r.className ?? "").trim().toLowerCase() === classNameFilter.trim().toLowerCase(),
             )
-          : rows;
+          : data.items;
       setItems(filtered);
+      setTotalItems(data.total);
+      setOffset(0);
     } catch {
       /* keep existing list on failure */
     }
@@ -290,9 +296,12 @@ export function StudentsListPanel({
   return (
     <>
       {updatedStudentNotice ? (
-        <div className="fixed right-4 top-4 z-[80] max-w-md rounded-2xl border border-[#cde8cf] bg-[#fffcf7] px-4 py-3 text-sm text-[#2d3436] shadow-[8px_12px_30px_rgba(45,52,54,0.18)]">
+        <div className="fixed right-4 top-4 z-[80] flex max-w-md animate-in fade-in slide-in-from-top-4 items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-800 shadow-lg">
+          <svg className="h-5 w-5 shrink-0 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
           <p>
-            <span className="font-semibold">{updatedStudentNotice}</span>, Information has been updated.
+            <span className="font-bold">{updatedStudentNotice}</span> has been updated.
           </p>
         </div>
       ) : null}
@@ -300,20 +309,25 @@ export function StudentsListPanel({
         <section className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
-            className="absolute inset-0 bg-[#2d3436]/40 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"
             onClick={() => setConfirmDeleteRow(null)}
             aria-label="Close warning dialog"
           />
-          <div className="relative w-full max-w-md rounded-2xl border border-[#f7d1cd] bg-[#fffcf7] p-5 shadow-[8px_12px_40px_rgba(45,52,54,0.2)]">
-            <h3 className="text-base font-bold text-[#a9332a]">Warning</h3>
-            <p className="mt-2 text-sm text-[#2d3436]">
-              {t("students.deleteRowConfirm")} You will have 10 seconds to undo.
+          <div className="relative w-full max-w-md animate-in fade-in zoom-in-95 rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+                <IconTrash />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800">Delete Student?</h3>
+            </div>
+            <p className="mt-4 text-sm text-slate-600">
+              {t("students.deleteRowConfirm")} You will have 10 seconds to undo this action.
             </p>
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setConfirmDeleteRow(null)}
-                className="rounded-full bg-[#faf7f0] px-4 py-1.5 text-xs font-semibold text-[#636e72] ring-1 ring-[#ebe4d9]"
+                className="rounded-full bg-slate-100 px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-200 focus:ring-4 focus:ring-slate-200"
               >
                 Cancel
               </button>
@@ -323,58 +337,68 @@ export function StudentsListPanel({
                   queueDelete(confirmDeleteRow);
                   setConfirmDeleteRow(null);
                 }}
-                className="rounded-full bg-[#fce8e5] px-4 py-1.5 text-xs font-bold text-[#a9332a]"
+                className="rounded-full bg-rose-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-rose-600/20 transition-colors hover:bg-rose-500 focus:ring-4 focus:ring-rose-600/20 active:scale-95"
               >
-                Delete
+                Delete Student
               </button>
             </div>
           </div>
         </section>
       ) : null}
       {pendingDelete ? (
-        <section className="neo-card flex items-center justify-between gap-3 border border-[#f7d1cd] bg-[#fff7f5] px-4 py-3">
-          <p className="text-sm text-[#2d3436]">Student deleted. Undo available for 10 seconds.</p>
+        <section className="flex animate-in fade-in items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm mb-6">
+          <div className="flex items-center gap-3">
+            <svg className="h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <p className="text-sm font-medium text-amber-800">Student deleted. Undo available for 10 seconds.</p>
+          </div>
           <button
             type="button"
             onClick={undoDelete}
-            className="rounded-full bg-[#2d3436] px-4 py-1.5 text-xs font-bold text-white"
+            className="rounded-full bg-amber-600 px-5 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-500 active:scale-95"
           >
             Undo
           </button>
         </section>
       ) : null}
       {profileCard ? null : (
-      <section className="overflow-hidden rounded-2xl border border-[#ebe4d9] bg-[#fffcf7] shadow-[6px_8px_24px_rgba(45,52,54,0.08)]">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
         {error ? (
-          <div className="border-b border-[#f7d1cd] bg-[#fff7f5] px-5 py-3 text-sm text-[#a9332a]" role="alert">
+          <div className="border-b border-rose-200 bg-rose-50 px-6 py-4 text-sm font-medium text-rose-800" role="alert">
             {error}
           </div>
         ) : null}
-        <div className="flex flex-col gap-4 border-b border-[#ebe4d9] bg-gradient-to-r from-[#f4faf5] via-[#f8f9f6] to-[#eef6f9] px-5 py-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/50 px-6 py-5 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
           <div className="min-w-0 shrink-0">
             {title.trim() ? (
-              <h2 className="text-base font-bold tracking-tight text-[#2d3436]">{title}</h2>
+              <h2 className="text-xl font-bold tracking-tight text-slate-800">{title}</h2>
             ) : null}
           </div>
           <div className="flex min-w-0 w-full flex-col gap-3 sm:max-w-none sm:flex-1 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end">
-            <div className="flex min-w-0 flex-1 flex-col gap-1 sm:max-w-md">
-              <span className="text-[10px] font-bold uppercase tracking-wide text-[#636e72]">
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:max-w-md">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 {t("toolbar.filter")}
               </span>
               <label className="sr-only" htmlFor="student-search">
                 {t("students.searchLabel")}
               </label>
-              <input
-                id="student-search"
-                type="search"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder={t("students.searchPlaceholder")}
-                className="min-w-0 w-full rounded-xl border border-[#e0d8cc] bg-[#faf9f7] px-3 py-2 text-sm text-[#2d3436] shadow-[inset_1px_1px_3px_rgba(0,0,0,0.06)] placeholder:text-[#636e72]/60"
-              />
+              <div className="relative">
+                <svg className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  id="student-search"
+                  type="search"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder={t("students.searchPlaceholder")}
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 hover:border-slate-300"
+                />
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold uppercase tracking-wide text-[#636e72]">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 {t("toolbar.sort")}
               </span>
               <div className="flex flex-wrap items-center gap-2">
@@ -429,7 +453,7 @@ export function StudentsListPanel({
                 <button
                   type="button"
                   onClick={runSearch}
-                  className="rounded-full bg-gradient-to-br from-[#6a9570] to-[#4a6b4e] px-5 py-2 text-sm font-bold text-white shadow-md transition hover:brightness-110"
+                  className="rounded-full bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-indigo-600/20 transition-all hover:from-indigo-500 hover:to-blue-500 hover:shadow-indigo-500/30 focus:ring-4 focus:ring-indigo-600/20 active:scale-95"
                 >
                   {t("dashboard.search")}
                 </button>
@@ -438,8 +462,11 @@ export function StudentsListPanel({
                     type="button"
                     onClick={handleExport}
                     disabled={loading || items.length === 0}
-                    className="rounded-full border border-[#c9e2f2] bg-gradient-to-br from-[#e8f4fa] to-[#d4e8f5] px-4 py-2 text-sm font-bold text-[#2d3436] shadow-sm transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:text-indigo-600 focus:ring-4 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-50 active:scale-95"
                   >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
                     {t("students.exportExcel")}
                   </button>
                 ) : null}
@@ -447,189 +474,234 @@ export function StudentsListPanel({
             </div>
           </div>
         </div>
-        <div className="min-w-0 overflow-hidden">
+        <div className="min-w-0 overflow-x-auto">
           <table className="table-fixed w-full text-left text-sm">
-            <thead className="sticky top-0 z-[1] border-b border-[#ebe4d9] bg-[#faf7f0]/95 text-[10px] font-bold uppercase tracking-wide text-[#636e72] backdrop-blur-sm sm:text-[11px]">
+            <thead className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
               <tr>
-                {showDirectoryTools ? (
-                  <th className="w-12 px-1 py-3 sm:w-14 sm:px-2">{t("students.col.photo")}</th>
-                ) : null}
-                <th className="w-[11%] px-1 py-3 sm:px-2">{t("students.col.admission")}</th>
-                <th className="w-[18%] px-1 py-3 sm:px-2">{t("students.col.name")}</th>
-                <th className="w-[12%] px-1 py-3 sm:px-2">{t("students.col.class")}</th>
-                <th className="w-[9%] px-1 py-3 sm:px-2">{t("students.col.section")}</th>
-                <th className="w-[10%] px-1 py-3 sm:px-2">{t("students.col.status")}</th>
-                <th className="w-[11%] px-1 py-3 sm:px-2">{t("students.col.dob")}</th>
-                <th className="w-[12%] px-1 py-3 sm:px-2">{t("students.col.admitted")}</th>
-                {showDirectoryTools ? (
-                  <th className="w-24 px-1 py-3 text-center sm:w-28 sm:px-2">
+                {showDirectoryTools && (
+                  <th className="w-14 px-3 py-4 sm:w-16 sm:px-4">{t("students.col.photo")}</th>
+                )}
+                <th className="w-[11%] px-2 py-4 sm:px-4">{t("students.col.admission")}</th>
+                <th className="w-[18%] px-2 py-4 sm:px-4">{t("students.col.name")}</th>
+                <th className="w-[12%] px-2 py-4 sm:px-4">{t("students.col.class")}</th>
+                <th className="w-[9%] px-2 py-4 sm:px-4">{t("students.col.section")}</th>
+                <th className="w-[10%] px-2 py-4 sm:px-4">{t("students.col.status")}</th>
+                <th className="w-[11%] px-2 py-4 sm:px-4">{t("students.col.dob")}</th>
+                <th className="w-[12%] px-2 py-4 sm:px-4">{t("students.col.admitted")}</th>
+                {showDirectoryTools && (
+                  <th className="w-24 px-2 py-4 text-center sm:w-28 sm:px-4">
                     {t("students.col.actions")}
                   </th>
-                ) : null}
+                )}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#f0ebe3]">
-              {loading ? (
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {loading && (
                 <tr>
                   <td
                     colSpan={showDirectoryTools ? 9 : 7}
-                    className="px-5 py-10 text-center text-sm text-[#636e72]"
+                    className="px-6 py-12 text-center text-sm font-medium text-slate-500"
                   >
-                    {t("students.loading")}
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <svg className="h-6 w-6 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {t("students.loading")}
+                    </div>
                   </td>
                 </tr>
-              ) : null}
-              {!loading && items.length === 0 ? (
+              )}
+              {!loading && items.length === 0 && (
                 <tr>
                   <td
                     colSpan={showDirectoryTools ? 9 : 7}
-                    className="px-5 py-10 text-center text-sm text-[#636e72]"
+                    className="px-6 py-12 text-center text-sm font-medium text-slate-500"
                   >
                     {t("students.noRecordFound")}
                   </td>
                 </tr>
-              ) : null}
-              {!loading
-                ? displayedItems.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="transition-colors hover:bg-[#f0f7f4]/90 odd:bg-[#fafaf8]/80"
-                    >
-                      {showDirectoryTools ? (
-                        <td className="px-1 py-2 sm:px-2">
-                          <div className="mx-auto h-9 w-9 overflow-hidden rounded-lg ring-1 ring-[#ebe4d9] sm:h-10 sm:w-10 sm:rounded-xl">
-                            <AuthenticatedStudentPhoto
-                              studentId={row.id}
-                              hasPhoto={row.hasPassportPhoto}
-                              alt=""
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                        </td>
-                      ) : null}
-                      <td className="min-w-0 truncate px-1 py-2 font-mono text-[10px] font-semibold text-[#5a8faf] sm:px-2 sm:text-xs">
-                        {row.admissionNumber}
-                      </td>
-                      <td className="min-w-0 truncate px-1 py-2 text-xs font-semibold text-[#2d3436] sm:px-2 sm:text-sm">
-                        {row.fullName}
-                      </td>
-                      <td className="min-w-0 truncate px-1 py-2 text-xs text-[#2d3436] sm:px-2 sm:text-sm">
-                        {row.className ?? "—"}
-                      </td>
-                      <td className="min-w-0 truncate px-1 py-2 text-xs text-[#636e72] sm:px-2 sm:text-sm">
-                        {row.sectionName ?? "—"}
-                      </td>
-                      <td className="min-w-0 truncate px-1 py-2 text-xs font-medium text-[#636e72] sm:px-2 sm:text-sm">
-                        {formatStudentStatus(row.boardingStatus)}
-                      </td>
-                      <td className="min-w-0 truncate px-1 py-2 text-[10px] tabular-nums text-[#636e72] sm:px-2 sm:text-sm">
-                        {row.dateOfBirthFormatted ?? "—"}
-                      </td>
-                      <td className="min-w-0 truncate px-1 py-2 text-[10px] tabular-nums text-[#636e72] sm:px-2 sm:text-sm">
-                        {row.admittedAt}
-                      </td>
-                      {showDirectoryTools ? (
-                        <td className="px-0 py-2 sm:px-1">
-                          <div className="flex items-center justify-center gap-0.5 sm:gap-1">
-                            <button
-                              type="button"
-                              className={iconBtn}
-                              title={t("students.action.view")}
-                              aria-label={t("students.action.view")}
-                              onClick={() => openView(row.id)}
-                            >
-                              <IconView />
-                            </button>
-                            <button
-                              type="button"
-                              className={iconBtn}
-                              title={t("students.action.edit")}
-                              aria-label={t("students.action.edit")}
-                              onClick={() => openEdit(row.id)}
-                            >
-                              <IconEdit />
-                            </button>
-                            <button
-                              type="button"
-                              className={`${iconBtn} text-rose-600 hover:border-rose-200 hover:text-rose-800`}
-                              title={t("students.action.delete")}
-                              aria-label={t("students.action.delete")}
-                              onClick={() => setConfirmDeleteRow(row)}
-                            >
-                              <IconTrash />
-                            </button>
-                          </div>
-                        </td>
-                      ) : null}
-                    </tr>
-                  ))
-                : null}
+              )}
+              {!loading && displayedItems.map((row) => (
+                <tr
+                  key={row.id}
+                  className="group transition-colors hover:bg-slate-50"
+                >
+                  {showDirectoryTools && (
+                    <td className="px-2 py-3 sm:px-4">
+                      <div className="h-10 w-10 overflow-hidden rounded-full border-2 border-white bg-slate-100 shadow-sm ring-1 ring-slate-200">
+                        <AuthenticatedStudentPhoto
+                          studentId={row.id}
+                          hasPhoto={row.hasPassportPhoto}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    </td>
+                  )}
+                  <td className="min-w-0 truncate px-2 py-3 font-mono text-xs font-semibold text-indigo-600 sm:px-4">
+                    {row.admissionNumber}
+                  </td>
+                  <td className="min-w-0 truncate px-2 py-3 text-xs font-bold text-slate-800 sm:px-4 sm:text-sm">
+                    {row.fullName}
+                  </td>
+                  <td className="min-w-0 truncate px-2 py-3 text-xs text-slate-600 sm:px-4 sm:text-sm">
+                    {row.className ?? "—"}
+                  </td>
+                  <td className="min-w-0 truncate px-2 py-3 text-xs text-slate-500 sm:px-4 sm:text-sm">
+                    {row.sectionName ?? "—"}
+                  </td>
+                  <td className="min-w-0 truncate px-2 py-3 text-xs font-medium sm:px-4">
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                      {formatStudentStatus(row.boardingStatus)}
+                    </span>
+                  </td>
+                  <td className="min-w-0 truncate px-2 py-3 text-xs tabular-nums text-slate-500 sm:px-4 sm:text-sm">
+                    {row.dateOfBirthFormatted ?? "—"}
+                  </td>
+                  <td className="min-w-0 truncate px-2 py-3 text-xs tabular-nums text-slate-500 sm:px-4 sm:text-sm">
+                    {row.admittedAt}
+                  </td>
+                  {showDirectoryTools && (
+                    <td className="px-1 py-3 sm:px-4">
+                      <div className="flex items-center justify-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <button
+                          type="button"
+                          className={iconBtn}
+                          title={t("students.action.view")}
+                          aria-label={t("students.action.view")}
+                          onClick={() => openView(row.id)}
+                        >
+                          <IconView />
+                        </button>
+                        <button
+                          type="button"
+                          className={iconBtn}
+                          title={t("students.action.edit")}
+                          aria-label={t("students.action.edit")}
+                          onClick={() => openEdit(row.id)}
+                        >
+                          <IconEdit />
+                        </button>
+                        <button
+                          type="button"
+                          className={`${iconBtn} hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600`}
+                          title={t("students.action.delete")}
+                          aria-label={t("students.action.delete")}
+                          onClick={() => setConfirmDeleteRow(row)}
+                        >
+                          <IconTrash />
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
+        {items.length < totalItems && (
+          <div className="mt-4 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setOffset((prev) => prev + limit)}
+              disabled={loading}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-8 py-2.5 text-sm font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Loading...
+                </>
+              ) : (
+                "Load More Students"
+              )}
+            </button>
+          </div>
+        )}
       </section>
       )}
 
       {profileCard ? (
-        <section className="neo-card overflow-hidden border border-[#d9e4f0] bg-gradient-to-br from-[#fffdf9] via-[#f8fbff] to-[#eef4fb] p-0">
-          <div className="flex items-start justify-between gap-3">
-            <div className="w-full border-b border-[#e1e9f2] px-4 py-3">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-[#2d3436]">Student Profile Card</h3>
-            </div>
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm animate-in fade-in zoom-in-95">
+          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-6 py-4">
+            <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-800">
+              <svg className="h-5 w-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              Student Profile Card
+            </h3>
             <button
               type="button"
               onClick={() => setProfileCard(null)}
-              className="mr-3 mt-3 rounded-full bg-[#faf7f0] px-3 py-1 text-xs font-semibold text-[#636e72] ring-1 ring-[#ebe4d9] transition hover:bg-white"
+              className="rounded-full bg-slate-100 p-2 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700"
+              aria-label="Close profile"
             >
-              Close
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
-          <div className="px-4 pb-4 pt-3">
-          <div className="flex items-center gap-3 rounded-2xl bg-white/80 p-3 ring-1 ring-[#e3ebf5]">
-            <div className="h-16 w-16 overflow-hidden rounded-2xl ring-1 ring-[#d0dfef]">
-              <AuthenticatedStudentPhoto
-                studentId={profileCard.id}
-                hasPhoto={profileCard.hasPassportPhoto}
-                alt="Student profile"
-                className="h-full w-full object-cover"
-              />
+          <div className="p-6">
+            <div className="flex items-center gap-5 rounded-2xl border border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5 shadow-sm">
+              <div className="h-20 w-20 overflow-hidden rounded-full border-4 border-white bg-slate-100 shadow-md">
+                <AuthenticatedStudentPhoto
+                  studentId={profileCard.id}
+                  hasPhoto={profileCard.hasPassportPhoto}
+                  alt="Student profile"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div>
+                <p className="text-2xl font-extrabold text-slate-800">{profileCard.fullName}</p>
+                <p className="mt-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-indigo-600">
+                  <span className="flex h-2 w-2 rounded-full bg-indigo-500"></span>
+                  {profileCard.className ?? "Unassigned"} {profileCard.sectionName ? `• ${profileCard.sectionName}` : ""}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-base font-bold text-[#2d3436]">{profileCard.fullName}</p>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#636e72]">
-                {profileCard.className ?? "Unassigned"} {profileCard.sectionName ? `- ${profileCard.sectionName}` : ""}
-              </p>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">{t("students.col.admission")}</span>
+                <span className="mt-1 block font-mono text-sm font-bold text-slate-800">{profileCard.admissionNumber}</span>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">{t("students.col.dob")}</span>
+                <span className="mt-1 block text-sm font-bold text-slate-800">{profileCard.dateOfBirthFormatted ?? "—"}</span>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">{t("students.col.nationality")}</span>
+                <span className="mt-1 block text-sm font-bold text-slate-800">{profileCard.nationality ?? "—"}</span>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">{t("students.col.district")}</span>
+                <span className="mt-1 block text-sm font-bold text-slate-800">{profileCard.district ?? "—"}</span>
+              </div>
             </div>
-          </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.admission")}:</span> {profileCard.admissionNumber}</p>
-            <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.class")}:</span> {profileCard.className ?? "—"}</p>
-            <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.section")}:</span> {profileCard.sectionName ?? "—"}</p>
-            <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.dob")}:</span> {profileCard.dateOfBirthFormatted ?? "—"}</p>
-            <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.nationality")}:</span> {profileCard.nationality ?? "—"}</p>
-            <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.country")}:</span> {profileCard.countryName ?? profileCard.countryCode ?? "—"}</p>
-            <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.district")}:</span> {profileCard.district ?? "—"}</p>
-            <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">{t("students.col.registrationType")}:</span> {profileCard.registrationType}</p>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2 border-t border-[#dce6f2] pt-3">
-            <button
-              type="button"
-              onClick={() => {
-                setModalInitialEdit(true);
-                setModalId(profileCard.id);
-              }}
-              className="rounded-full bg-[#e8f2fa] px-4 py-1.5 text-xs font-semibold text-[#2d3436]"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmDeleteRow(profileCard)}
-              className="rounded-full bg-[#fce8e5] px-4 py-1.5 text-xs font-semibold text-[#a9332a]"
-            >
-              Delete
-            </button>
-          </div>
+            <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-100 pt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setModalInitialEdit(true);
+                  setModalId(profileCard.id);
+                }}
+                className="flex items-center gap-2 rounded-full bg-indigo-50 px-6 py-2.5 text-sm font-bold text-indigo-700 transition-colors hover:bg-indigo-100"
+              >
+                <IconEdit className="h-4 w-4" />
+                Edit Student Profile
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteRow(profileCard)}
+                className="flex items-center gap-2 rounded-full bg-rose-50 px-6 py-2.5 text-sm font-bold text-rose-700 transition-colors hover:bg-rose-100"
+              >
+                <IconTrash className="h-4 w-4" />
+                Delete Record
+              </button>
+            </div>
           </div>
         </section>
       ) : null}
@@ -644,9 +716,8 @@ export function StudentsListPanel({
         onChanged={reloadList}
         onSaved={(studentName) => {
           setUpdatedStudentNotice(studentName);
-          const id = modalId;
-          if (id != null && profileCard?.id === id) {
-            void fetchStudent(id).then((row) => setProfileCard(row));
+          if (modalId != null && profileCard?.id === modalId) {
+            void fetchStudent(modalId).then((row) => setProfileCard(row));
           }
           setModalId(null);
           setModalInitialEdit(false);

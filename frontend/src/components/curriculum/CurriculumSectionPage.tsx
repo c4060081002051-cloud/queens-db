@@ -5,12 +5,12 @@ import {
   deleteExamTypeConfig,
   deleteSubjectConfig,
   fetchExamTypeConfigs,
-  fetchPendingResultEntryStudents,
   fetchPerformanceSummary,
   fetchResultEntryOptions,
   fetchResultEntryStudents,
   fetchSubjectConfigs,
   fetchStudentMarkEntry,
+  generateClassMarksheet,
   fetchUpcomingExams,
   fetchExamsPerformanceSummary,
   createExam,
@@ -23,6 +23,7 @@ import {
   type SubjectAssignmentConfigRow,
   type UpcomingExamRow,
   type ExamPerformanceSummaryRow,
+  type GeneratedMarksheetPayload,
   type GradingScaleRow,
 } from "../../api/academics";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -93,90 +94,150 @@ function ExamsDashboardPage() {
     return () => { cancelled = true; };
   }, [term]);
 
+  const globalAvg = useMemo(() => {
+    if (performanceSummary.length === 0) return 0;
+    return performanceSummary.reduce((sum, r) => sum + Number(r.avgScore), 0) / performanceSummary.length;
+  }, [performanceSummary]);
+
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6 duration-700">
-      <header className="flex flex-col justify-between gap-4 border-b border-[#ebe4d9]/80 pb-4 sm:flex-row sm:items-center">
+    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8 duration-700">
+      <header className="flex flex-col justify-between gap-4 border-b border-[#ebe4d9]/80 pb-6 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-[#2d3436]">Exams Dashboard</h1>
-          <p className="mt-1 text-sm text-[#636e72]">Real-time academic performance & scheduling overview.</p>
+          <h1 className="text-3xl font-black tracking-tight text-[#2d3436]">Academic Command Center</h1>
+          <p className="mt-1 text-sm font-semibold text-[#636e72]">Real-time academic performance & institutional oversight.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <select
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-            className="neo-inset-field rounded-full px-4 py-2 text-sm font-semibold text-[#2d3436] outline-none"
-          >
-            <option value="Term 1">Term 1</option>
-            <option value="Term 2">Term 2</option>
-            <option value="Term 3">Term 3</option>
-          </select>
-          <button className="flex items-center gap-2 rounded-full bg-gradient-to-br from-[#3498db] to-[#2980b9] px-5 py-2 text-sm font-bold text-white shadow-lg transition hover:brightness-110 active:scale-95">
-            <span>Print Reports</span>
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Term:</span>
+            <select
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              className="neo-inset-field rounded-full px-5 py-2.5 text-sm font-black text-[#2d3436] outline-none"
+            >
+              <option value="Term 1">Term 1</option>
+              <option value="Term 2">Term 2</option>
+              <option value="Term 3">Term 3</option>
+            </select>
+          </div>
+          <button className="group flex items-center gap-2 rounded-full bg-gradient-to-br from-[#3498db] to-[#2980b9] px-6 py-3 text-sm font-black text-white shadow-xl transition hover:brightness-110 active:scale-95">
+            <span>Print Executive Summary</span>
+            <svg className="h-4 w-4 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+            </svg>
           </button>
         </div>
       </header>
 
       {error ? (
-        <div className="neo-card border-l-4 border-red-500 p-4 text-sm text-red-700">{error}</div>
+        <div className="neo-card border-l-4 border-red-500 p-4 text-sm font-bold text-red-700 shadow-md">{error}</div>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* High Level Stats */}
+      <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+        <div className="neo-card-elevated p-6">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Global Average</p>
+          <div className="mt-2 flex items-baseline gap-1">
+            <p className="text-3xl font-black text-[#2d3436]">{loading ? "—" : globalAvg.toFixed(1)}</p>
+            <span className="text-sm font-bold text-[#636e72]">%</span>
+          </div>
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[#ebe4d9]/50">
+            <div className="h-full bg-[#3498db]" style={{ width: `${globalAvg}%` }}></div>
+          </div>
+        </div>
+        <div className="neo-card-elevated p-6">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Upcoming Exams</p>
+          <p className="mt-2 text-3xl font-black text-[#e67e22]">{loading ? "—" : upcomingExams.length}</p>
+          <p className="mt-1 text-[10px] font-bold text-[#636e72]">Next 7 Days</p>
+        </div>
+        <div className="neo-card-elevated p-6">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Active Classes</p>
+          <p className="mt-2 text-3xl font-black text-[#2ecc71]">{loading ? "—" : performanceSummary.length}</p>
+          <p className="mt-1 text-[10px] font-bold text-[#636e72]">Result Entry Active</p>
+        </div>
+        <div className="neo-card-elevated p-6">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Term Progress</p>
+          <p className="mt-2 text-3xl font-black text-[#9b59b6]">{term === "Term 1" ? "35" : term === "Term 2" ? "65" : "90"}%</p>
+          <p className="mt-1 text-[10px] font-bold text-[#636e72]">Academic Calendar</p>
+        </div>
+      </div>
+
+      <div className="grid gap-8 lg:grid-cols-2">
         {/* Upcoming Exams Card */}
         <section className="neo-card-elevated flex flex-col overflow-hidden">
-          <div className="bg-[#faf7f0]/60 px-5 py-4">
-            <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-[#2d3436]">
-              <span className="h-2 w-2 rounded-full bg-[#3498db]"></span>
-              Upcoming Exams
+          <div className="flex items-center justify-between border-b border-[#ebe4d9]/60 bg-[#faf7f0]/60 px-6 py-5">
+            <h2 className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#2d3436]">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#3498db]/10 text-[#3498db]">
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              </span>
+              Exam Schedule
             </h2>
+            <button className="text-[10px] font-black uppercase tracking-widest text-[#3498db] hover:underline">View All</button>
           </div>
-          <div className="flex-1 p-5">
+          <div className="flex-1 p-6">
             {loading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map(i => <div key={i} className="h-12 w-full animate-pulse rounded-xl bg-[#ebe4d9]/50"></div>)}
+              <div className="space-y-4">
+                {[1, 2, 3, 4].map(i => <div key={i} className="h-14 w-full animate-pulse rounded-2xl bg-[#ebe4d9]/40"></div>)}
               </div>
             ) : upcomingExams.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {upcomingExams.map(ex => (
-                  <div key={ex.id} className="group flex items-center justify-between rounded-xl border border-[#ebe4d9]/60 bg-white/40 p-3 transition hover:bg-white/80">
-                    <div>
-                      <p className="text-sm font-bold text-[#2d3436]">{ex.subject}</p>
-                      <p className="text-xs text-[#636e72]">{ex.className} · {ex.examKey}</p>
+                  <div key={ex.id} className="group flex items-center justify-between rounded-2xl border border-[#ebe4d9]/50 bg-white/40 p-4 transition-all hover:translate-x-1 hover:bg-white/80 hover:shadow-md">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-10 w-10 flex-col items-center justify-center rounded-xl bg-[#3498db]/10 font-black text-[#3498db]">
+                        <span className="text-[10px] leading-none uppercase">{ex.examDate.split('-')[1]}</span>
+                        <span className="text-sm leading-none">{ex.examDate.split('-')[2]}</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-[#2d3436]">{ex.subject}</p>
+                        <p className="text-[10px] font-bold text-[#636e72] uppercase tracking-wide">{ex.className} · {ex.examKey}</p>
+                      </div>
                     </div>
-                    <div className="text-right text-xs font-black text-[#3498db]">
+                    <div className="rounded-full bg-[#ebe4d9]/40 px-3 py-1 text-[10px] font-black text-[#2d3436]">
                       {ex.examDate}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="py-10 text-center text-sm text-[#636e72]">No exams scheduled for the near future.</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#ebe4d9]/30 text-[#636e72]">
+                  <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <p className="text-sm font-bold text-[#636e72]">No exams scheduled for the near future.</p>
+              </div>
             )}
           </div>
         </section>
 
         {/* Performance Chart / Summary */}
         <section className="neo-card-elevated flex flex-col overflow-hidden">
-          <div className="bg-[#faf7f0]/60 px-5 py-4">
-            <h2 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-[#2d3436]">
-              <span className="h-2 w-2 rounded-full bg-[#e67e22]"></span>
-              Term Performance Summary
+          <div className="flex items-center justify-between border-b border-[#ebe4d9]/60 bg-[#faf7f0]/60 px-6 py-5">
+            <h2 className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#2d3436]">
+               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#e67e22]/10 text-[#e67e22]">
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+              </span>
+              Class Averages
             </h2>
+             <button className="text-[10px] font-black uppercase tracking-widest text-[#e67e22] hover:underline">Analytics</button>
           </div>
-          <div className="flex-1 p-5">
+          <div className="flex-1 p-6">
             {loading ? (
-               <div className="h-full w-full animate-pulse rounded-xl bg-[#ebe4d9]/50"></div>
+               <div className="h-full w-full animate-pulse rounded-2xl bg-[#ebe4d9]/40"></div>
             ) : performanceSummary.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {performanceSummary.map(row => (
-                  <div key={row.classRoomId}>
-                    <div className="mb-1 flex justify-between text-xs font-bold text-[#2d3436]">
-                      <span>{row.className}</span>
-                      <span>{row.avgScore}%</span>
+                  <div key={row.classRoomId} className="group">
+                    <div className="mb-2 flex justify-between text-xs font-black text-[#2d3436]">
+                      <span className="uppercase tracking-wide">{row.className}</span>
+                      <span className="rounded-md bg-[#ebe4d9]/30 px-2 py-0.5">{row.avgScore}%</span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-[#ebe4d9]/50">
+                    <div className="h-2.5 overflow-hidden rounded-full bg-[#ebe4d9]/50 shadow-inner">
                       <div 
-                        className="h-full bg-gradient-to-r from-[#3498db] to-[#2ecc71] transition-all duration-1000"
+                        className={`h-full transition-all duration-1000 ${
+                          Number(row.avgScore) > 75 ? 'bg-gradient-to-r from-[#2ecc71] to-[#27ae60]' :
+                          Number(row.avgScore) > 50 ? 'bg-gradient-to-r from-[#3498db] to-[#2980b9]' :
+                          'bg-gradient-to-r from-[#e67e22] to-[#d35400]'
+                        }`}
                         style={{ width: `${row.avgScore}%` }}
                       ></div>
                     </div>
@@ -184,22 +245,38 @@ function ExamsDashboardPage() {
                 ))}
               </div>
             ) : (
-              <p className="py-10 text-center text-sm text-[#636e72]">No result data available for this term.</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#ebe4d9]/30 text-[#636e72]">
+                  <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+                </div>
+                <p className="text-sm font-bold text-[#636e72]">No result data available for this term.</p>
+              </div>
             )}
           </div>
         </section>
       </div>
 
       {/* Exam Types & Configuration Quick Links */}
-      <section className="neo-card p-5">
-        <h2 className="text-sm font-black uppercase tracking-widest text-[#2d3436] mb-4">Configured Exam Types</h2>
-        <div className="flex flex-wrap gap-3">
+      <section className="neo-card p-6">
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-xs font-black uppercase tracking-widest text-[#2d3436]">Active Assessment Modules</h2>
+          <button className="rounded-full bg-white/80 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-[#2d3436] shadow-sm hover:bg-white transition">Configuration</button>
+        </div>
+        <div className="flex flex-wrap gap-4">
           {examTypes.map(t => (
-            <div key={t.id} className="rounded-full border border-[#ebe4d9] bg-white/60 px-4 py-2 text-xs font-bold text-[#2d3436]">
-              {t.displayName}
+            <div key={t.id} className="flex items-center gap-3 rounded-2xl border border-[#ebe4d9]/60 bg-white/60 p-3 pr-5 shadow-sm transition-all hover:shadow-md">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#9b59b6]/10 text-lg">
+                📝
+              </div>
+              <div>
+                <p className="text-xs font-black text-[#2d3436]">{t.displayName}</p>
+                <p className="text-[10px] font-bold text-[#636e72] uppercase tracking-tighter">{t.examKey}</p>
+              </div>
             </div>
           ))}
-          {examTypes.length === 0 && !loading && <p className="text-sm text-[#636e72]">No exam types configured.</p>}
+          {examTypes.length === 0 && !loading && (
+            <div className="w-full py-4 text-center text-xs font-bold text-[#636e72]">No active assessment modules found.</div>
+          )}
         </div>
       </section>
     </div>
@@ -261,73 +338,94 @@ function PerformanceStatsPage({ section }: { section: CurriculumSection }) {
   );
 
   return (
-    <div className="space-y-5">
-      <header className="border-b border-[#ebe4d9]/80 pb-3">
-        <h1 className="text-xl font-bold tracking-tight text-[#2d3436]">{titleForSection(section)}</h1>
-        <p className="mt-1 text-sm text-[#636e72]">Performance statistics grouped by section and class.</p>
-      </header>
-
-      <div className="neo-card p-4">
-        <label className="text-sm font-semibold text-[#2d3436]">
-          Term
+    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6 duration-700">
+      <header className="flex flex-col justify-between gap-4 border-b border-[#ebe4d9]/80 pb-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-[#2d3436]">{titleForSection(section)}</h1>
+          <p className="mt-1 text-sm font-semibold text-[#636e72]">Performance statistics grouped by section and class.</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <label className="text-xs font-black uppercase tracking-widest text-[#636e72]">Active Term:</label>
           <select
             value={term}
             onChange={(e) => setTerm(e.target.value)}
-            className="neo-inset-field mt-2 w-full max-w-xs rounded-lg px-3 py-2 text-sm"
+            className="neo-inset-field rounded-full px-4 py-2 text-sm font-bold text-[#2d3436] outline-none"
           >
             <option value="Term 1">Term 1</option>
             <option value="Term 2">Term 2</option>
             <option value="Term 3">Term 3</option>
           </select>
-        </label>
+        </div>
+      </header>
+
+      {error ? (
+        <div className="neo-card border-l-4 border-red-500 p-4 text-sm font-bold text-red-700">{error}</div>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div className="neo-card-elevated p-5">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Total Students</p>
+          <p className="mt-1 text-2xl font-black text-[#2d3436]">{loading ? "…" : totalStudents}</p>
+        </div>
+        <div className="neo-card-elevated p-5">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Classes Covered</p>
+          <p className="mt-1 text-2xl font-black text-[#3498db]">{loading ? "…" : classesCount}</p>
+        </div>
+        <div className="neo-card-elevated p-5">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Results Entered</p>
+          <p className="mt-1 text-2xl font-black text-[#2ecc71]">{loading ? "…" : resultsEntered}</p>
+        </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="neo-card-elevated p-4">
-          <p className="text-xs uppercase tracking-wide text-[#636e72]">Total students</p>
-          <p className="mt-1 text-xl font-bold text-[#2d3436]">{loading ? "…" : totalStudents}</p>
-        </div>
-        <div className="neo-card-elevated p-4">
-          <p className="text-xs uppercase tracking-wide text-[#636e72]">Classes covered</p>
-          <p className="mt-1 text-xl font-bold text-[#2d3436]">{loading ? "…" : classesCount}</p>
-        </div>
-        <div className="neo-card-elevated p-4">
-          <p className="text-xs uppercase tracking-wide text-[#636e72]">Results entered</p>
-          <p className="mt-1 text-xl font-bold text-[#2d3436]">{loading ? "…" : resultsEntered}</p>
-        </div>
-      </div>
-
-      {error ? <p className="text-sm font-semibold text-[#b84040]">{error}</p> : null}
-
-      <div className="neo-card overflow-hidden">
-        <div className="border-b border-[#ebe4d9]/80 bg-[#faf7f0]/60 px-5 py-3">
-          <h2 className="text-sm font-bold text-[#2d3436]">Section/Class performance table</h2>
+      <div className="neo-card-elevated overflow-hidden">
+        <div className="border-b border-[#ebe4d9]/80 bg-[#faf7f0]/60 px-6 py-4">
+          <h2 className="text-sm font-black uppercase tracking-widest text-[#2d3436]">Performance Breakdown by Class</h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-[#3f4f67]">
-            <thead className="bg-[#f5f8f5] text-xs font-bold uppercase text-[#6a9570]">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-[#f5f8f5]/50 text-[10px] font-black uppercase tracking-widest text-[#6a9570]">
               <tr>
-                <th className="px-5 py-3">Class</th>
-                <th className="px-5 py-3">Section</th>
-                <th className="px-5 py-3 text-right">Students</th>
-                <th className="px-5 py-3 text-right">Average score</th>
-                <th className="px-5 py-3 text-right">Pass rate</th>
+                <th className="px-6 py-4">Class</th>
+                <th className="px-6 py-4">Section</th>
+                <th className="px-6 py-4 text-right">Students</th>
+                <th className="px-6 py-4 text-right">Avg Score</th>
+                <th className="px-6 py-4 text-right">Pass Rate</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#ebe4d9]">
+            <tbody className="divide-y divide-[#ebe4d9]/40">
               {rows.map((row) => (
-                <tr key={`${row.className}-${row.sectionName}`}>
-                  <td className="px-5 py-3 font-semibold text-[#2d3436]">{row.className}</td>
-                  <td className="px-5 py-3">{row.sectionName}</td>
-                  <td className="px-5 py-3 text-right">{row.totalStudents}</td>
-                  <td className="px-5 py-3 text-right">{fmtAvg(row.avgScore)}</td>
-                  <td className="px-5 py-3 text-right">{fmtPct(row.passRate)}</td>
+                <tr key={`${row.className}-${row.sectionName}`} className="group transition-colors hover:bg-white/40">
+                  <td className="px-6 py-4 font-bold text-[#2d3436]">{row.className}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-[#636e72]">{row.sectionName}</td>
+                  <td className="px-6 py-4 text-right font-bold text-[#2d3436]">{row.totalStudents}</td>
+                  <td className="px-6 py-4 text-right">
+                    <span className="font-black text-[#3498db]">{fmtAvg(row.avgScore)}</span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="inline-flex items-center gap-2">
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[#ebe4d9]/50 hidden sm:block">
+                        <div 
+                          className="h-full bg-[#2ecc71] transition-all" 
+                          style={{ width: `${row.passRate ?? 0}%` }}
+                        ></div>
+                      </div>
+                      <span className="font-black text-[#2ecc71]">{fmtPct(row.passRate)}</span>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {!loading && rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-5 py-6 text-center text-sm text-[#636e72]">
-                    No performance data found for this exam and term.
+                  <td colSpan={5} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#ebe4d9]/30 text-[#636e72]">
+                        <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-bold text-[#636e72]">No performance data found for this selection.</p>
+                    </div>
                   </td>
                 </tr>
               ) : null}
@@ -414,15 +512,28 @@ function StudentMarksEntryPage({
           subject: row.subject,
           score: Number(row.score),
         }))
-        .filter((x) => Number.isFinite(x.score));
+        .filter((x) => Number.isFinite(x.score) && x.score >= 0 && x.score <= 100);
+      
+      if (marks.length === 0 && entryStudent.subjects.length > 0) {
+        setError("Enter at least one valid mark between 0 and 100 before saving.");
+        setSaving(false);
+        return;
+      }
+      
       const saved = await saveStudentMarkEntry({
         studentId: entryStudent.studentId,
         term,
         examType,
         marks,
       });
-      setSuccess(`Saved ${saved.saved} subject mark entries.`);
-      onSaved();
+      if (saved.saved > 0) {
+        setSuccess(`Saved ${saved.saved} subject mark entries.`);
+        setTimeout(() => {
+          onSaved();
+        }, 1000);
+      } else {
+        setError("No marks were saved. Confirm subject values and try again.");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save result entries");
     } finally {
@@ -431,74 +542,178 @@ function StudentMarksEntryPage({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="neo-card p-6">
-        <div className="flex items-center justify-between gap-3">
+    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6 duration-500">
+      <header className="flex flex-col justify-between gap-4 border-b border-[#ebe4d9]/80 pb-4 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onBack}
+            className="neo-icon-btn flex h-10 w-10 items-center justify-center bg-white/60 text-[#2d3436] transition-transform active:scale-90"
+            title="Go back"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
           <div>
-            <h1 className="text-xl font-bold text-[#2d3436]">Marks Entry Page</h1>
-            <p className="mt-1 text-sm text-[#636e72]">
-              Enter marks per subject for {term} · {examType}.
+            <h1 className="text-2xl font-black tracking-tight text-[#2d3436]">Marks Entry</h1>
+            <p className="mt-0.5 text-sm font-medium text-[#636e72]">
+              Academic Year 2026 · {term} · {examType}
             </p>
           </div>
+        </div>
+        
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={onBack}
-            className="rounded-full border border-[#d7d1c6] bg-white px-4 py-2 text-sm font-semibold text-[#2d3436] transition hover:bg-[#faf7f0]"
+            onClick={() => void onSaveStudentMarks()}
+            disabled={saving || loading || !entryStudent}
+            className="flex items-center gap-2 rounded-full bg-gradient-to-br from-[#2ecc71] to-[#27ae60] px-6 py-2.5 text-sm font-bold text-white shadow-lg transition hover:brightness-110 active:scale-95 disabled:opacity-50"
           >
-            Back to pending list
+            {saving ? (
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            ) : (
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+            <span>{saving ? "Saving..." : "Save Marks"}</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      {error ? <p className="text-sm font-semibold text-[#b84040]">{error}</p> : null}
-      {success ? <p className="text-sm font-semibold text-[#4a6b4e]">{success}</p> : null}
+      {error ? (
+        <div className="neo-card border-l-4 border-red-500 bg-red-50/30 p-4 text-sm font-bold text-red-700 animate-in shake duration-500">
+          <div className="flex items-center gap-3">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {error}
+          </div>
+        </div>
+      ) : null}
 
-      <div className="neo-card p-6">
-        {loading ? (
-          <p className="text-sm text-[#636e72]">Loading student marks page...</p>
-        ) : entryStudent ? (
-          <>
-            <div className="mb-4">
-              <h2 className="text-lg font-bold text-[#2d3436]">Enter Marks: {entryStudent.fullName}</h2>
-              <p className="text-sm text-[#636e72]">
-                {entryStudent.admissionNumber} · {entryStudent.className} · {term} · {examType}
-              </p>
-            </div>
-            <div className="grid gap-3">
-              {entryStudent.subjects.map((row) => (
-                <div
-                  key={row.subject}
-                  className="grid gap-3 rounded-xl border border-[#ebe4d9]/90 bg-[#faf7f0]/60 p-3 sm:grid-cols-[1.6fr_1fr]"
-                >
-                  <div className="font-semibold text-[#2d3436]">{row.subject}</div>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.01}
-                    value={row.score}
-                    onChange={(e) => updateSubjectMark(row.subject, e.target.value)}
-                    className="neo-inset-field w-full rounded-lg px-3 py-2 text-sm text-right"
-                    placeholder="Out of 100"
-                  />
+      {success ? (
+        <div className="neo-card border-l-4 border-green-500 bg-green-50/30 p-4 text-sm font-bold text-green-700 animate-in zoom-in duration-300">
+          <div className="flex items-center gap-3">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {success}
+          </div>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#3498db] border-t-transparent"></div>
+          <p className="mt-4 font-bold text-[#636e72]">Loading student records...</p>
+        </div>
+      ) : entryStudent ? (
+        <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
+          <aside className="space-y-6">
+            <div className="neo-card-elevated p-6 text-center">
+              <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[#3498db]/20 to-[#2980b9]/20 text-[#3498db]">
+                <svg className="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-black text-[#2d3436]">{entryStudent.fullName}</h2>
+              <p className="mt-1 text-sm font-bold text-[#3498db]">{entryStudent.admissionNumber}</p>
+              
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <div className="neo-inset p-3 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Class</p>
+                  <p className="mt-1 text-sm font-bold text-[#2d3436]">{entryStudent.className}</p>
                 </div>
-              ))}
+                <div className="neo-inset p-3 text-center">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Status</p>
+                  <p className="mt-1 text-sm font-bold text-green-600">Missing Marks</p>
+                </div>
+              </div>
             </div>
-            <div className="mt-5 flex justify-end">
-              <button
-                type="button"
-                onClick={() => void onSaveStudentMarks()}
-                disabled={saving || loading}
-                className="rounded-full bg-gradient-to-br from-[#b8d8ba] to-[#8fb892] px-5 py-2 text-sm font-bold text-[#2d3436] shadow-[3px_3px_8px_rgba(120,150,125,0.4),-2px_-2px_6px_rgba(255,255,255,0.8)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {saving ? "Saving..." : "Save marks"}
-              </button>
+
+            <div className="neo-card p-5">
+              <h3 className="mb-3 text-xs font-black uppercase tracking-widest text-[#636e72]">Instructions</h3>
+              <ul className="space-y-2 text-sm text-[#2d3436]">
+                <li className="flex gap-2">
+                  <span className="text-[#3498db] font-bold">•</span>
+                  Enter marks out of 100 for each subject.
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-[#3498db] font-bold">•</span>
+                  Leave empty if the student missed the exam.
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-[#3498db] font-bold">•</span>
+                  Use decimals (e.g. 85.5) if required.
+                </li>
+              </ul>
             </div>
-          </>
-        ) : (
-          <p className="text-sm text-[#636e72]">Student details unavailable.</p>
-        )}
-      </div>
+          </aside>
+
+          <main className="neo-card overflow-hidden">
+            <div className="border-b border-[#ebe4d9]/80 bg-[#faf7f0]/60 px-6 py-4">
+              <h3 className="text-sm font-black uppercase tracking-widest text-[#2d3436]">Subject Marks List</h3>
+            </div>
+            <div className="divide-y divide-[#ebe4d9]/60 p-6">
+              {entryStudent.subjects.map((row) => {
+                const scoreNum = parseFloat(row.score);
+                const isValid = row.score === "" || (scoreNum >= 0 && scoreNum <= 100);
+                
+                return (
+                  <div
+                    key={row.subject}
+                    className="group flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between first:pt-0 last:pb-0"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-black/5 group-hover:scale-110 transition-transform">
+                        <span className="text-xs font-black text-[#3498db]">{row.subject.slice(0, 2).toUpperCase()}</span>
+                      </div>
+                      <span className="font-bold text-[#2d3436]">{row.subject}</span>
+                    </div>
+                    
+                    <div className="relative w-full sm:w-48">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.01}
+                        value={row.score}
+                        onChange={(e) => updateSubjectMark(row.subject, e.target.value)}
+                        className={`neo-inset-field w-full rounded-xl px-4 py-3 text-right text-sm font-black transition-all outline-none focus:ring-2 ${
+                          !isValid 
+                            ? "text-red-600 ring-red-400 ring-2" 
+                            : row.score !== "" 
+                              ? "text-[#2d3436] ring-[#2ecc71]/30 ring-2" 
+                              : "text-[#636e72]"
+                        }`}
+                        placeholder="0.00"
+                      />
+                      {!isValid && (
+                        <span className="absolute -bottom-5 right-0 text-[10px] font-bold text-red-500">Must be 0-100</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              
+              {entryStudent.subjects.length === 0 && (
+                <div className="py-10 text-center">
+                  <p className="text-sm font-medium text-[#636e72]">No subjects assigned to this student's class.</p>
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
+      ) : (
+        <div className="neo-card p-20 text-center">
+          <p className="text-lg font-bold text-[#636e72]">Student records could not be found.</p>
+          <button onClick={onBack} className="mt-4 text-[#3498db] font-bold hover:underline">Return to list</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -507,6 +722,7 @@ function ResultEntryPage({ mode }: { mode: "exams" | "assessments" }) {
   const [options, setOptions] = useState<ResultEntryOptions | null>(null);
   const [term, setTerm] = useState("Term 1");
   const [examType, setExamType] = useState<ExamType>("");
+  const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
   const [rows, setRows] = useState<
     Array<{
       studentId: number;
@@ -514,11 +730,13 @@ function ResultEntryPage({ mode }: { mode: "exams" | "assessments" }) {
       fullName: string;
       className: string;
       sectionName: string;
+      hasResults: boolean;
     }>
   >([]);
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -529,6 +747,7 @@ function ResultEntryPage({ mode }: { mode: "exams" | "assessments" }) {
         if (cancelled) return;
         setOptions(data);
         setTerm(data.terms[0] ?? "Term 1");
+        setSelectedClassId(data.classes[0]?.id ?? null);
         if (mode === "assessments") {
           const hasAssessment = data.examTypes.includes("ASSESSMENT");
           setExamType(hasAssessment ? "ASSESSMENT" : "");
@@ -549,11 +768,19 @@ function ResultEntryPage({ mode }: { mode: "exams" | "assessments" }) {
   }, [mode]);
 
   useEffect(() => {
+    if (!selectedClassId || !examType) {
+      setRows([]);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
     setSelectedStudentId(null);
-    void fetchPendingResultEntryStudents({ term, examType })
+    void fetchResultEntryStudents({
+      term,
+      examType,
+      classRoomId: selectedClassId,
+    })
       .then((items) => {
         if (cancelled) return;
         setRows(
@@ -561,14 +788,16 @@ function ResultEntryPage({ mode }: { mode: "exams" | "assessments" }) {
             studentId: x.studentId,
             admissionNumber: x.admissionNumber,
             fullName: x.fullName,
-            className: x.className,
-            sectionName: x.sectionName,
+            className:
+              options?.classes.find((cls) => cls.id === x.classRoomId)?.name ?? "Unknown class",
+            sectionName: x.sectionName ?? "General",
+            hasResults: x.hasResults,
           })),
         );
       })
       .catch((e) => {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load pending students");
+          setError(e instanceof Error ? e.message : "Failed to load students");
           setRows([]);
         }
       })
@@ -578,12 +807,24 @@ function ResultEntryPage({ mode }: { mode: "exams" | "assessments" }) {
     return () => {
       cancelled = true;
     };
-  }, [term, examType]);
+  }, [selectedClassId, term, examType, options?.classes]);
+
+  const filteredRows = useMemo(() => {
+    const s = searchTerm.toLowerCase().trim();
+    if (!s) return rows;
+    return rows.filter(
+      (r) =>
+        r.fullName.toLowerCase().includes(s) ||
+        r.admissionNumber.toLowerCase().includes(s) ||
+        r.className.toLowerCase().includes(s) ||
+        r.sectionName.toLowerCase().includes(s)
+    );
+  }, [rows, searchTerm]);
 
   const authorityText =
     options?.authority === "full"
-      ? "Access: Admin has full authority."
-      : "Access: Authorized user is restricted to assigned class(es).";
+      ? "Full Administrative Authority"
+      : "Restricted Access (Assigned Classes Only)";
   const examChoices = (options?.examTypes ?? []).filter((t) => t !== "ASSESSMENT");
 
   if (selectedStudentId != null) {
@@ -595,32 +836,34 @@ function ResultEntryPage({ mode }: { mode: "exams" | "assessments" }) {
         onBack={() => setSelectedStudentId(null)}
         onSaved={() => {
           setSelectedStudentId(null);
-          setRows((prev) => prev.filter((x) => x.studentId !== selectedStudentId));
+          setRows((prev) =>
+            prev.map((x) => (x.studentId === selectedStudentId ? { ...x, hasResults: true } : x)),
+          );
         }}
       />
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="neo-card p-6">
-        <h1 className="text-xl font-bold text-[#2d3436]">
-          {mode === "assessments" ? "Assessment Tests Entry" : "Result Entry"}
-        </h1>
-        <p className="mt-2 text-sm text-[#636e72]">{authorityText}</p>
-        <p className="mt-1 text-sm text-[#636e72]">
-          Students shown below are automatically filtered to those without records, sorted by class and section.
-        </p>
-      </div>
-
-      <div className="neo-card p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="text-sm font-semibold text-[#2d3436]">
-            Term
+    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6 duration-700">
+      <header className="flex flex-col justify-between gap-4 border-b border-[#ebe4d9]/80 pb-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-[#2d3436]">
+            {mode === "assessments" ? "Assessment Entry" : "Result Entry"}
+          </h1>
+          <p className="mt-1 text-sm font-semibold text-[#636e72] flex items-center gap-2">
+            <span className={`h-2 w-2 rounded-full ${options?.authority === 'full' ? 'bg-green-500' : 'bg-orange-500'}`}></span>
+            {authorityText}
+          </p>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-black uppercase tracking-widest text-[#636e72]">Term:</label>
             <select
               value={term}
               onChange={(e) => setTerm(e.target.value)}
-              className="neo-inset-field mt-2 w-full rounded-lg px-3 py-2 text-sm"
+              className="neo-inset-field rounded-full px-4 py-2 text-sm font-bold text-[#2d3436] outline-none"
             >
               {(options?.terms ?? ["Term 1", "Term 2", "Term 3"]).map((t) => (
                 <option key={t} value={t}>
@@ -628,26 +871,38 @@ function ResultEntryPage({ mode }: { mode: "exams" | "assessments" }) {
                 </option>
               ))}
             </select>
-          </label>
+          </div>
 
-          {mode === "assessments" ? (
-            <div className="text-sm font-semibold text-[#2d3436]">
-              Exam type
-              <div className="neo-inset-field mt-2 rounded-lg px-3 py-2 text-sm text-[#3f4f67]">
-                {examType || "No ASSESSMENT exam type configured"}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-black uppercase tracking-widest text-[#636e72]">Class:</label>
+            <select
+              value={selectedClassId ?? ""}
+              onChange={(e) => setSelectedClassId(e.target.value ? Number(e.target.value) : null)}
+              className="neo-inset-field rounded-full px-4 py-2 text-sm font-bold text-[#2d3436] outline-none"
+            >
+              {(options?.classes ?? []).map((cls) => (
+                <option key={cls.id} value={cls.id}>
+                  {cls.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-black uppercase tracking-widest text-[#636e72]">Type:</label>
+            {mode === "assessments" ? (
+              <div className="neo-inset px-4 py-2 text-sm font-bold text-[#3498db]">
+                ASSESSMENT
               </div>
-            </div>
-          ) : (
-            <label className="text-sm font-semibold text-[#2d3436]">
-              Exam type
+            ) : (
               <select
                 value={examType}
                 onChange={(e) => setExamType(e.target.value as ExamType)}
                 disabled={examChoices.length === 0}
-                className="neo-inset-field mt-2 w-full rounded-lg px-3 py-2 text-sm"
+                className="neo-inset-field rounded-full px-4 py-2 text-sm font-bold text-[#2d3436] outline-none disabled:opacity-50"
               >
                 {examChoices.length === 0 ? (
-                  <option value="">No exam types configured</option>
+                  <option value="">None Configured</option>
                 ) : null}
                 {examChoices.map((t) => (
                   <option key={t} value={t}>
@@ -655,56 +910,140 @@ function ResultEntryPage({ mode }: { mode: "exams" | "assessments" }) {
                   </option>
                 ))}
               </select>
-            </label>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      </header>
 
-      {error ? <p className="text-sm font-semibold text-[#b84040]">{error}</p> : null}
+      {error ? (
+        <div className="neo-card border-l-4 border-red-500 p-4 text-sm font-bold text-red-700">{error}</div>
+      ) : null}
 
-      <div className="neo-card overflow-hidden">
-        <div className="border-b border-[#ebe4d9]/80 bg-[#faf7f0]/60 px-5 py-3">
-          <h2 className="text-sm font-bold text-[#2d3436]">Students without records (auto-filtered)</h2>
+      <div className="grid gap-6">
+        {/* Stats Row */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="neo-card-elevated p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Total Students</p>
+            <p className="mt-1 text-2xl font-black text-[#2d3436]">{loading ? "..." : rows.length}</p>
+          </div>
+          <div className="neo-card-elevated p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Filtered</p>
+            <p className="mt-1 text-2xl font-black text-[#3498db]">{loading ? "..." : filteredRows.length}</p>
+          </div>
+          <div className="neo-card-elevated p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Saved</p>
+            <p className="mt-1 text-2xl font-black text-[#2ecc71]">
+              {loading ? "..." : rows.filter((row) => row.hasResults).length}
+            </p>
+          </div>
+          <div className="neo-card-elevated p-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Missing Marks</p>
+            <p className="mt-1 text-2xl font-black text-[#e74c3c]">
+              {loading ? "..." : rows.filter((row) => !row.hasResults).length}
+            </p>
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-[#3f4f67]">
-            <thead className="bg-[#f5f8f5] text-xs font-bold uppercase text-[#6a9570]">
-              <tr>
-                <th className="px-5 py-3">Class</th>
-                <th className="px-5 py-3">Section</th>
-                <th className="px-5 py-3">Admission No</th>
-                <th className="px-5 py-3">Student</th>
-                <th className="px-5 py-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#ebe4d9]">
-              {rows.map((row) => (
-                <tr key={row.studentId}>
-                  <td className="px-5 py-3 font-semibold text-[#2d3436]">{row.className}</td>
-                  <td className="px-5 py-3">{row.sectionName}</td>
-                  <td className="px-5 py-3">{row.admissionNumber}</td>
-                  <td className="px-5 py-3 font-semibold text-[#2d3436]">{row.fullName}</td>
-                  <td className="px-5 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedStudentId(row.studentId)}
-                      className="rounded-full bg-[#3498db] px-4 py-1.5 text-xs font-bold text-white transition hover:brightness-105"
-                    >
-                      Enter marks
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 ? (
+
+        {/* List Section */}
+        <section className="neo-card-elevated flex flex-col overflow-hidden">
+          <div className="flex flex-col gap-4 border-b border-[#ebe4d9]/60 bg-[#faf7f0]/40 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-sm font-black uppercase tracking-widest text-[#2d3436]">Students In Selected Class</h2>
+            <div className="relative w-full sm:w-64">
+              <input
+                type="text"
+                placeholder="Search students..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="neo-inset-field w-full rounded-full py-2 pl-10 pr-4 text-sm font-medium outline-none focus:ring-2 focus:ring-[#3498db]/30"
+              />
+              <svg className="absolute left-3.5 top-2.5 h-4 w-4 text-[#636e72]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[#f5f8f5]/50 text-[10px] font-black uppercase tracking-widest text-[#6a9570]">
                 <tr>
-                  <td colSpan={5} className="px-5 py-6 text-center text-sm text-[#636e72]">
-                    {loading ? "Loading students..." : "No pending students found for selected term/exam type."}
-                  </td>
+                  <th className="px-6 py-4">Student Info</th>
+                  <th className="px-6 py-4">Class & Section</th>
+                  <th className="px-6 py-4">Admission No</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4 text-right">Action</th>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-[#ebe4d9]/40">
+                {filteredRows.map((row) => (
+                  <tr key={row.studentId} className="group transition-colors hover:bg-white/40">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#3498db]/10 to-[#2980b9]/10 font-black text-[#3498db]">
+                          {row.fullName.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-bold text-[#2d3436]">{row.fullName}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-[#2d3436]">{row.className}</span>
+                        <span className="text-xs font-medium text-[#636e72]">{row.sectionName}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="neo-inset px-3 py-1 text-xs font-black text-[#636e72]">
+                        {row.admissionNumber}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                          row.hasResults ? "bg-[#cde8cf] text-[#2d3436]" : "bg-[#f7d1cd] text-[#8a2f2f]"
+                        }`}
+                      >
+                        {row.hasResults ? "Saved" : "Missing Marks"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStudentId(row.studentId)}
+                        className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#3498db] to-[#2980b9] px-4 py-2 text-xs font-black text-white shadow-md transition hover:brightness-110 active:scale-95"
+                      >
+                        <span>{row.hasResults ? "Edit Marks" : "Enter Marks"}</span>
+                        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                
+                {filteredRows.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#ebe4d9]/30 text-[#636e72]">
+                          <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9.172 9.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-lg font-black text-[#2d3436]">
+                            {loading ? "Syncing data..." : rows.length === 0 ? "All caught up!" : "No matches found"}
+                          </p>
+                          <p className="text-sm font-medium text-[#636e72]">
+                            {loading ? "Fetching latest records from server" : rows.length === 0 ? "No students found for this class and selection." : `Try searching for something else.`}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
   );
@@ -1146,40 +1485,64 @@ function GradingStandardsPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="neo-card p-6">
-        <h1 className="text-xl font-bold text-[#2d3436]">Grading Standards & Scales</h1>
-        <p className="mt-1 text-sm text-[#636e72]">Configure academic grading thresholds and division logic.</p>
-      </div>
+    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-8 duration-700">
+      <header className="flex flex-col justify-between gap-4 border-b border-[#ebe4d9]/80 pb-6 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-[#2d3436]">Grading Standards & Scales</h1>
+          <p className="mt-1 text-sm font-semibold text-[#636e72]">Configure academic grading thresholds and division logic.</p>
+        </div>
+      </header>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="neo-card p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[#2d3436] mb-4">Active Scales</h2>
-          {error ? <p className="mb-3 text-sm font-semibold text-[#b84040]">{error}</p> : null}
-          <div className="space-y-3">
-            {scales.map(s => (
-              <div key={s.id} className="rounded-xl border border-[#ebe4d9] bg-[#faf7f0]/60 p-4">
-                <h3 className="font-bold text-[#2d3436]">{s.name}</h3>
-                <div className="mt-2 grid grid-cols-4 gap-2 text-[10px] uppercase font-bold text-[#636e72]">
-                  <span>Grade</span>
-                  <span>Min</span>
-                  <span>Max</span>
-                  <span>Point</span>
+      <div className="grid gap-8 lg:grid-cols-2">
+        <section className="neo-card-elevated flex flex-col overflow-hidden">
+          <div className="border-b border-[#ebe4d9]/60 bg-[#faf7f0]/60 px-6 py-5">
+             <h2 className="text-xs font-black uppercase tracking-widest text-[#2d3436]">Active Grading Policies</h2>
+          </div>
+          <div className="flex-1 p-6">
+            {error ? <div className="mb-4 rounded-xl bg-red-50 p-4 text-sm font-bold text-red-600">{error}</div> : null}
+            <div className="space-y-4">
+              {scales.map(s => (
+                <div key={s.id} className="group rounded-2xl border border-[#ebe4d9]/60 bg-white/40 p-5 transition-all hover:bg-white/80">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-lg font-black text-[#2d3436]">{s.name}</h3>
+                    <button className="text-[10px] font-black uppercase tracking-widest text-[#3498db]">Edit Policy</button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-4 text-center">
+                    {Object.entries(s.thresholds).slice(0, 4).map(([grade, score]) => (
+                      <div key={grade} className="rounded-xl bg-[#ebe4d9]/30 p-2">
+                        <p className="text-[10px] font-black uppercase text-[#636e72]">{grade}</p>
+                        <p className="text-sm font-black text-[#2d3436]">{score as number}+</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-[#636e72]">
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>Used across {s.name.includes('Primary') ? '7' : '6'} class sections</span>
+                  </div>
                 </div>
-                {/* Simplified threshold display */}
-                <p className="mt-2 text-xs text-[#636e72]">JSON: {JSON.stringify(s.thresholds).slice(0, 50)}...</p>
-              </div>
-            ))}
-            {scales.length === 0 && !loading && <p className="text-sm text-[#636e72]">No grading scales found.</p>}
+              ))}
+              {scales.length === 0 && !loading && (
+                <div className="py-12 text-center text-sm font-bold text-[#636e72]">No grading scales found.</div>
+              )}
+              {loading && <div className="h-32 w-full animate-pulse rounded-2xl bg-[#ebe4d9]/40"></div>}
+            </div>
           </div>
         </section>
 
-        <section className="neo-card p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[#2d3436] mb-4">Add New Standard</h2>
-          <p className="text-xs text-[#636e72] mb-4">Define custom grading logic for Primary or Secondary sections.</p>
-          <button className="w-full rounded-full bg-[#3498db] py-3 text-sm font-bold text-white transition hover:brightness-110">
-            Create New Scale Template
-          </button>
+        <section className="neo-card-elevated p-8">
+           <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-[#3498db]/10 to-[#2980b9]/10 text-3xl">
+              📐
+            </div>
+            <h2 className="text-xl font-black text-[#2d3436]">Global Academic Policy</h2>
+            <p className="mt-3 max-w-sm text-sm font-medium text-[#636e72]">
+              Define custom grading logic for Primary or Secondary sections. Changes here will instantly update performance reports across the entire school.
+            </p>
+            <button className="mt-10 w-full rounded-2xl bg-gradient-to-br from-[#3498db] to-[#2980b9] py-4 text-sm font-black uppercase tracking-widest text-white shadow-xl transition hover:brightness-110 active:scale-95">
+              Initialize New Template
+            </button>
+            <p className="mt-4 text-[10px] font-bold uppercase tracking-widest text-[#636e72]">Last updated 2 days ago</p>
+          </div>
         </section>
       </div>
     </div>
@@ -1188,13 +1551,41 @@ function GradingStandardsPage() {
 
 function ReportRemarksPage() {
   return (
-    <div className="space-y-6">
-      <div className="neo-card p-6 text-center">
-        <h1 className="text-xl font-bold text-[#2d3436]">Student Report Remarks</h1>
-        <p className="mt-1 text-sm text-[#636e72]">Manage teacher comments and conduct reports for student cards.</p>
-        <div className="mt-6 inline-flex items-center gap-3 rounded-full bg-[#3498db]/10 px-6 py-3 text-sm font-bold text-[#3498db]">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-[#3498db]"></span>
-          Select a student from the Results Entry page to add remarks
+    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6 duration-700">
+      <header className="flex flex-col justify-between gap-4 border-b border-[#ebe4d9]/80 pb-6 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-[#2d3436]">Student Report Remarks</h1>
+          <p className="mt-1 text-sm font-semibold text-[#636e72]">Manage teacher comments and conduct reports for student cards.</p>
+        </div>
+      </header>
+
+      <div className="neo-card-elevated p-16 text-center">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-3xl bg-gradient-to-br from-[#3498db]/10 to-[#2980b9]/10 text-4xl mb-8">
+          💬
+        </div>
+        <h2 className="text-2xl font-black text-[#2d3436]">No Student Selected</h2>
+        <p className="mx-auto mt-3 max-w-lg text-sm font-medium text-[#636e72]">
+          Remarks are managed during the result entry process. To add comments, please select a student from the Results Entry page and click on the "Add Remarks" option in their mark entry form.
+        </p>
+        
+        <div className="mt-12 inline-flex items-center gap-3 rounded-2xl bg-[#3498db]/10 px-8 py-4 text-sm font-black text-[#3498db]">
+          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#3498db]"></span>
+          Select a student from Results Entry to begin
+        </div>
+
+        <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto">
+          <div className="p-4 rounded-2xl bg-[#ebe4d9]/30 border border-white/50">
+            <p className="text-xs font-black uppercase text-[#636e72] mb-1">Conduct Reports</p>
+            <p className="text-[10px] font-bold text-[#2d3436]">Behavioral assessment logs</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-[#ebe4d9]/30 border border-white/50">
+            <p className="text-xs font-black uppercase text-[#636e72] mb-1">Termly Comments</p>
+            <p className="text-[10px] font-bold text-[#2d3436]">Custom teacher feedback</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-[#ebe4d9]/30 border border-white/50">
+            <p className="text-xs font-black uppercase text-[#636e72] mb-1">HM Signature</p>
+            <p className="text-[10px] font-bold text-[#2d3436]">Official report validation</p>
+          </div>
         </div>
       </div>
     </div>
@@ -1207,44 +1598,68 @@ function ExamSchedulePage() {
 
   useEffect(() => {
     setLoading(true);
-    fetchExams()
+    void fetchExams()
       .then(setExams)
       .finally(() => setLoading(false));
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="neo-card p-6">
-        <h1 className="text-xl font-bold text-[#2d3436]">Academic Exam Scheduling</h1>
-        <p className="mt-1 text-sm text-[#636e72]">Set dates for BOT, MID, and EOT exams across all classes.</p>
-      </div>
+    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6 duration-700">
+      <header className="flex flex-col justify-between gap-4 border-b border-[#ebe4d9]/80 pb-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-[#2d3436]">Exam Scheduling</h1>
+          <p className="mt-1 text-sm font-semibold text-[#636e72]">Set and manage dates for BOT, MID, and EOT exams.</p>
+        </div>
+      </header>
 
-      <div className="neo-card overflow-hidden">
+      <div className="neo-card-elevated overflow-hidden">
+        <div className="border-b border-[#ebe4d9]/60 bg-[#faf7f0]/40 px-6 py-4">
+          <h2 className="text-sm font-black uppercase tracking-widest text-[#2d3436]">Scheduled Academic Exams</h2>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-[#3f4f67]">
-            <thead className="bg-[#f5f8f5] text-xs font-bold uppercase text-[#6a9570]">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-[#f5f8f5]/50 text-[10px] font-black uppercase tracking-widest text-[#6a9570]">
               <tr>
-                <th className="px-5 py-3">Date</th>
-                <th className="px-5 py-3">Subject</th>
-                <th className="px-5 py-3">Class</th>
-                <th className="px-5 py-3">Type</th>
-                <th className="px-5 py-3 text-right">Action</th>
+                <th className="px-6 py-4">Exam Date</th>
+                <th className="px-6 py-4">Subject</th>
+                <th className="px-6 py-4">Class</th>
+                <th className="px-6 py-4">Type</th>
+                <th className="px-6 py-4 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#ebe4d9]">
+            <tbody className="divide-y divide-[#ebe4d9]/40">
               {exams.map(ex => (
-                <tr key={ex.id}>
-                  <td className="px-5 py-3 font-bold text-[#3498db]">{ex.examDate}</td>
-                  <td className="px-5 py-3 font-semibold text-[#2d3436]">{ex.subject}</td>
-                  <td className="px-5 py-3">{ex.className}</td>
-                  <td className="px-5 py-3"><span className="rounded-full bg-[#ebe4d9] px-2 py-1 text-[10px] font-black uppercase">{ex.examKey}</span></td>
-                  <td className="px-5 py-3 text-right">
-                    <button className="text-[#3498db] hover:underline font-bold">Edit</button>
+                <tr key={ex.id} className="group transition-colors hover:bg-white/40">
+                  <td className="px-6 py-4">
+                    <span className="font-black text-[#3498db]">{ex.examDate}</span>
+                  </td>
+                  <td className="px-6 py-4 font-bold text-[#2d3436]">{ex.subject}</td>
+                  <td className="px-6 py-4 font-medium text-[#636e72]">{ex.className}</td>
+                  <td className="px-6 py-4">
+                    <span className="neo-inset px-3 py-1 text-[10px] font-black uppercase text-[#2d3436]">
+                      {ex.examKey}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button className="rounded-full bg-white/80 px-4 py-1.5 text-xs font-black text-[#3498db] shadow-sm hover:bg-white transition active:scale-95">
+                      Edit
+                    </button>
                   </td>
                 </tr>
               ))}
               {exams.length === 0 && !loading && (
-                <tr><td colSpan={5} className="py-10 text-center text-[#636e72]">No exams scheduled.</td></tr>
+                <tr>
+                  <td colSpan={5} className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#ebe4d9]/30 text-[#636e72]">
+                        <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <p className="text-sm font-bold text-[#636e72]">No exams scheduled yet.</p>
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -1256,42 +1671,49 @@ function ExamSchedulePage() {
 
 function PromotionPage() {
   return (
-    <div className="space-y-6">
-      <div className="neo-card p-6">
-        <h1 className="text-xl font-bold text-[#2d3436]">Promotion & Graduation Engine</h1>
-        <p className="mt-1 text-sm text-[#636e72]">Bulk promote students to the next class or graduate final year students.</p>
-      </div>
-
-      <div className="neo-card p-8 text-center border-dashed border-2 border-[#ebe4d9]">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#f1c40f]/10 text-[#f1c40f]">
-          <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6 duration-700">
+      <header className="flex flex-col justify-between gap-4 border-b border-[#ebe4d9]/80 pb-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-[#2d3436]">Promotion Engine</h1>
+          <p className="mt-1 text-sm font-semibold text-[#636e72]">Manage bulk student promotions and graduation.</p>
         </div>
-        <h2 className="mt-4 text-lg font-bold text-[#2d3436]">Promotion Engine Locked</h2>
-        <p className="mt-2 text-sm text-[#636e72]">Promotion is typically available at the end of Term 3. Configure grading scales first to enable automatic promotion eligibility checks.</p>
-        <button className="mt-6 rounded-full bg-[#3498db] px-8 py-3 text-sm font-bold text-white transition hover:brightness-110">
-          Check Eligibility (Simulate)
-        </button>
+      </header>
+
+      <div className="neo-card-elevated p-12 text-center">
+        <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[#f1c40f]/10 text-[#f1c40f] ring-8 ring-[#f1c40f]/5">
+          <svg className="h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <h2 className="mt-8 text-2xl font-black text-[#2d3436]">Promotion Engine Locked</h2>
+        <p className="mx-auto mt-3 max-w-lg text-sm font-medium text-[#636e72]">
+          Promotion is typically available at the end of Term 3. Configure grading scales first to enable automatic promotion eligibility checks.
+        </p>
+        <div className="mt-10 flex justify-center gap-4">
+          <button className="rounded-full bg-gradient-to-br from-[#3498db] to-[#2980b9] px-8 py-3 text-sm font-black text-white shadow-lg transition hover:brightness-110 active:scale-95">
+            Check Eligibility (Simulate)
+          </button>
+          <button className="rounded-full bg-white px-8 py-3 text-sm font-black text-[#2d3436] shadow-md transition hover:bg-[#faf7f0] active:scale-95">
+            View Requirements
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
 function LearnsReportPage() {
-  const [classes, setClasses] = useState<Array<{ id: number; name: string }>>([]);
+  const [classes, setClasses] = useState<
+    Array<{ id: number; name: string; categoryId: number | null; categoryName: string | null }>
+  >([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
   const [term, setTerm] = useState("Term 1");
   const [examType, setExamType] = useState<ExamType>("");
   const [examTypes, setExamTypes] = useState<string[]>([]);
-  const [rows, setRows] = useState<
-    Array<{
-      studentId: number;
-      admissionNumber: string;
-      fullName: string;
-      sectionName: string | null;
-      hasResults: boolean;
-    }>
-  >([]);
-  const [loading, setLoading] = useState(false);
+  const [marksheet, setMarksheet] = useState<GeneratedMarksheetPayload | null>(null);
+  const [, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1302,6 +1724,8 @@ function LearnsReportPage() {
       .then((data) => {
         if (cancelled) return;
         setClasses(data.classes);
+        const categoryIds = Array.from(new Set(data.classes.map((x) => x.categoryId).filter((x): x is number => x != null)));
+        setSelectedCategoryId(categoryIds[0] ?? null);
         setTerm(data.terms[0] ?? "Term 1");
         const nonAssessmentTypes = data.examTypes.filter((x) => x !== "ASSESSMENT");
         setExamTypes(nonAssessmentTypes);
@@ -1318,195 +1742,217 @@ function LearnsReportPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!selectedClassId || !examType) {
-      setRows([]);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    void fetchResultEntryStudents({
-      term,
-      examType,
-      classRoomId: selectedClassId,
-    })
-      .then((items) => {
-        if (cancelled) return;
-        setRows(
-          items.map((x) => ({
-            studentId: x.studentId,
-            admissionNumber: x.admissionNumber,
-            fullName: x.fullName,
-            sectionName: x.sectionName,
-            hasResults: x.hasResults,
-          })),
-        );
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load class marksheet");
-          setRows([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedClassId, term, examType]);
-
-  const selectedClassName = useMemo(
-    () => classes.find((x) => x.id === selectedClassId)?.name ?? "",
-    [classes, selectedClassId],
+  const categoryOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          classes
+            .filter((x) => x.categoryId != null)
+            .map((x) => [x.categoryId as number, x.categoryName ?? "Uncategorized"]),
+        ).entries(),
+      ).map(([id, name]) => ({ id, name })),
+    [classes],
   );
 
-  if (selectedClassId == null) {
-    return (
-      <div className="space-y-6">
-        <div className="neo-card p-6">
-          <h1 className="text-xl font-bold text-[#2d3436]">Learner's Reports</h1>
-          <p className="mt-1 text-sm text-[#636e72]">
-            Open any class to view its marksheet and learner-level result status.
-          </p>
+  const classOptions = useMemo(
+    () => classes.filter((x) => x.categoryId === selectedCategoryId),
+    [classes, selectedCategoryId],
+  );
+
+  useEffect(() => {
+    if (selectedCategoryId == null) {
+      setSelectedClassId(null);
+      return;
+    }
+    const stillValid = classOptions.some((x) => x.id === selectedClassId);
+    if (!stillValid) setSelectedClassId(classOptions[0]?.id ?? null);
+  }, [selectedCategoryId, classOptions, selectedClassId]);
+
+  async function onGenerateMarksheet() {
+    if (!selectedClassId || !examType) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const item = await generateClassMarksheet({
+        term,
+        examType,
+        classRoomId: selectedClassId,
+      });
+      setMarksheet(item);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to generate marksheet");
+      setMarksheet(null);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-4 space-y-6 duration-700">
+      <header className="flex flex-col justify-between gap-4 border-b border-[#ebe4d9]/80 pb-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-[#2d3436]">Learner Result Reports</h1>
+          <p className="mt-1 text-sm font-semibold text-[#636e72]">Generate and view comprehensive class marksheets.</p>
         </div>
-        {error ? <p className="text-sm font-semibold text-[#b84040]">{error}</p> : null}
-        <div className="neo-card overflow-hidden">
-          <div className="border-b border-[#ebe4d9]/80 bg-[#faf7f0]/60 px-5 py-3">
-            <h2 className="text-sm font-bold text-[#2d3436]">Classes</h2>
+      </header>
+
+      <div className="neo-card p-6">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Section</label>
+            <select
+              value={selectedCategoryId ?? ""}
+              onChange={(e) => setSelectedCategoryId(e.target.value ? Number(e.target.value) : null)}
+              className="neo-inset-field w-full rounded-xl px-4 py-3 text-sm font-bold text-[#2d3436] outline-none"
+            >
+              {categoryOptions.length === 0 ? <option value="">No categories</option> : null}
+              {categoryOptions.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Class</label>
+            <select
+              value={selectedClassId ?? ""}
+              onChange={(e) => setSelectedClassId(e.target.value ? Number(e.target.value) : null)}
+              className="neo-inset-field w-full rounded-xl px-4 py-3 text-sm font-bold text-[#2d3436] outline-none"
+            >
+              {classOptions.length === 0 ? <option value="">No classes</option> : null}
+              {classOptions.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-[#636e72]">Term & Type</label>
+            <div className="flex gap-2">
+              <select
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
+                className="neo-inset-field flex-1 rounded-xl px-3 py-3 text-sm font-bold text-[#2d3436] outline-none"
+              >
+                {["Term 1", "Term 2", "Term 3"].map((x) => (
+                  <option key={x} value={x}>
+                    {x}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={examType}
+                onChange={(e) => setExamType(e.target.value as ExamType)}
+                className="neo-inset-field flex-1 rounded-xl px-3 py-3 text-sm font-bold text-[#2d3436] outline-none"
+              >
+                {examTypes.map((x) => (
+                  <option key={x} value={x}>
+                    {x}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={() => void onGenerateMarksheet()}
+              disabled={generating || !selectedClassId || !examType}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-[#3498db] to-[#2980b9] px-6 py-3.5 text-sm font-black text-white shadow-lg transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+            >
+              {generating ? (
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              ) : (
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              )}
+              <span>{generating ? "Generating..." : "Generate Marksheet"}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {error ? (
+        <div className="neo-card border-l-4 border-red-500 p-4 text-sm font-bold text-red-700">{error}</div>
+      ) : null}
+
+      {marksheet ? (
+        <div className="neo-card-elevated overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[#ebe4d9]/80 bg-[#faf7f0]/60 px-6 py-4">
+            <div>
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#2d3436]">
+                {marksheet.className} · {marksheet.term} · {marksheet.examType}
+              </h2>
+              <p className="mt-0.5 text-xs font-bold text-[#3498db]">{marksheet.rows.length} Learners Ranked</p>
+            </div>
+            <button className="flex items-center gap-2 rounded-full bg-white/80 px-4 py-2 text-xs font-black text-[#2d3436] shadow-sm hover:bg-white transition">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print
+            </button>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-[#3f4f67]">
-              <thead className="bg-[#f5f8f5] text-xs font-bold uppercase text-[#6a9570]">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[#f5f8f5]/50 text-[10px] font-black uppercase tracking-widest text-[#6a9570]">
                 <tr>
-                  <th className="px-5 py-3">Class</th>
-                  <th className="px-5 py-3 text-right">Action</th>
+                  <th className="px-6 py-4">Rank</th>
+                  <th className="px-6 py-4">Learner</th>
+                  {marksheet.subjects.map((subject) => (
+                    <th key={subject} className="px-6 py-4 text-right">
+                      {subject}
+                    </th>
+                  ))}
+                  <th className="px-6 py-4 text-right">Total</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#ebe4d9]">
-                {classes.map((row) => (
-                  <tr key={row.id}>
-                    <td className="px-5 py-3 font-semibold text-[#2d3436]">{row.name}</td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedClassId(row.id)}
-                        className="rounded-full bg-[#3498db] px-4 py-1.5 text-xs font-bold text-white transition hover:brightness-105"
-                      >
-                        Open
-                      </button>
+              <tbody className="divide-y divide-[#ebe4d9]/40">
+                {marksheet.rows.map((row) => (
+                  <tr key={row.studentId} className="group transition-colors hover:bg-white/40">
+                    <td className="px-6 py-4">
+                      <div className={`flex h-7 w-7 items-center justify-center rounded-full font-black text-xs ${
+                        row.position === 1 ? 'bg-yellow-100 text-yellow-700' : 
+                        row.position === 2 ? 'bg-slate-100 text-slate-600' : 
+                        row.position === 3 ? 'bg-orange-100 text-orange-700' : 
+                        'text-[#636e72]'
+                      }`}>
+                        {row.position}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 font-bold text-[#2d3436]">{row.fullName}</td>
+                    {marksheet.subjects.map((subject) => (
+                      <td key={`${row.studentId}-${subject}`} className="px-6 py-4 text-right font-black text-[#2d3436]">
+                        {row.marksBySubject[subject] ?? "-"}
+                      </td>
+                    ))}
+                    <td className="px-6 py-4 text-right">
+                      <span className="rounded-lg bg-[#3498db]/10 px-3 py-1.5 font-black text-[#3498db]">
+                        {row.totalMarks}
+                      </span>
                     </td>
                   </tr>
                 ))}
-                {!loading && classes.length === 0 ? (
-                  <tr>
-                    <td colSpan={2} className="px-5 py-6 text-center text-sm text-[#636e72]">
-                      No classes available.
-                    </td>
-                  </tr>
-                ) : null}
               </tbody>
             </table>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="neo-card p-6">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-bold text-[#2d3436]">{selectedClassName} Marksheet</h1>
-            <p className="mt-1 text-sm text-[#636e72]">
-              Review marksheet status by learner for the selected term and exam type.
-            </p>
+      ) : (
+        <div className="neo-card border-dashed border-2 border-[#ebe4d9] p-20 text-center">
+           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#ebe4d9]/30 text-[#636e72] mb-4">
+            <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
           </div>
-          <button
-            type="button"
-            onClick={() => setSelectedClassId(null)}
-            className="rounded-full border border-[#d7d1c6] bg-white px-4 py-2 text-sm font-semibold text-[#2d3436] transition hover:bg-[#faf7f0]"
-          >
-            Back to classes
-          </button>
+          <p className="font-black text-[#2d3436]">Ready to Generate</p>
+          <p className="text-sm font-medium text-[#636e72] mt-1">Select a class and exam type above to view the performance marksheet.</p>
         </div>
-      </div>
-      <div className="neo-card p-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm font-semibold text-[#2d3436]">
-            Term
-            <select
-              value={term}
-              onChange={(e) => setTerm(e.target.value)}
-              className="neo-inset-field mt-2 w-full rounded-lg px-3 py-2 text-sm"
-            >
-              {["Term 1", "Term 2", "Term 3"].map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-semibold text-[#2d3436]">
-            Exam type
-            <select
-              value={examType}
-              onChange={(e) => setExamType(e.target.value as ExamType)}
-              className="neo-inset-field mt-2 w-full rounded-lg px-3 py-2 text-sm"
-            >
-              {examTypes.map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </div>
-      {error ? <p className="text-sm font-semibold text-[#b84040]">{error}</p> : null}
-      <div className="neo-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-[#3f4f67]">
-            <thead className="bg-[#f5f8f5] text-xs font-bold uppercase text-[#6a9570]">
-              <tr>
-                <th className="px-5 py-3">Section</th>
-                <th className="px-5 py-3">Admission No</th>
-                <th className="px-5 py-3">Learner</th>
-                <th className="px-5 py-3 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#ebe4d9]">
-              {rows.map((row) => (
-                <tr key={row.studentId}>
-                  <td className="px-5 py-3">{row.sectionName || "-"}</td>
-                  <td className="px-5 py-3">{row.admissionNumber}</td>
-                  <td className="px-5 py-3 font-semibold text-[#2d3436]">{row.fullName}</td>
-                  <td className="px-5 py-3 text-right">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                        row.hasResults
-                          ? "bg-[#cde8cf] text-[#2d3436]"
-                          : "bg-[#f7d1cd] text-[#8a2f2f]"
-                      }`}
-                    >
-                      {row.hasResults ? "Has marks" : "Missing marks"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {!loading && rows.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-5 py-6 text-center text-sm text-[#636e72]">
-                    No learners found for this class and filter.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

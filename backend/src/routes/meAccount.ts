@@ -34,6 +34,10 @@ const updateRolePermissionsSchema = z.object({
   permissions: z.array(z.string()),
 });
 
+const bulkUpdateRolePermissionsSchema = z.object({
+  updates: z.array(updateRolePermissionsSchema),
+});
+
 const updateUserRoleSchema = z.object({
   role: z.string().trim().min(2, "Enter a role").max(50),
 });
@@ -304,13 +308,16 @@ export function createMeAccountRouter(config: Config) {
 
   r.get("/users", async (req, res) => {
     const userId = req.userId!;
+    const limit = Number.parseInt(req.query.limit as string, 10) || 100;
+    const offset = Number.parseInt(req.query.offset as string, 10) || 0;
+
     try {
       const user = await User.findByPk(userId);
       if (!user || !isAdminRole(user.role)) {
         return res.status(403).json({ error: "Access denied" });
       }
 
-      const users = await User.findAll({
+      const { count, rows: users } = await User.findAndCountAll({
         attributes: [
           "id",
           "fullName",
@@ -326,10 +333,13 @@ export function createMeAccountRouter(config: Config) {
         ],
         where: { isDeleted: false },
         order: [["id", "DESC"]],
+        limit,
+        offset,
       });
 
       return res.json({
         users: users.map((row) => toManagedUser(row)),
+        total: count,
       });
     } catch (err) {
       console.error(err);
@@ -719,6 +729,45 @@ export function createMeAccountRouter(config: Config) {
       });
 
       return res.json({ message: `Permissions updated for ${role}` });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
+  r.post("/role-permissions/bulk", async (req, res) => {
+    const userId = req.userId!;
+    const parsed = bulkUpdateRolePermissionsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid body" });
+    }
+
+    try {
+      const user = await User.findByPk(userId);
+      if (!user || !isAdminRole(user.role)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const sequelize = RolePermission.sequelize;
+      if (!sequelize) {
+        return res.status(500).json({ error: "Database not initialized" });
+      }
+
+      await sequelize.transaction(async (t) => {
+        for (const update of parsed.data.updates) {
+          const { role, permissions } = update;
+          await RolePermission.destroy({ where: { role }, transaction: t });
+          if (permissions.length > 0) {
+            const toCreate = permissions.map((pk) => ({
+              role,
+              permissionKey: pk,
+            }));
+            await RolePermission.bulkCreate(toCreate, { transaction: t });
+          }
+        }
+      });
+
+      return res.json({ message: "Bulk permissions updated successfully" });
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });

@@ -10,7 +10,7 @@ export type ResultEntryOptions = {
   authority: "full" | "restricted";
   terms: string[];
   examTypes: string[];
-  classes: Array<{ id: number; name: string }>;
+  classes: Array<{ id: number; name: string; categoryId: number | null; categoryName: string | null }>;
   sections: Array<{ id: number; classRoomId: number; name: string }>;
 };
 
@@ -188,6 +188,49 @@ export async function fetchResultEntryStudents(params: {
   return data.items;
 }
 
+export type GeneratedMarksheetRow = {
+  studentId: number;
+  admissionNumber: string;
+  fullName: string;
+  sectionName: string | null;
+  marksBySubject: Record<string, number | null>;
+  totalMarks: number;
+  position: number;
+};
+
+export type GeneratedMarksheetPayload = {
+  classRoomId: number;
+  className: string;
+  categoryId: number | null;
+  categoryName: string | null;
+  term: string;
+  examType: string;
+  subjects: string[];
+  rows: GeneratedMarksheetRow[];
+};
+
+export async function generateClassMarksheet(params: {
+  term: string;
+  examType: string;
+  classRoomId: number;
+}): Promise<GeneratedMarksheetPayload> {
+  const q = new URLSearchParams({
+    term: params.term,
+    examType: params.examType,
+    classRoomId: String(params.classRoomId),
+  });
+  const res = await fetch(apiUrl(`/api/me/academics/result-entry/marksheet?${q.toString()}`), {
+    headers: { ...authHeaders() },
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  const data = await readJson<{ item: GeneratedMarksheetPayload }>(res);
+  return data.item;
+}
+
 export type PendingResultEntryStudentRow = {
   studentId: number;
   admissionNumber: string;
@@ -195,16 +238,19 @@ export type PendingResultEntryStudentRow = {
   className: string;
   sectionName: string;
   classRoomId: number | null;
+  hasResults: boolean;
 };
 
 export async function fetchPendingResultEntryStudents(params: {
   term: string;
   examType: string;
+  includeSaved?: boolean;
 }): Promise<PendingResultEntryStudentRow[]> {
   const q = new URLSearchParams({
     term: params.term,
     examType: params.examType,
   });
+  if (params.includeSaved) q.set("includeSaved", "true");
   const res = await fetch(apiUrl(`/api/me/academics/result-entry/pending-students?${q.toString()}`), {
     headers: { ...authHeaders() },
   });
@@ -326,19 +372,41 @@ export type GradingScaleRow = {
 };
 
 export async function fetchGradingScales(): Promise<GradingScaleRow[]> {
-  const res = await fetch(apiUrl("/api/me/exams/grading-scales"), {
+  const res = await fetch(apiUrl("/api/me/academics/config/grading-scale"), {
     headers: { ...authHeaders() },
   });
-  return readJson<{ items: GradingScaleRow[] }>(res).then(d => d.items);
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Failed to load grading scale");
+  }
+  const data = await readJson<{ items: any[] }>(res);
+  return [
+    {
+      id: 1,
+      name: "Global Scale",
+      thresholds: data.items ?? [],
+    },
+  ];
 }
 
 export async function saveGradingScale(body: any): Promise<GradingScaleRow> {
-  const res = await fetch(apiUrl("/api/me/exams/grading-scales"), {
+  const res = await fetch(apiUrl("/api/me/academics/config/grading-scale"), {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ items: body.thresholds ?? [] }),
   });
-  return readJson<{ item: GradingScaleRow }>(res).then(d => d.item);
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Failed to save grading scale");
+  }
+  const data = await readJson<{ items: any[] }>(res);
+  return {
+    id: Number(body.id ?? 1),
+    name: String(body.name ?? "Global Scale"),
+    thresholds: data.items ?? [],
+  };
 }
 
 export type ReportCommentRow = {

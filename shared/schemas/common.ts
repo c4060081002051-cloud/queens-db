@@ -36,3 +36,21 @@ export function optionalPositiveInt() {
     return value;
   }, z.number().int().positive().nullable().optional());
 }
+
+export function ugandanPhoneRequired(message?: string) {
+  return z.preprocess((value: unknown) => {
+    if (typeof value !== "string" && typeof value !== "number") return value;
+    const str = String(value).replace(/[\s\-\(\)]/g, "");
+    return str;
+  }, z.string().regex(/^(?:\+256|0|256)[1-9]\d{8}$/, message || "Must be a valid Ugandan phone number (e.g. 0772123456 or +256772123456)"));
+}
+
+export function ugandanPhoneOptional(message?: string) {
+  return z.preprocess((value: unknown) => {
+    if (value === undefined || value === null || value === "") return value;
+    if (typeof value !== "string" && typeof value !== "number") return value;
+    const str = String(value).replace(/[\s\-\(\)]/g, "");
+    if (str.length === 0) return undefined;
+    return str;
+  }, z.string().regex(/^(?:\+256|0|256)[1-9]\d{8}$/, message || "Must be a valid Ugandan phone number (e.g. 0772123456 or +256772123456)").optional().nullable());
+}

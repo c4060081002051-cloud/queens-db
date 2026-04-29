@@ -1,353 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  fetchCountries,
-  fetchDistricts,
-  fetchNationalities,
-  type CountryOption,
-} from "../../api/geo";
-import {
-  fetchClassSections,
-  createStudent,
-  fetchClassrooms,
-  uploadStudentPhoto,
-  type ClassRoomOption,
-  type ClassSectionOption,
-} from "../../api/students";
-import { fetchGeneralSettings } from "../../api/settingsGeneral";
-import { useI18n } from "../../i18n/I18nProvider";
+const fs = require('fs');
 
-type NewAdmissionFormProps = {
-  onCreated: () => void;
-};
+const file = fs.readFileSync('c:/queens_sms/queens-db/frontend/src/components/students/NewAdmissionForm.tsx', 'utf8');
 
-const fieldClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 hover:border-slate-300";
+const newFieldClass = `const fieldClass =
+  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 hover:border-slate-300";`;
 
-const religions = [
-  "Christian",
-  "Muslim",
-  "Catholic",
-  "Protestant",
-  "Born Again",
-  "Seventh-day Adventist",
-  "Orthodox",
-  "Traditional",
-  "Other",
-];
+const labelClass = "block text-xs font-semibold text-slate-600 mb-1.5";
 
-export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
-  const { t } = useI18n();
-  const [rooms, setRooms] = useState<ClassRoomOption[]>([]);
-  const [loadRoomsError, setLoadRoomsError] = useState<string | null>(null);
-  const [nationalities, setNationalities] = useState<string[]>([]);
-  const [countries, setCountries] = useState<CountryOption[]>([]);
-  const [districts, setDistricts] = useState<string[]>([]);
-  const [geoError, setGeoError] = useState<string | null>(null);
-  const [districtsLoading, setDistrictsLoading] = useState(false);
-  const [sections, setSections] = useState<ClassSectionOption[]>([]);
-  const [sectionsLoading, setSectionsLoading] = useState(false);
-  const [sectionsStreamsEnabled, setSectionsStreamsEnabled] = useState(false);
-  const [firstName, setFirstName] = useState("");
-  const [middleName, setMiddleName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [dateOfBirth, setDateOfBirth] = useState("");
-  const [parentEmail, setParentEmail] = useState("");
-  const [gender, setGender] = useState("");
-  const [sectionName, setSectionName] = useState("");
-  const [classRoomId, setClassRoomId] = useState("");
-  const [nationality, setNationality] = useState("");
-  const [countryCode, setCountryCode] = useState("");
-  const [district, setDistrict] = useState("");
-  const [registrationType, setRegistrationType] = useState<"first" | "continuing" | "">("");
-  const [transferReason, setTransferReason] = useState<
-    "" | "relocation" | "discipline" | "better_education"
-  >("");
-  const [parentAliveStatus, setParentAliveStatus] = useState<"both" | "one" | "none" | "">("");
-  const [singleParentType, setSingleParentType] = useState<"mother" | "father" | "">("");
-  const [parentFullName, setParentFullName] = useState("");
-  const [parentPhone, setParentPhone] = useState("");
-  const [parentAddress, setParentAddress] = useState("");
-  const [religion, setReligion] = useState("");
-  const [specialNeeds, setSpecialNeeds] = useState("");
-  const [boardingStatus, setBoardingStatus] = useState<
-    "boarding" | "day_half" | "day_full" | ""
-  >("");
-  const [residenceAddress, setResidenceAddress] = useState("");
-  const [medicalInfo, setMedicalInfo] = useState("");
-  const [emergencyContactName, setEmergencyContactName] = useState("");
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
-  const [guardianName, setGuardianName] = useState("");
-  const [guardianPhone, setGuardianPhone] = useState("");
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [formSuccess, setFormSuccess] = useState<string | null>(null);
-  const activeRooms = useMemo(
-    () => rooms.filter((r) => r.isActive !== false),
-    [rooms],
-  );
-  const sortedActiveRooms = useMemo(
-    () =>
-      [...activeRooms].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
-      ),
-    [activeRooms],
-  );
-  const selectedClassRoom = useMemo(() => {
-    const id = Number.parseInt(classRoomId, 10);
-    if (!Number.isFinite(id) || id <= 0) return null;
-    return rooms.find((room) => room.id === id) ?? null;
-  }, [classRoomId, rooms]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchClassrooms()
-      .then((list) => {
-        if (!cancelled) setRooms(list);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadRoomsError(t("students.form.classroomsError"));
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchGeneralSettings()
-      .then((settings) => {
-        if (cancelled) return;
-        setSectionsStreamsEnabled((settings.classes_sections_streams_enabled ?? "yes") === "yes");
-      })
-      .catch(() => {
-        if (!cancelled) setSectionsStreamsEnabled(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all([fetchNationalities(), fetchCountries()])
-      .then(([nat, ctry]) => {
-        if (!cancelled) {
-          setGeoError(null);
-          setNationalities(nat);
-          setCountries(ctry);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setGeoError(t("students.form.geoLoadError"));
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once
-  }, []);
-
-  useEffect(() => {
-    const code = countryCode.trim();
-    if (!code) {
-      setDistricts([]);
-      setDistrict("");
-      return;
-    }
-    let cancelled = false;
-    setDistrictsLoading(true);
-    void fetchDistricts(code)
-      .then((list) => {
-        if (!cancelled) {
-          setGeoError(null);
-          setDistricts(list);
-          setDistrict((d) => (d && list.includes(d) ? d : ""));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDistricts([]);
-          setDistrict("");
-          setGeoError(t("students.form.geoLoadError"));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setDistrictsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [countryCode, t]);
-
-  useEffect(() => {
-    if (!sectionsStreamsEnabled) {
-      setSectionName("");
-      return;
-    }
-    const id = Number.parseInt(classRoomId, 10);
-    if (!Number.isFinite(id) || id <= 0) {
-      setSectionName("");
-      return;
-    }
-    if (sectionsLoading) {
-      setSectionName("");
-      return;
-    }
-    if (sections.length > 0) {
-      setSectionName(sections[0].name);
-    } else {
-      setSectionName("");
-    }
-  }, [classRoomId, sections, sectionsLoading, sectionsStreamsEnabled]);
-
-  useEffect(() => {
-    if (!sectionsStreamsEnabled) {
-      setSections([]);
-      setSectionsLoading(false);
-      return;
-    }
-    const id = Number.parseInt(classRoomId, 10);
-    if (!Number.isFinite(id) || id <= 0) {
-      setSections([]);
-      return;
-    }
-    let cancelled = false;
-    setSections([]);
-    setSectionsLoading(true);
-    void fetchClassSections(id)
-      .then((list) => {
-        if (!cancelled) setSections(list);
-      })
-      .catch(() => {
-        if (!cancelled) setSections([]);
-      })
-      .finally(() => {
-        if (!cancelled) setSectionsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [classRoomId, sectionsStreamsEnabled]);
-
-  const resetForm = () => {
-    setFirstName("");
-    setMiddleName("");
-    setLastName("");
-    setDateOfBirth("");
-    setParentEmail("");
-    setGender("");
-    setSectionName("");
-    setClassRoomId("");
-    setSections([]);
-    setNationality("");
-    setCountryCode("");
-    setDistrict("");
-    setDistricts([]);
-    setRegistrationType("");
-    setTransferReason("");
-    setParentAliveStatus("");
-    setSingleParentType("");
-    setParentFullName("");
-    setParentPhone("");
-    setParentAddress("");
-    setReligion("");
-    setSpecialNeeds("");
-    setBoardingStatus("");
-    setResidenceAddress("");
-    setMedicalInfo("");
-    setEmergencyContactName("");
-    setEmergencyContactPhone("");
-    setGuardianName("");
-    setGuardianPhone("");
-    setPhotoFile(null);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-    setFormSuccess(null);
-    setSubmitting(true);
-    try {
-      if (!firstName.trim() || !lastName.trim()) {
-        setFormError(t("students.form.firstLastRequired"));
-        setSubmitting(false);
-        return;
-      }
-      const cr =
-        classRoomId.trim() === "" ? undefined : Number.parseInt(classRoomId, 10);
-      if (!cr || !Number.isFinite(cr) || cr <= 0) {
-        setFormError(t("students.form.classRequired"));
-        setSubmitting(false);
-        return;
-      }
-      if (!boardingStatus) {
-        setFormError(t("students.form.boardingStatusUnset"));
-        setSubmitting(false);
-        return;
-      }
-      if (!registrationType) {
-        setFormError(t("students.form.registrationTypeUnset"));
-        setSubmitting(false);
-        return;
-      }
-      const cc = countryCode.trim();
-      const dist = district.trim();
-      const created = await createStudent({
-        firstName: firstName.trim(),
-        middleName: middleName.trim() || undefined,
-        lastName: lastName.trim(),
-        dateOfBirth: dateOfBirth.trim() || undefined,
-        parentEmail: parentEmail.trim() || undefined,
-        classRoomId: cr,
-        gender: gender.trim() || undefined,
-        sectionName: sectionName.trim() || undefined,
-        nationality: nationality.trim() || undefined,
-        countryCode: cc ? cc : undefined,
-        district: dist || undefined,
-        registrationType,
-        previousGrades: undefined,
-        transferReason: registrationType === "continuing" && transferReason ? transferReason : undefined,
-        parentAliveStatus: parentAliveStatus || undefined,
-        parentFullName: parentFullName.trim() || undefined,
-        parentPhone: parentPhone.trim() || undefined,
-        parentAddress: parentAddress.trim() || undefined,
-        religion: religion || undefined,
-        specialNeeds: specialNeeds.trim() || undefined,
-        boardingStatus: boardingStatus || undefined,
-        residenceAddress: residenceAddress.trim() || undefined,
-        medicalInfo: medicalInfo.trim() || undefined,
-        emergencyContactName: emergencyContactName.trim() || undefined,
-        emergencyContactPhone: emergencyContactPhone.trim() || undefined,
-        guardianName: guardianName.trim() || undefined,
-        guardianPhone: guardianPhone.trim() || undefined,
-      });
-
-      if (photoFile) {
-        try {
-          await uploadStudentPhoto(created.id, photoFile);
-        } catch {
-          setFormSuccess(
-            `${t("students.form.success")} ${t("students.photo.uploadLaterHint")}`,
-          );
-          resetForm();
-          onCreated();
-          return;
-        }
-      }
-      setFormSuccess(
-        `${t("students.form.success")} (${t("students.form.admissionNumberLabel")}: ${created.admissionNumber})`,
-      );
-      resetForm();
-      onCreated();
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : t("students.form.error"));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
+const renderContent = `  return (
     <div className="mx-auto max-w-6xl space-y-8 pb-12">
       {/* Header Hero */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-900 via-indigo-800 to-blue-900 px-8 py-10 shadow-xl sm:px-12 sm:py-12">
@@ -390,23 +50,23 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
           </div>
           <div className="grid gap-x-6 gap-y-6 p-8 sm:grid-cols-2 lg:grid-cols-3">
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.firstName")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.firstName")} <span className="text-rose-500">*</span></span>
               <input required value={firstName} onChange={(e) => setFirstName(e.target.value)} className={fieldClass} autoComplete="given-name" placeholder="E.g. John" />
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.middleName")}</span>
+              <span className="${labelClass}">{t("students.form.middleName")}</span>
               <input value={middleName} onChange={(e) => setMiddleName(e.target.value)} className={fieldClass} autoComplete="additional-name" placeholder="Optional" />
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.lastName")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.lastName")} <span className="text-rose-500">*</span></span>
               <input required value={lastName} onChange={(e) => setLastName(e.target.value)} className={fieldClass} autoComplete="family-name" placeholder="E.g. Doe" />
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.dob")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.dob")} <span className="text-rose-500">*</span></span>
               <input type="date" required value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className={fieldClass} />
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.gender")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.gender")} <span className="text-rose-500">*</span></span>
               <select required value={gender} onChange={(e) => setGender(e.target.value)} className={fieldClass}>
                 <option value="">{t("students.form.genderUnset")}</option>
                 <option value="Female">{t("students.form.genderFemale")}</option>
@@ -415,29 +75,29 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
               </select>
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.religion")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.religion")} <span className="text-rose-500">*</span></span>
               <select required value={religion} onChange={(e) => setReligion(e.target.value)} className={fieldClass}>
                 <option value="">{t("students.form.religionUnset")}</option>
                 {religions.map((r) => (<option key={r} value={r}>{r}</option>))}
               </select>
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.nationality")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.nationality")} <span className="text-rose-500">*</span></span>
               <select required value={nationality} onChange={(e) => setNationality(e.target.value)} className={fieldClass}>
                 <option value="">{t("students.form.nationalityUnset")}</option>
                 {nationalities.map((n) => (<option key={n} value={n}>{n}</option>))}
               </select>
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.country")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.country")} <span className="text-rose-500">*</span></span>
               <select required value={countryCode} onChange={(e) => { setCountryCode(e.target.value); setDistrict(""); }} className={fieldClass}>
                 <option value="">{t("students.form.countryUnset")}</option>
                 {countries.map((c) => (<option key={c.code} value={c.code}>{c.name}</option>))}
               </select>
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.district")}</span>
-              <select value={district} onChange={(e) => setDistrict(e.target.value)} disabled={!countryCode.trim() || districtsLoading} className={`${fieldClass} disabled:opacity-60 disabled:bg-slate-50`}>
+              <span className="${labelClass}">{t("students.form.district")}</span>
+              <select value={district} onChange={(e) => setDistrict(e.target.value)} disabled={!countryCode.trim() || districtsLoading} className={\`\${fieldClass} disabled:opacity-60 disabled:bg-slate-50\`}>
                 <option value="">
                   {!countryCode.trim() ? t("students.form.districtPickCountry") : districtsLoading ? t("students.form.districtLoading") : t("students.form.districtUnset")}
                 </option>
@@ -457,7 +117,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
           </div>
           <div className="grid gap-x-6 gap-y-6 p-8 sm:grid-cols-2 lg:grid-cols-3">
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.registrationType")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.registrationType")} <span className="text-rose-500">*</span></span>
               <select required value={registrationType} onChange={(e) => {
                 const v = e.target.value as "first" | "continuing" | "";
                 setRegistrationType(v);
@@ -470,7 +130,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
             </label>
             {registrationType === "continuing" ? (
               <label className="block animate-in fade-in zoom-in-95">
-                <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.transferReason")}</span>
+                <span className="${labelClass}">{t("students.form.transferReason")}</span>
                 <select value={transferReason} onChange={(e) => setTransferReason(e.target.value as any)} className={fieldClass}>
                   <option value="">{t("students.form.transferReasonUnset")}</option>
                   <option value="relocation">{t("students.form.transferReasonRelocation")}</option>
@@ -482,33 +142,33 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
             <div className="hidden lg:block"></div>
 
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.classroom")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.classroom")} <span className="text-rose-500">*</span></span>
               <select required value={classRoomId} onChange={(e) => setClassRoomId(e.target.value)} className={fieldClass}>
                 <option value="">{t("students.form.classroomUnset")}</option>
                 {sortedActiveRooms.map((r) => (
-                  <option key={r.id} value={String(r.id)}>{r.name} {r.academicYear ? `(${r.academicYear})` : ""}</option>
+                  <option key={r.id} value={String(r.id)}>{r.name} {r.academicYear ? \`(\${r.academicYear})\` : ""}</option>
                 ))}
               </select>
             </label>
             
             <div className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">Class Category</span>
-              <div className={`${fieldClass} flex min-h-[44px] items-center text-slate-700 bg-slate-50`}>
+              <span className="${labelClass}">Class Category</span>
+              <div className={\`\${fieldClass} flex min-h-[44px] items-center text-slate-700 bg-slate-50\`}>
                 {!classRoomId ? "Select class first" : selectedClassRoom?.categoryName || "No category assigned"}
               </div>
             </div>
 
             {sectionsStreamsEnabled ? (
               <div className="block">
-                <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.section")}</span>
-                <div className={`${fieldClass} flex min-h-[44px] items-center text-slate-700 bg-slate-50`}>
+                <span className="${labelClass}">{t("students.form.section")}</span>
+                <div className={\`\${fieldClass} flex min-h-[44px] items-center text-slate-700 bg-slate-50\`}>
                   {!classRoomId ? t("students.form.sectionPickClass") : sectionsLoading ? t("students.form.sectionLoading") : sectionName || t("students.form.sectionNoData")}
                 </div>
               </div>
             ) : <div className="hidden lg:block"></div>}
 
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.boardingStatus")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.boardingStatus")} <span className="text-rose-500">*</span></span>
               <select required value={boardingStatus} onChange={(e) => setBoardingStatus(e.target.value as any)} className={fieldClass}>
                 <option value="">{t("students.form.boardingStatusUnset")}</option>
                 <option value="day_half">{t("students.form.boardingStatusDayHalf")}</option>
@@ -529,7 +189,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
           </div>
           <div className="grid gap-x-6 gap-y-6 p-8 sm:grid-cols-2 lg:grid-cols-3">
             <label className="block col-span-full sm:col-span-1">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.parentAliveStatus")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.parentAliveStatus")} <span className="text-rose-500">*</span></span>
               <select required value={parentAliveStatus} onChange={(e) => {
                 const next = e.target.value as "both" | "one" | "none" | "";
                 setParentAliveStatus(next);
@@ -549,7 +209,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
 
             {parentAliveStatus === "one" ? (
               <label className="block animate-in fade-in col-span-full sm:col-span-1">
-                <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.singleParentType")}</span>
+                <span className="${labelClass}">{t("students.form.singleParentType")}</span>
                 <select value={singleParentType} onChange={(e) => setSingleParentType(e.target.value as any)} className={fieldClass}>
                   <option value="">{t("students.form.singleParentTypeUnset")}</option>
                   <option value="mother">{t("students.form.singleParentMother")}</option>
@@ -562,7 +222,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
               {parentAliveStatus === "both" || parentAliveStatus === "one" ? (
                 <>
                   <label className="block animate-in fade-in">
-                    <span className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    <span className="${labelClass}">
                       {parentAliveStatus === "one" && singleParentType
                         ? t("students.form.parentFullNameSingle").replace("{parent}", singleParentType === "mother" ? t("students.form.singleParentMother") : t("students.form.singleParentFather"))
                         : t("students.form.parentFullName")} <span className="text-rose-500">*</span>
@@ -570,15 +230,15 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
                     <input required value={parentFullName} onChange={(e) => setParentFullName(e.target.value)} className={fieldClass} autoComplete="name" />
                   </label>
                   <label className="block animate-in fade-in">
-                    <span className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    <span className="${labelClass}">
                       {parentAliveStatus === "one" && singleParentType
                         ? t("students.form.parentPhoneSingle").replace("{parent}", singleParentType === "mother" ? t("students.form.singleParentMother") : t("students.form.singleParentFather"))
                         : t("students.form.parentPhone")} <span className="text-rose-500">*</span>
                     </span>
-                    <input type="tel" required minLength={10} maxLength={13} value={parentPhone} onChange={(e) => setParentPhone(e.target.value.replace(/[^\d+]/g, ''))} className={fieldClass} autoComplete="tel" />
+                    <input type="tel" required minLength={10} maxLength={13} value={parentPhone} onChange={(e) => setParentPhone(e.target.value.replace(/[^\\d+]/g, ''))} className={fieldClass} autoComplete="tel" />
                   </label>
                   <label className="block animate-in fade-in">
-                    <span className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    <span className="${labelClass}">
                       {parentAliveStatus === "one" && singleParentType
                         ? t("students.form.parentEmailSingle").replace("{parent}", singleParentType === "mother" ? t("students.form.singleParentMother") : t("students.form.singleParentFather"))
                         : t("students.form.parentEmail")}
@@ -586,7 +246,7 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
                     <input type="email" value={parentEmail} onChange={(e) => setParentEmail(e.target.value)} className={fieldClass} autoComplete="email" />
                   </label>
                   <label className="block animate-in fade-in col-span-full lg:col-span-2">
-                    <span className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    <span className="${labelClass}">
                       {parentAliveStatus === "one" && singleParentType
                         ? t("students.form.parentAddressSingle").replace("{parent}", singleParentType === "mother" ? t("students.form.singleParentMother") : t("students.form.singleParentFather"))
                         : t("students.form.parentAddress")} <span className="text-rose-500">*</span>
@@ -599,12 +259,12 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
               {parentAliveStatus === "none" ? (
                 <>
                   <label className="block animate-in fade-in">
-                    <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.guardianName")} <span className="text-rose-500">*</span></span>
+                    <span className="${labelClass}">{t("students.form.guardianName")} <span className="text-rose-500">*</span></span>
                     <input required value={guardianName} onChange={(e) => setGuardianName(e.target.value)} className={fieldClass} autoComplete="name" />
                   </label>
                   <label className="block animate-in fade-in">
-                    <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.guardianPhone")} <span className="text-rose-500">*</span></span>
-                    <input type="tel" required minLength={10} maxLength={13} value={guardianPhone} onChange={(e) => setGuardianPhone(e.target.value.replace(/[^\d+]/g, ''))} className={fieldClass} autoComplete="tel" />
+                    <span className="${labelClass}">{t("students.form.guardianPhone")} <span className="text-rose-500">*</span></span>
+                    <input type="tel" required minLength={10} maxLength={13} value={guardianPhone} onChange={(e) => setGuardianPhone(e.target.value.replace(/[^\\d+]/g, ''))} className={fieldClass} autoComplete="tel" />
                   </label>
                 </>
               ) : null}
@@ -622,26 +282,26 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
           </div>
           <div className="grid gap-x-6 gap-y-6 p-8 sm:grid-cols-2 lg:grid-cols-3">
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.emergencyContactName")} <span className="text-rose-500">*</span></span>
+              <span className="${labelClass}">{t("students.form.emergencyContactName")} <span className="text-rose-500">*</span></span>
               <input required value={emergencyContactName} onChange={(e) => setEmergencyContactName(e.target.value)} className={fieldClass} autoComplete="name" />
             </label>
             <label className="block">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.emergencyContactPhone")} <span className="text-rose-500">*</span></span>
-              <input type="tel" required minLength={10} maxLength={13} value={emergencyContactPhone} onChange={(e) => setEmergencyContactPhone(e.target.value.replace(/[^\d+]/g, ''))} className={fieldClass} autoComplete="tel" />
+              <span className="${labelClass}">{t("students.form.emergencyContactPhone")} <span className="text-rose-500">*</span></span>
+              <input type="tel" required minLength={10} maxLength={13} value={emergencyContactPhone} onChange={(e) => setEmergencyContactPhone(e.target.value.replace(/[^\\d+]/g, ''))} className={fieldClass} autoComplete="tel" />
             </label>
             <div className="hidden lg:block"></div>
 
             <label className="block col-span-full lg:col-span-1">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.specialNeeds")}</span>
-              <textarea value={specialNeeds} onChange={(e) => setSpecialNeeds(e.target.value)} className={`${fieldClass} min-h-[96px] resize-none`} placeholder={t("students.form.specialNeedsPlaceholder")} />
+              <span className="${labelClass}">{t("students.form.specialNeeds")}</span>
+              <textarea value={specialNeeds} onChange={(e) => setSpecialNeeds(e.target.value)} className={\`\${fieldClass} min-h-[96px] resize-none\`} placeholder={t("students.form.specialNeedsPlaceholder")} />
             </label>
             <label className="block col-span-full lg:col-span-1">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.residenceAddress")} <span className="text-rose-500">*</span></span>
-              <textarea required value={residenceAddress} onChange={(e) => setResidenceAddress(e.target.value)} className={`${fieldClass} min-h-[96px] resize-none`} placeholder={t("students.form.residenceAddressPlaceholder")} />
+              <span className="${labelClass}">{t("students.form.residenceAddress")} <span className="text-rose-500">*</span></span>
+              <textarea required value={residenceAddress} onChange={(e) => setResidenceAddress(e.target.value)} className={\`\${fieldClass} min-h-[96px] resize-none\`} placeholder={t("students.form.residenceAddressPlaceholder")} />
             </label>
             <label className="block col-span-full lg:col-span-1">
-              <span className="block text-xs font-semibold text-slate-600 mb-1.5">{t("students.form.medicalInfo")}</span>
-              <textarea value={medicalInfo} onChange={(e) => setMedicalInfo(e.target.value)} className={`${fieldClass} min-h-[96px] resize-none`} placeholder={t("students.form.medicalInfoPlaceholder")} />
+              <span className="${labelClass}">{t("students.form.medicalInfo")}</span>
+              <textarea value={medicalInfo} onChange={(e) => setMedicalInfo(e.target.value)} className={\`\${fieldClass} min-h-[96px] resize-none\`} placeholder={t("students.form.medicalInfoPlaceholder")} />
             </label>
           </div>
         </div>
@@ -708,5 +368,16 @@ export function NewAdmissionForm({ onCreated }: NewAdmissionFormProps) {
         </div>
       </form>
     </div>
-  );
+  );`;
+
+let newFile = file.replace(/const fieldClass =[\s\S]*?";/, newFieldClass);
+const splitString = '  return (\n    <section className="overflow-hidden rounded-2xl border border-[#ebe4d9] bg-[#fffcf7] shadow-[6px_8px_24px_rgba(45,52,54,0.08)]">';
+
+const parts = newFile.split(splitString);
+if (parts.length === 2) {
+  newFile = parts[0] + renderContent + "\n}\n";
+  fs.writeFileSync('c:/queens_sms/queens-db/frontend/src/components/students/NewAdmissionForm.tsx', newFile);
+  console.log("File updated successfully.");
+} else {
+  console.error("Could not find exact split string");
 }

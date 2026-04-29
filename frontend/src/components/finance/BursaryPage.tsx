@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { revokeBursery } from "../../api/financeBursery";
+import { revokeBursary } from "../../api/financeBursary";
 import { formatCurrencyUGX } from "./shared/financeFormat";
 
-export type BuseryRecord = {
+export type BursaryRecord = {
   id: number;
   studentName: string;
   awardType: string;
@@ -11,21 +11,21 @@ export type BuseryRecord = {
   term: string;
   status: "Approved" | "Pending";
 };
-const MOCK_RECORDS: BuseryRecord[] = [];
+const MOCK_RECORDS: BursaryRecord[] = [];
 
-export function BuseryPage({
+export function BursaryPage({
   isAdmin,
   onAssignClick,
   onEditRow,
 }: {
   isAdmin?: boolean;
   onAssignClick?: () => void;
-  onEditRow?: (row: BuseryRecord) => void;
+  onEditRow?: (row: BursaryRecord) => void;
 }) {
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [rows, setRows] = useState(MOCK_RECORDS);
-  const [selectedRow, setSelectedRow] = useState<BuseryRecord | null>(null);
+  const [selectedRow, setSelectedRow] = useState<BursaryRecord | null>(null);
   const [actionRowId, setActionRowId] = useState<number | null>(null);
 
   const filteredRows = useMemo(() => {
@@ -46,16 +46,16 @@ export function BuseryPage({
     [filteredRows],
   );
 
-  const handleEdit = (row: BuseryRecord) => {
+  const handleEdit = (row: BursaryRecord) => {
     onEditRow?.(row);
   };
 
-  const handleView = (row: BuseryRecord) => {
+  const handleView = (row: BursaryRecord) => {
     setSelectedRow(row);
     setNotice(`Viewing bursary details for ${row.studentName}.`);
   };
 
-  const handleRevoke = async (row: BuseryRecord) => {
+  const handleRevoke = async (row: BursaryRecord) => {
     if (row.status !== "Approved") {
       setNotice(`${row.studentName} does not have an active bursary to revoke.`);
       return;
@@ -63,7 +63,7 @@ export function BuseryPage({
     if (!window.confirm(`Revoke bursary for ${row.studentName}?`)) return;
     setActionRowId(row.id);
     try {
-      await revokeBursery(row.id, row.term);
+      await revokeBursary(row.id, row.term);
       setRows((current) =>
         current.map((item) =>
           item.id === row.id
@@ -118,7 +118,7 @@ export function BuseryPage({
             {formatCurrencyUGX(approvedTotal)}
           </p>
           <p className="mt-1 text-xs text-[#636e72]">
-            Total amount covered by active busery awards.
+            Total amount covered by active bursary awards.
           </p>
         </section>
         <section className="neo-card border-t-4 border-[#5a8faf] p-5">
@@ -138,7 +138,7 @@ export function BuseryPage({
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebe4d9]/80 bg-[#faf7f0]/40 px-5 py-4">
           <div className="flex items-center gap-4">
             <h2 className="text-sm font-bold uppercase tracking-wider text-[#2d3436]">
-              Busery Awards
+              Bursary Awards
             </h2>
             {isAdmin && (
               <button
@@ -224,7 +224,7 @@ export function BuseryPage({
               {filteredRows.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-5 py-8 text-center text-sm text-[#636e72]">
-                    No busery records match your search.
+                    No bursary records match your search.
                   </td>
                 </tr>
               ) : null}

@@ -78,34 +78,34 @@ export function FinanceOverviewPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Monthly Summary & Arrears */}
         <div className="lg:col-span-1 space-y-6">
-          <section className="neo-card p-6 bg-gradient-to-br from-[#ffffff] to-[#f8fbff]">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-[#636e72] mb-4">Monthly Summary ({data?.month.key})</h3>
+          <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4">Monthly Summary ({data?.month.key})</h3>
             <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="text-[#636e72]">Total Income</span>
-                  <span className="font-bold text-[#2d3436]">{formatCurrencyUGX(data?.month.totalIncome ?? 0)}</span>
+                  <span className="text-slate-500">Total Income</span>
+                  <span className="font-bold text-slate-800">{formatCurrencyUGX(data?.month.totalIncome ?? 0)}</span>
                 </div>
-                <div className="h-2 bg-[#ebe4d9]/50 rounded-full overflow-hidden">
-                  <div className="h-full bg-[#5a8faf] rounded-full" style={{ width: "100%" }} />
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: "100%" }} />
                 </div>
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="text-[#636e72]">Total Expenses</span>
-                  <span className="font-bold text-[#2d3436]">{formatCurrencyUGX(data?.month.totalExpenses ?? 0)}</span>
+                  <span className="text-slate-500">Total Expenses</span>
+                  <span className="font-bold text-slate-800">{formatCurrencyUGX(data?.month.totalExpenses ?? 0)}</span>
                 </div>
-                <div className="h-2 bg-[#ebe4d9]/50 rounded-full overflow-hidden">
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-[#e67e22] rounded-full" 
+                    className="h-full bg-rose-500 rounded-full" 
                     style={{ width: `${Math.min(((data?.month.totalExpenses ?? 0) / (data?.month.totalIncome || 1)) * 100, 100)}%` }} 
                   />
                 </div>
               </div>
-              <div className="pt-2 border-t border-[#ebe4d9]/80 mt-2">
+              <div className="pt-4 border-t border-slate-100 mt-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-semibold text-[#2d3436]">Net Profit</span>
-                  <span className={`text-lg font-black ${ (data?.month.net ?? 0) >= 0 ? "text-[#27ae60]" : "text-[#c0392b]" }`}>
+                  <span className="text-sm font-semibold text-slate-800">Net Profit</span>
+                  <span className={`text-lg font-black ${ (data?.month.net ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600" }`}>
                     {formatCurrencyUGX(data?.month.net ?? 0)}
                   </span>
                 </div>
@@ -113,37 +113,40 @@ export function FinanceOverviewPage() {
             </div>
           </section>
 
-          <section className="neo-card p-6 border-t-4 border-[#e67e22]">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-[#636e72] mb-4">Payroll & Arrears</h3>
+          <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 flex items-center gap-2">
+              <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Payroll & Arrears
+            </h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-[#636e72]">Monthly Payroll</span>
-                <span className="text-sm font-bold">{formatCurrencyUGX(data?.payroll.totalPayroll ?? 0)}</span>
+                <span className="text-sm text-slate-500">Monthly Payroll</span>
+                <span className="text-sm font-bold text-slate-800">{formatCurrencyUGX(data?.payroll.totalPayroll ?? 0)}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-[#636e72]">Paid to Date</span>
-                <span className="text-sm font-bold text-[#27ae60]">{formatCurrencyUGX(data?.payroll.paidToDate ?? 0)}</span>
+                <span className="text-sm text-slate-500">Paid to Date</span>
+                <span className="text-sm font-bold text-emerald-600">{formatCurrencyUGX(data?.payroll.paidToDate ?? 0)}</span>
               </div>
-              <div className="flex justify-between items-center pt-2 border-t border-[#ebe4d9]/50">
-                <span className="text-sm font-bold text-[#2d3436]">Unpaid Arrears</span>
-                <span className="text-lg font-black text-[#c0392b]">{formatCurrencyUGX(data?.payroll.arrears ?? 0)}</span>
+              <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                <span className="text-sm font-bold text-slate-800">Unpaid Arrears</span>
+                <span className="text-lg font-black text-rose-600">{formatCurrencyUGX(data?.payroll.arrears ?? 0)}</span>
               </div>
             </div>
           </section>
 
-          <section className="neo-card p-6">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-[#636e72] mb-4">Income by Method</h3>
+          <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4">Income by Method</h3>
             <div className="space-y-3">
               {(data?.month.methodBreakdown ?? []).map((mb) => (
                 <div key={mb.method} className="flex items-center gap-3">
                   <div className="flex-1">
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="font-semibold text-[#636e72]">{mb.method}</span>
-                      <span className="text-[#2d3436] font-bold">{formatCurrencyUGX(mb.amount)}</span>
+                      <span className="font-semibold text-slate-500">{mb.method}</span>
+                      <span className="text-slate-800 font-bold">{formatCurrencyUGX(mb.amount)}</span>
                     </div>
-                    <div className="h-1.5 bg-[#ebe4d9]/30 rounded-full">
+                    <div className="h-1.5 bg-slate-100 rounded-full">
                       <div 
-                        className="h-full bg-[#5a8faf]/70 rounded-full" 
+                        className="h-full bg-indigo-400 rounded-full" 
                         style={{ width: `${(mb.amount / (data?.month.totalIncome || 1)) * 100}%` }} 
                       />
                     </div>
@@ -151,7 +154,7 @@ export function FinanceOverviewPage() {
                 </div>
               ))}
               {(!data?.month.methodBreakdown || data.month.methodBreakdown.length === 0) && (
-                <p className="text-xs text-[#636e72] italic text-center py-2">No income recorded this month</p>
+                <p className="text-xs text-slate-500 italic text-center py-2">No income recorded this month</p>
               )}
             </div>
           </section>
@@ -159,15 +162,15 @@ export function FinanceOverviewPage() {
 
         {/* Recent Transactions */}
         <div className="lg:col-span-2">
-          <section className="neo-card h-full flex flex-col overflow-hidden p-0">
-            <header className="px-6 py-4 border-b border-[#ebe4d9]/80 bg-gradient-to-r from-[#faf7f0] to-white flex justify-between items-center">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-[#2d3436]">Recent Financial Activities</h3>
-              <span className="text-[10px] bg-[#5a8faf]/10 text-[#5a8faf] px-2 py-0.5 rounded-full font-bold uppercase">Live Sync</span>
+          <section className="flex flex-col h-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+            <header className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">Recent Financial Activities</h3>
+              <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold uppercase ring-1 ring-indigo-200">Live Sync</span>
             </header>
             <div className="flex-1 overflow-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-[#fcfbf9] text-[10px] font-bold uppercase tracking-wider text-[#636e72]">
+                  <tr className="bg-white text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100">
                     <th className="px-6 py-3">Type</th>
                     <th className="px-6 py-3">Reference/Entity</th>
                     <th className="px-6 py-3">Method</th>
@@ -175,30 +178,30 @@ export function FinanceOverviewPage() {
                     <th className="px-6 py-3 text-right">Amount</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#ebe4d9]/50">
+                <tbody className="divide-y divide-slate-100">
                   {data?.recentTransactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-[#f8fbff] transition-colors group">
+                    <tr key={tx.id} className="hover:bg-slate-50 transition-colors group">
                       <td className="px-6 py-4">
-                        <span className={`inline-flex h-2 w-2 rounded-full mr-2 ${tx.type === "income" ? "bg-[#27ae60]" : "bg-[#e67e22]"}`} />
-                        <span className="text-[10px] font-bold uppercase text-[#636e72]">{tx.type}</span>
+                        <span className={`inline-flex h-2 w-2 rounded-full mr-2 ${tx.type === "income" ? "bg-emerald-500" : "bg-rose-500"}`} />
+                        <span className="text-[10px] font-bold uppercase text-slate-500">{tx.type}</span>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm font-bold text-[#2d3436] truncate max-w-[180px]">{tx.label}</div>
+                        <div className="text-sm font-bold text-slate-800 truncate max-w-[180px]">{tx.label}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-xs text-[#636e72]">{tx.method}</span>
+                        <span className="text-xs text-slate-500">{tx.method}</span>
                       </td>
-                      <td className="px-6 py-4 text-xs text-[#636e72]">
+                      <td className="px-6 py-4 text-xs tabular-nums text-slate-500">
                         {formatShortAgo(tx.date)}
                       </td>
-                      <td className={`px-6 py-4 text-right text-sm font-black ${tx.type === "income" ? "text-[#27ae60]" : "text-[#e67e22]"}`}>
+                      <td className={`px-6 py-4 text-right text-sm font-black tabular-nums ${tx.type === "income" ? "text-emerald-600" : "text-rose-600"}`}>
                         {tx.type === "income" ? "+" : "-"}{formatCurrencyUGX(tx.amount)}
                       </td>
                     </tr>
                   ))}
                   {(!data?.recentTransactions || data.recentTransactions.length === 0) && (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-sm text-[#636e72] italic">
+                      <td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-500 italic">
                         No recent transactions found
                       </td>
                     </tr>
@@ -206,8 +209,8 @@ export function FinanceOverviewPage() {
                 </tbody>
               </table>
             </div>
-            <footer className="px-6 py-3 bg-[#fcfbf9] border-t border-[#ebe4d9]/80 text-center">
-              <button className="text-[10px] font-bold uppercase tracking-widest text-[#5a8faf] hover:underline transition">View Full Ledger</button>
+            <footer className="px-6 py-3 bg-slate-50/50 border-t border-slate-100 text-center">
+              <button className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 hover:underline transition">View Full Ledger</button>
             </footer>
           </section>
         </div>
@@ -232,34 +235,34 @@ function MetricCard({
   isStatus?: boolean;
 }) {
   const colorMap = {
-    blue: "border-[#5a8faf] bg-blue-50/30",
-    orange: "border-[#e67e22] bg-orange-50/30",
-    green: "border-[#27ae60] bg-green-50/30",
-    red: "border-[#c0392b] bg-red-50/30",
-    purple: "border-[#8e44ad] bg-purple-50/30",
+    blue: "border-l-4 border-l-blue-500 bg-white hover:bg-blue-50/30",
+    orange: "border-l-4 border-l-amber-500 bg-white hover:bg-amber-50/30",
+    green: "border-l-4 border-l-emerald-500 bg-white hover:bg-emerald-50/30",
+    red: "border-l-4 border-l-rose-500 bg-white hover:bg-rose-50/30",
+    purple: "border-l-4 border-l-indigo-500 bg-white hover:bg-indigo-50/30",
   };
 
   return (
-    <div className={`neo-card border-t-4 ${colorMap[color]} p-5 relative overflow-hidden group hover:translate-y-[-2px] transition-all`}>
-      <div className="absolute top-[-10px] right-[-10px] opacity-[0.05] text-6xl group-hover:scale-110 transition-transform grayscale">
+    <div className={`rounded-3xl border border-slate-200 ${colorMap[color]} p-5 relative overflow-hidden group shadow-sm hover:shadow-md transition-shadow`}>
+      <div className="absolute top-[-10px] right-[-10px] opacity-10 text-6xl group-hover:scale-110 transition-transform grayscale">
         {icon}
       </div>
       <div className="flex items-center gap-3 mb-3">
-        <span className="text-lg" role="img" aria-label={label}>{icon}</span>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-[#636e72]">{label}</p>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-lg shadow-sm ring-1 ring-slate-100" role="img" aria-label={label}>{icon}</span>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
       </div>
-      <p className={`text-xl font-black ${isStatus ? "text-[#2d3436]" : "text-[#2f4054]"}`}>{value}</p>
+      <p className={`text-2xl font-black ${isStatus ? "text-slate-800" : "text-slate-800"}`}>{value}</p>
       
       {trend && (
-        <div className="mt-2 flex items-center gap-1.5 overflow-hidden">
+        <div className="mt-3 flex items-center gap-1.5 overflow-hidden">
           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
-            trend === "Positive" ? "bg-green-100 text-green-700" : 
-            trend === "Negative" ? "bg-red-100 text-red-700" : 
-            "bg-gray-100 text-gray-700"
+            trend === "Positive" ? "bg-emerald-100 text-emerald-700" : 
+            trend === "Negative" ? "bg-rose-100 text-rose-700" : 
+            "bg-slate-100 text-slate-700"
           }`}>
             {trend}
           </span>
-          <div className="flex-1 h-[1px] bg-[#ebe4d9]/50" />
+          <div className="flex-1 h-[1px] bg-slate-100" />
         </div>
       )}
     </div>

@@ -107,6 +107,13 @@ function EyeOffIcon({ className }: { className?: string }) {
   );
 }
 
+const sliderImages = [
+  "/login-slide-1.jpg",
+  "/login-slide-2.jpg",
+  "/login-slide-3.jpg",
+  "/login-slide-4.jpg",
+];
+
 export function PasswordResetPage({ onBack, onSuccess }: PasswordResetPageProps) {
   const emailId = useId();
   const otpId = useId();
@@ -128,13 +135,6 @@ export function PasswordResetPage({ onBack, onSuccess }: PasswordResetPageProps)
   const [shake, setShake] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const prevError = useRef<string | null>(null);
-
-  const sliderImages = [
-    "/login-slide-1.jpg",
-    "/login-slide-2.jpg",
-    "/login-slide-3.jpg",
-    "/login-slide-4.jpg",
-  ];
 
   useEffect(() => {
     const timer = setInterval(() => {

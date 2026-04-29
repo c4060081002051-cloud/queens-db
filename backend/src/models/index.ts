@@ -414,7 +414,7 @@ export function setupDatabase(config: Config): Sequelize {
     username: config.DB_USER,
     password: config.DB_PASSWORD === "" ? undefined : config.DB_PASSWORD,
     database: config.DB_NAME,
-    logging: config.NODE_ENV === "development" ? console.log : false,
+    logging: config.NODE_ENV === "development" && process.env.DB_LOGGING === "true" ? console.log : false,
   });
 
   User.init(
@@ -473,6 +473,10 @@ export function setupDatabase(config: Config): Sequelize {
       tableName: "users",
       modelName: "User",
       timestamps: false,
+      indexes: [
+        { fields: ["is_deleted", "role"] },
+        { fields: ["email"] },
+      ],
     },
   );
 
@@ -794,6 +798,13 @@ export function setupDatabase(config: Config): Sequelize {
       timestamps: true,
       createdAt: "created_at",
       updatedAt: "updated_at",
+      indexes: [
+        { fields: ["admission_number"], unique: true },
+        { fields: ["class_room_id"] },
+        { fields: ["first_name", "last_name"] },
+        { fields: ["parent_email"] },
+      ],
+
     },
   );
 
@@ -1172,13 +1183,15 @@ export function setupDatabase(config: Config): Sequelize {
         allowNull: true,
         field: "change_reason",
       },
-
     },
     {
       sequelize,
       tableName: "student_fee_payments",
       modelName: "StudentFeePayment",
       timestamps: false,
+      indexes: [
+        { fields: ["created_at"] },
+      ],
     },
   );
 
@@ -1228,13 +1241,15 @@ export function setupDatabase(config: Config): Sequelize {
         allowNull: true,
         field: "change_reason",
       },
-
     },
     {
       sequelize,
       tableName: "daily_expense_entries",
       modelName: "DailyExpenseEntry",
       timestamps: false,
+      indexes: [
+        { fields: ["expense_date"] },
+      ],
     },
   );
 
@@ -1821,6 +1836,7 @@ export function setupDatabase(config: Config): Sequelize {
       tableName: "notice_board_entries",
       modelName: "NoticeBoardEntry",
       timestamps: false,
+      indexes: [{ fields: ["published_at"] }],
     },
   );
 
@@ -1907,6 +1923,7 @@ export function setupDatabase(config: Config): Sequelize {
       tableName: "school_expenses",
       modelName: "SchoolExpense",
       timestamps: false,
+      indexes: [{ fields: ["expense_date"] }],
     },
   );
 
@@ -2034,6 +2051,7 @@ export function setupDatabase(config: Config): Sequelize {
       tableName: "attendance_records",
       modelName: "AttendanceRecord",
       timestamps: false,
+      indexes: [{ fields: ["record_date", "present"] }],
     },
   );
 

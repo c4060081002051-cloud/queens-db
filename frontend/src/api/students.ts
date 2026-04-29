@@ -88,13 +88,14 @@ export type TeacherOption = {
 export type StudentSortBy = "date" | "id" | "name" | "class";
 export type StudentSortDir = "asc" | "desc";
 
-export async function fetchStudents(opts: StudentListQueryInput): Promise<StudentApiRow[]> {
+export async function fetchStudents(opts: StudentListQueryInput): Promise<{ items: StudentApiRow[]; total: number }> {
   const p = new URLSearchParams();
   const query = typeof opts.q === "string" ? opts.q.trim() : "";
   if (query) p.set("q", query);
   p.set("sortBy", opts.sortBy ?? "date");
   p.set("sortDir", opts.sortDir ?? "desc");
   if (opts.limit != null) p.set("limit", String(opts.limit));
+  if (opts.offset != null) p.set("offset", String(opts.offset));
   const res = await fetch(apiUrl(`/api/me/students?${p.toString()}`), {
     headers: { ...authHeaders() },
   });
@@ -103,8 +104,7 @@ export async function fetchStudents(opts: StudentListQueryInput): Promise<Studen
     const err = await readJson<{ error?: string }>(res).catch(() => null);
     throw new Error(err?.error ?? "Request failed");
   }
-  const data = await readJson<{ items: StudentApiRow[] }>(res);
-  return data.items;
+  return readJson<{ items: StudentApiRow[]; total: number }>(res);
 }
 
 export async function fetchStudent(id: number): Promise<StudentApiRow> {
@@ -561,3 +561,18 @@ export async function bulkUploadStudentsCsv(file: File): Promise<BulkUploadResul
   }
   return readJson<BulkUploadResult>(res);
 }
+
+export async function bulkCreateStudentsJson(items: CreateStudentBody[]): Promise<{ created: number; results: { admissionNumber?: string; error?: string }[] }> {
+  const res = await fetch(apiUrl("/api/me/students/bulk-json"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ items }),
+  });
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) {
+    const err = await readJson<{ error?: string }>(res).catch(() => null);
+    throw new Error(err?.error ?? "Request failed");
+  }
+  return readJson(res);
+}
+

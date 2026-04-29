@@ -67,28 +67,49 @@ async function getUserRole(userId: number): Promise<string> {
   return user?.role?.toLowerCase() ?? "";
 }
 
-async function getAccessibleClassrooms(userId: number): Promise<Array<{ id: number; name: string }>> {
+async function getAccessibleClassrooms(
+  userId: number,
+): Promise<Array<{ id: number; name: string; categoryId: number | null; categoryName: string | null }>> {
   const role = await getUserRole(userId);
   if (role === "admin") {
     const rows = await ClassRoom.findAll({
-      attributes: ["id", "name"],
+      attributes: ["id", "name", "categoryId"],
+      include: [{ model: ClassCategory, as: "category", attributes: ["name"], required: false }],
       order: [["name", "ASC"]],
     });
-    return rows.map((x) => ({ id: x.id, name: x.name }));
+    return rows.map((x) => ({
+      id: x.id,
+      name: x.name,
+      categoryId: x.categoryId ?? null,
+      categoryName: ((x.get("category") as ClassCategory | null | undefined)?.name ?? null),
+    }));
   }
 
   const rows = await UserClassAuthorization.findAll({
     where: { userId },
-    include: [{ model: ClassRoom, as: "classRoom", attributes: ["id", "name"], required: true }],
+    include: [
+      {
+        model: ClassRoom,
+        as: "classRoom",
+        attributes: ["id", "name", "categoryId"],
+        required: true,
+        include: [{ model: ClassCategory, as: "category", attributes: ["name"], required: false }],
+      },
+    ],
     order: [[{ model: ClassRoom, as: "classRoom" }, "name", "ASC"]],
   });
   return rows
     .map((x) => {
       const cls = x.get("classRoom") as ClassRoom | undefined;
       if (!cls) return null;
-      return { id: cls.id, name: cls.name };
+      return {
+        id: cls.id,
+        name: cls.name,
+        categoryId: cls.categoryId ?? null,
+        categoryName: ((cls.get("category") as ClassCategory | null | undefined)?.name ?? null),
+      };
     })
-    .filter((x): x is { id: number; name: string } => x != null);
+    .filter((x): x is { id: number; name: string; categoryId: number | null; categoryName: string | null } => x != null);
 }
 
 async function subjectsForStudentClass(
@@ -164,7 +185,12 @@ export function createMeAcademicsRouter() {
         authority: role === "admin" ? "full" : "restricted",
         terms: TERM_OPTIONS,
         examTypes,
-        classes,
+        classes: classes.map((x) => ({
+          id: x.id,
+          name: x.name,
+          categoryId: x.categoryId,
+          categoryName: x.categoryName,
+        })),
         sections: sectionRows.map((x) => ({
           id: x.id,
           classRoomId: x.classRoomId,
@@ -310,10 +336,124 @@ export function createMeAcademicsRouter() {
     }
   });
 
+  r.get("/academics/result-entry/marksheet", async (req, res) => {
+    try {
+      const userId = req.userId!;
+      const term = trimStr(req.query.term, 20) ?? "Term 1";
+      const examTypes = await activeExamTypeKeys();
+      if (examTypes.length === 0) {
+        return res.status(400).json({ error: "No exam types configured. Add exam types manually first." });
+      }
+      const examType = normalizeExamType(req.query.examType, examTypes) ?? examTypes[0];
+      const classRoomId = Number(req.query.classRoomId);
+      if (!Number.isFinite(classRoomId) || classRoomId < 1) {
+        return res.status(400).json({ error: "Invalid classRoomId" });
+      }
+
+      const classes = await getAccessibleClassrooms(userId);
+      const classRow = classes.find((x) => x.id === classRoomId);
+      if (!classRow) {
+        return res.status(403).json({ error: "Not authorized for this class" });
+      }
+
+      const students = await Student.findAll({
+        where: { classRoomId },
+        attributes: ["id", "admissionNumber", "firstName", "middleName", "lastName", "sectionName"],
+        order: [
+          ["first_name", "ASC"],
+          ["last_name", "ASC"],
+        ],
+      });
+      const studentIds = students.map((x) => x.id);
+      const resultRows =
+        studentIds.length === 0
+          ? []
+          : await StudentAssessmentResult.findAll({
+              where: {
+                studentId: { [Op.in]: studentIds },
+                classRoomId,
+                term,
+                examType,
+              },
+              attributes: ["studentId", "subject", "score"],
+            });
+
+      const configuredSubjects = classRow.categoryId
+        ? await AcademicSubjectAssignment.findAll({
+            where: { classCategoryId: classRow.categoryId },
+            attributes: ["subjectName"],
+            order: [["subject_name", "ASC"]],
+          })
+        : [];
+      const subjectSet = new Set<string>(
+        configuredSubjects.map((x) => x.subjectName.trim()).filter(Boolean),
+      );
+      for (const row of resultRows) {
+        const subject = row.subject.trim();
+        if (subject) subjectSet.add(subject);
+      }
+      const subjects = Array.from(subjectSet).sort((a, b) => a.localeCompare(b));
+
+      const markMap = new Map<string, number>();
+      for (const row of resultRows) {
+        const subject = row.subject.trim();
+        if (!subject) continue;
+        markMap.set(`${row.studentId}::${subject}`, Number(row.score) || 0);
+      }
+
+      const rows = students.map((student) => {
+        const marksBySubject: Record<string, number | null> = {};
+        let totalMarks = 0;
+        for (const subject of subjects) {
+          const score = markMap.get(`${student.id}::${subject}`) ?? null;
+          marksBySubject[subject] = score;
+          totalMarks += score ?? 0;
+        }
+        return {
+          studentId: student.id,
+          admissionNumber: student.admissionNumber,
+          fullName: [student.firstName, student.middleName, student.lastName].filter(Boolean).join(" "),
+          sectionName: student.sectionName ?? null,
+          marksBySubject,
+          totalMarks: Number(totalMarks.toFixed(2)),
+          position: 0,
+        };
+      });
+
+      rows.sort((a, b) => b.totalMarks - a.totalMarks || a.fullName.localeCompare(b.fullName));
+      let currentPosition = 0;
+      let previousTotal: number | null = null;
+      rows.forEach((row, index) => {
+        if (previousTotal == null || row.totalMarks !== previousTotal) {
+          currentPosition = index + 1;
+          previousTotal = row.totalMarks;
+        }
+        row.position = currentPosition;
+      });
+
+      return res.json({
+        item: {
+          classRoomId,
+          className: classRow.name,
+          categoryId: classRow.categoryId,
+          categoryName: classRow.categoryName,
+          term,
+          examType,
+          subjects,
+          rows,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
   r.get("/academics/result-entry/pending-students", async (req, res) => {
     try {
       const userId = req.userId!;
       const term = trimStr(req.query.term, 20) ?? "Term 1";
+      const includeSaved = String(req.query.includeSaved ?? "").toLowerCase() === "true";
       const examTypes = await activeExamTypeKeys();
       if (examTypes.length === 0) {
         return res.status(400).json({ error: "No exam types configured. Add exam types manually first." });
@@ -333,8 +473,12 @@ export function createMeAcademicsRouter() {
         attributes: ["studentId"],
       });
       const hasRecord = new Set(resultRows.map((x) => x.studentId));
+      const role = await getUserRole(userId);
       const items = students
-        .filter((s) => !hasRecord.has(s.id))
+        .filter((s) => {
+          if (!hasRecord.has(s.id)) return true;
+          return includeSaved && role === "admin";
+        })
         .map((s) => {
           const className = classNameById.get(s.classRoomId ?? 0) ?? "Unassigned";
           const sectionName = (s.sectionName ?? "").trim() || "General";
@@ -346,6 +490,7 @@ export function createMeAcademicsRouter() {
             className,
             sectionName,
             classRoomId: s.classRoomId,
+            hasResults: hasRecord.has(s.id),
           };
         })
         .sort((a, b) => {
@@ -481,6 +626,7 @@ export function createMeAcademicsRouter() {
         (student.get("classRoom") as ClassRoom | null | undefined)?.name ??
         classes.find((x) => x.id === student.classRoomId)?.name ??
         "Unknown";
+      const normalizedSectionName = (student.sectionName ?? "").trim() || "General";
       const allowedSubjects = new Set(
         await subjectsForStudentClass(student.classRoomId, className, student.sectionName ?? null),
       );
@@ -498,7 +644,7 @@ export function createMeAcademicsRouter() {
           where: { studentId, term, examType, subject },
           defaults: {
             classRoomId: student.classRoomId,
-            sectionName: student.sectionName ?? null,
+            sectionName: normalizedSectionName,
             subject,
             score,
             remarks: null,
@@ -507,7 +653,7 @@ export function createMeAcademicsRouter() {
         });
         await row.update({
           classRoomId: student.classRoomId,
-          sectionName: student.sectionName ?? null,
+          sectionName: normalizedSectionName,
           subject,
           score,
           remarks: null,

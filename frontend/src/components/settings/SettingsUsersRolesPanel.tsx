@@ -3,6 +3,7 @@ import {
   fetchRolePermissions,
   fetchUserPermissions,
   updateRolePermissions,
+  updateRolePermissionsBulk,
   updateUserPermissionOverrides,
 } from "../../api/settings";
 import {
@@ -111,6 +112,9 @@ export function SettingsUsersRolesPanel() {
   const [activeManageRowId, setActiveManageRowId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const USERS_PAGE_SIZE = 100;
   const [status, setStatus] = useState<string | null>(null);
   const [classrooms, setClassrooms] = useState<ClassRoomOption[]>([]);
   const [sections, setSections] = useState<ClassSectionOption[]>([]);
@@ -165,13 +169,18 @@ export function SettingsUsersRolesPanel() {
 
   useEffect(() => {
     setIsLoadingUsers(true);
-    fetchManagedUsers()
-      .then((loadedUsers) => {
-        setUsers(loadedUsers);
+    fetchManagedUsers(USERS_PAGE_SIZE, offset)
+      .then((data) => {
+        if (offset === 0) {
+          setUsers(data.users);
+        } else {
+          setUsers((prev) => [...prev, ...data.users]);
+        }
+        setTotalUsers(data.total);
       })
       .catch((err: Error) => setStatus("Error loading users: " + err.message))
       .finally(() => setIsLoadingUsers(false));
-  }, []);
+  }, [offset]);
 
   useEffect(() => {
     void Promise.all([fetchClassrooms(), fetchClassSections(), fetchStaffMembers("teaching")])
@@ -241,13 +250,13 @@ export function SettingsUsersRolesPanel() {
     setIsSaving(true);
     setStatus(null);
     try {
-      // We save role by role for simplicity or bulk if needed. 
-      // For now, let's group by role.
-      const rolesToUpdate = ROLE_OPTIONS.map(r => r.id);
-      for (const roleId of rolesToUpdate) {
-        const perms = permissionMappings.filter(m => m.role === roleId).map(m => m.permissionKey);
-        await updateRolePermissions(roleId, perms);
-      }
+      const updates = ROLE_OPTIONS.map((r) => ({
+        role: r.id,
+        permissions: permissionMappings
+          .filter((m) => m.role === r.id)
+          .map((m) => m.permissionKey),
+      }));
+      await updateRolePermissionsBulk(updates);
       setStatus("Permissions updated successfully!");
     } catch (err: any) {
       setStatus("Error saving permissions: " + err.message);
@@ -563,34 +572,33 @@ export function SettingsUsersRolesPanel() {
     const successMessage = status?.startsWith("Permissions updated") || status?.startsWith("User permissions updated");
     return (
       <div className="max-w-[1100px] space-y-6 pb-24">
-        <header className="neo-card relative overflow-hidden rounded-2xl bg-white px-6 py-6 sm:px-8 shadow-sm">
-          <div className="absolute top-0 left-0 h-1.5 w-full bg-gradient-to-r from-[#0c2340] to-[#ea580c]" />
+        <header className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0c2340]/10 to-[#ea580c]/10 text-2xl shadow-inner">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-2xl text-indigo-600 shadow-inner ring-1 ring-indigo-100">
                 🔐
               </div>
               <div>
-                <h1 className="text-2xl font-black tracking-tight text-[#0c2340]">
+                <h1 className="text-2xl font-black tracking-tight text-slate-800">
                   {permissionMode === "role" ? "Role Permissions" : "User Permissions"}
                 </h1>
                 <p className="mt-1 text-sm font-medium text-slate-500">
                   {permissionMode === "role"
-                    ? "Each sector lists permissions. Grant or revoke per role, then save."
-                    : "Select a user and configure individual permission overrides set by admin."}
+                    ? "Configure system access for each role. Grant or revoke per sector, then save."
+                    : "Individual permission overrides for specific administrative accounts."}
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
                 <button
                   type="button"
                   onClick={() => {
                     setPermissionMode("role");
                     setStatus(null);
                   }}
-                  className={`rounded-lg px-3 py-2 text-xs font-bold ${
-                    permissionMode === "role" ? "bg-[#0c2340] text-white" : "text-slate-600 hover:bg-slate-100"
+                  className={`rounded-lg px-4 py-2 text-xs font-bold transition-all ${
+                    permissionMode === "role" ? "bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
                   }`}
                 >
                   By Role
@@ -604,8 +612,8 @@ export function SettingsUsersRolesPanel() {
                       setSelectedPermissionUserId(users[0].id);
                     }
                   }}
-                  className={`rounded-lg px-3 py-2 text-xs font-bold ${
-                    permissionMode === "user" ? "bg-[#0c2340] text-white" : "text-slate-600 hover:bg-slate-100"
+                  className={`rounded-lg px-4 py-2 text-xs font-bold transition-all ${
+                    permissionMode === "user" ? "bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
                   }`}
                 >
                   By User
@@ -614,7 +622,7 @@ export function SettingsUsersRolesPanel() {
               <button
                 type="button"
                 onClick={() => setView("list")}
-                className="rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200"
+                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50"
               >
                 Back
               </button>
@@ -622,7 +630,7 @@ export function SettingsUsersRolesPanel() {
                 type="button"
                 disabled={isSaving}
                 onClick={permissionMode === "role" ? handleSavePermissions : handleSaveUserPermissions}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#0c2340] to-[#1a3a5c] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#0c2340]/20 hover:shadow-xl disabled:pointer-events-none disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 disabled:pointer-events-none disabled:opacity-60 transition-all"
               >
                 {isSaving ? "Saving..." : "Save Changes"}
               </button>
@@ -632,15 +640,15 @@ export function SettingsUsersRolesPanel() {
 
         <div className="space-y-6">
           {permissionMode === "user" ? (
-            <section className="neo-card rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-              <label className="block space-y-1.5">
-                <span className="text-xs font-black uppercase tracking-widest text-[#0c2340]">
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <label className="block space-y-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                   Select User (Admin managed)
                 </span>
                 <select
                   value={selectedPermissionUserId ?? ""}
                   onChange={(event) => setSelectedPermissionUserId(Number.parseInt(event.target.value, 10))}
-                  className="neo-inset-field w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none shadow-sm transition-all hover:border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
                 >
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
@@ -658,11 +666,11 @@ export function SettingsUsersRolesPanel() {
           {permissionSectors.map((sector) => (
             <section
               key={sector.id}
-              className="neo-card overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm"
+              className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
             >
-              <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-4">
-                <h2 className="text-sm font-black uppercase tracking-wider text-[#0c2340]">{sector.title}</h2>
-                <p className="mt-1 text-xs font-medium text-slate-600">{sector.subtitle}</p>
+              <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800">{sector.title}</h2>
+                <p className="mt-0.5 text-xs font-medium text-slate-500">{sector.subtitle}</p>
               </div>
               {permissionMode === "role" ? (
                 renderPermissionMatrix([...sector.keys])
@@ -736,21 +744,20 @@ export function SettingsUsersRolesPanel() {
   if (view === "add") {
     return (
       <div className="max-w-[860px] space-y-6 pb-24">
-        <header className="neo-card relative overflow-hidden rounded-2xl bg-white px-6 py-6 sm:px-8 shadow-sm">
-          <div className="absolute top-0 left-0 h-1.5 w-full bg-gradient-to-r from-[#0c2340] to-[#ea580c]" />
+        <header className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0c2340]/10 to-[#ea580c]/10 text-2xl shadow-inner">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-2xl text-indigo-600 shadow-inner ring-1 ring-indigo-100">
                 👤
               </div>
               <div>
-                <h1 className="text-2xl font-black tracking-tight text-[#0c2340]">
-                  {editingUserId != null ? "Edit User" : "Add New User"}
+                <h1 className="text-2xl font-black tracking-tight text-slate-800">
+                  {editingUserId != null ? "Edit User Account" : "Add New User Account"}
                 </h1>
                 <p className="mt-1 text-sm font-medium text-slate-500">
                   {editingUserId != null
-                    ? "Update the user's saved account information."
-                    : "Enter the user identity, role, and secure password to provision a login-ready account."}
+                    ? "Update access and profile information for this user."
+                    : "Create a new school identity with role-based dashboard access."}
                 </p>
               </div>
             </div>
@@ -768,46 +775,46 @@ export function SettingsUsersRolesPanel() {
         </header>
 
         <div className="space-y-6">
-            <section className="neo-card rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-              <h2 className="mb-4 text-[10px] font-black uppercase tracking-widest text-[#0c2340]">
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+              <h2 className="mb-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">
                 Step 1: User Identity
               </h2>
-              <div className="grid gap-5 sm:grid-cols-2">
-                <label className="block space-y-1.5">
-                  <span className="text-xs font-bold text-[#0c2340]">Full Name <span className="text-red-500">*</span></span>
+              <div className="grid gap-6 sm:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-xs font-bold text-slate-700">Full Name <span className="text-rose-500">*</span></span>
                   <input
                     value={name}
                     onChange={(event) => setName(event.target.value)}
                     placeholder="e.g. Jane Namusoke"
-                    className="neo-inset-field w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none shadow-sm transition-all hover:border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
                   />
                 </label>
-                <label className="block space-y-1.5">
-                  <span className="text-xs font-bold text-[#0c2340]">Email <span className="text-red-500">*</span></span>
+                <label className="block space-y-2">
+                  <span className="text-xs font-bold text-slate-700">Email Address <span className="text-rose-500">*</span></span>
                   <input
                     type="email"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder="e.g. jane@queens.school"
-                    className="neo-inset-field w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none shadow-sm transition-all hover:border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
                   />
                 </label>
               </div>
             </section>
 
-            <section className="neo-card rounded-2xl bg-white p-6 shadow-sm border border-slate-100">
-              <h2 className="mb-4 text-[10px] font-black uppercase tracking-widest text-[#0c2340]">
-                {editingUserId != null ? "Step 2: Role" : "Step 2: Role & Password"}
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+              <h2 className="mb-6 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                {editingUserId != null ? "Step 2: Access Role" : "Step 2: Role & Security"}
               </h2>
-              <div className="grid gap-5 sm:grid-cols-2">
-                <label className="block space-y-1.5">
-                  <span className="text-xs font-bold text-[#0c2340]">Role <span className="text-red-500">*</span></span>
+              <div className="grid gap-6 sm:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-xs font-bold text-slate-700">Assigned Role <span className="text-rose-500">*</span></span>
                   <input
                     list="role-suggestions"
                     value={role}
                     onChange={(event) => setRole(event.target.value)}
                     placeholder="e.g. teacher, accountant, registrar"
-                    className="neo-inset-field w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none shadow-sm transition-all hover:border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
                   />
                   <datalist id="role-suggestions">
                     {roleSuggestions.map((item) => (
@@ -820,24 +827,24 @@ export function SettingsUsersRolesPanel() {
                 </label>
                 {editingUserId == null ? (
                   <>
-                    <label className="block space-y-1.5">
-                      <span className="text-xs font-bold text-[#0c2340]">Password <span className="text-red-500">*</span></span>
+                    <label className="block space-y-2">
+                      <span className="text-xs font-bold text-slate-700">Account Password <span className="text-rose-500">*</span></span>
                       <input
                         type="password"
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
                         placeholder="Enter secure password"
-                        className="neo-inset-field w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none shadow-sm transition-all hover:border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
                       />
                     </label>
-                    <label className="block space-y-1.5">
-                      <span className="text-xs font-bold text-[#0c2340]">Confirm Password <span className="text-red-500">*</span></span>
+                    <label className="block space-y-2">
+                      <span className="text-xs font-bold text-slate-700">Confirm Account Password <span className="text-rose-500">*</span></span>
                       <input
                         type="password"
                         value={confirmPassword}
                         onChange={(event) => setConfirmPassword(event.target.value)}
                         placeholder="Re-type password"
-                        className="neo-inset-field w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 outline-none shadow-sm transition-all hover:border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
                       />
                     </label>
                   </>
@@ -866,22 +873,25 @@ export function SettingsUsersRolesPanel() {
                 type="button"
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="w-full inline-flex justify-center items-center gap-2 rounded-xl bg-gradient-to-r from-[#0c2340] to-[#1a3a5c] px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#0c2340]/20 hover:shadow-xl disabled:pointer-events-none disabled:opacity-60"
+                className="w-full inline-flex justify-center items-center gap-2 rounded-2xl bg-indigo-600 px-6 py-4 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 disabled:pointer-events-none disabled:opacity-60 transition-all"
               >
                 {isSubmitting
                   ? editingUserId != null
-                    ? "Saving..."
-                    : "Creating account..."
+                    ? "Saving Changes..."
+                    : "Creating Account..."
                   : editingUserId != null
-                    ? "Save Changes"
-                    : "Create Account"}
+                    ? "Save User Changes"
+                    : "Create User Account"}
               </button>
               <button
                 type="button"
-                onClick={resetForm}
-                className="w-full inline-flex justify-center rounded-xl bg-white border border-slate-200 px-6 py-3.5 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                onClick={() => {
+                  resetForm();
+                  setView("list");
+                }}
+                className="w-full inline-flex justify-center rounded-2xl bg-white border border-slate-200 px-6 py-4 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50 transition-all"
               >
-                Clear Form
+                Cancel and Return
               </button>
             </div>
         </div>
@@ -889,29 +899,28 @@ export function SettingsUsersRolesPanel() {
     );
   }
 
-  return (
-    <div className="max-w-[1000px] space-y-6 pb-24">
-      <header className="neo-card relative overflow-hidden rounded-2xl bg-white px-6 py-6 sm:px-8 shadow-sm">
-        <div className="absolute top-0 left-0 h-1.5 w-full bg-gradient-to-r from-[#0c2340] to-[#ea580c]" />
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0c2340]/10 to-[#ea580c]/10 text-2xl shadow-inner">
-              👥
+    return (
+      <div className="max-w-[1000px] space-y-6 pb-24">
+        <header className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-2xl text-indigo-600 shadow-inner ring-1 ring-indigo-100">
+                👥
+              </div>
+              <div>
+                <h1 className="text-2xl font-black tracking-tight text-slate-800">Users & Roles</h1>
+                <p className="mt-1 text-sm font-medium text-slate-500">
+                  Administrative control for system accounts, role definitions, and portal access permissions.
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-black tracking-tight text-[#0c2340]">Users & Roles</h1>
-              <p className="mt-1 text-sm font-medium text-slate-500">
-                Manage system access and prepare user accounts for finance, academics, administration, and portal access.
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setView("permissions")}
-              className="rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200"
+              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50 transition-all"
             >
-              Manage Permissions
+              Manage System Permissions
             </button>
             <button
               type="button"
@@ -919,83 +928,91 @@ export function SettingsUsersRolesPanel() {
                 resetForm();
                 setView("add");
               }}
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#ea580c] to-[#c2410c] px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#ea580c]/20 hover:shadow-xl"
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:shadow-indigo-300 transition-all"
             >
-              Add User
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add New User
             </button>
           </div>
         </div>
       </header>
 
       <div className="space-y-6">
-        <section className="neo-card overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+        <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+          <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
             <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-center">
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search by name, email, or role"
-                className="neo-inset-field w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
-              />
+              <div className="relative">
+                <svg className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search accounts..."
+                  className="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-sm font-semibold text-slate-700 outline-none shadow-sm transition-all hover:border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
+                />
+              </div>
               <select
                 value={roleFilter}
                 onChange={(event) => setRoleFilter(event.target.value)}
-                className="neo-inset-field rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-[#0c2340] focus:ring-2 focus:ring-[#0c2340]/10"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 outline-none shadow-sm transition-all hover:border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
               >
-                <option value="all">All roles</option>
+                <option value="all">All Roles</option>
                 {ROLE_OPTIONS.map((opt) => (
                   <option key={opt.id} value={opt.id}>
                     {opt.label}
                   </option>
                 ))}
               </select>
-              <div className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600">
-                {filteredUsers.length} user(s)
+              <div className="inline-flex items-center rounded-xl bg-indigo-50 px-4 py-2.5 text-xs font-bold text-indigo-600 ring-1 ring-indigo-100">
+                {filteredUsers.length} Active Accounts
               </div>
             </div>
           </div>
           <div className="max-h-[65vh] overflow-auto">
-            <table className="w-full min-w-[980px] text-left">
-              <thead className="sticky top-0 z-10 bg-slate-50">
-                <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-[#0c2340]">
-                  <th className="px-5 py-3">User</th>
-                  <th className="px-5 py-3">Role</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Class assigned</th>
-                  <th className="px-5 py-3 text-right">Actions</th>
+            <table className="w-full min-w-[980px] text-left border-collapse">
+              <thead className="sticky top-0 z-10 bg-white">
+                <tr className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-6 py-4">Identity</th>
+                  <th className="px-6 py-4">Assigned Role</th>
+                  <th className="px-6 py-4">Account Status</th>
+                  <th className="px-6 py-4">Academic Assignment</th>
+                  <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredUsers.map((user) => {
                   const rowBusy = actingUserId === user.id;
                   return (
-                    <tr key={user.id} className="align-top hover:bg-slate-50/60">
-                      <td className="px-5 py-4">
-                        <p className="text-sm font-bold text-[#0c2340]">{user.name}</p>
-                        <p className="mt-0.5 text-xs font-semibold text-slate-500">{user.email}</p>
+                    <tr key={user.id} className="group hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-bold text-slate-800">{user.name}</p>
+                        <p className="mt-0.5 text-xs font-medium text-slate-500">{user.email}</p>
                       </td>
-                      <td className="px-5 py-4">
-                        <span className="inline-flex rounded-full border border-orange-100 bg-orange-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#ea580c]">
+                      <td className="px-6 py-4">
+                        <span className="inline-flex rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-indigo-600">
                           {user.role}
                         </span>
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-6 py-4">
                         <span
-                          className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${
+                          className={`inline-flex rounded-lg border px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${
                             user.isActive
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-rose-200 bg-rose-50 text-rose-700"
+                              ? "border-emerald-100 bg-emerald-50 text-emerald-600"
+                              : "border-rose-100 bg-rose-50 text-rose-600"
                           }`}
                         >
-                          {user.isActive ? "Active" : "Deactivated"}
+                          {user.isActive ? "Active" : "Archived"}
                         </span>
                       </td>
-                      <td className="px-5 py-4">
-                        <span className="text-xs font-semibold text-slate-600">
+                      <td className="px-6 py-4">
+                        <span className="text-xs font-semibold text-slate-600 italic">
                           {teacherAssignmentLabel(user)}
                         </span>
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-6 py-4">
                         <div
                           ref={activeManageRowId === user.id ? activeManageMenuRef : null}
                           className="relative flex justify-end"
@@ -1006,66 +1023,67 @@ export function SettingsUsersRolesPanel() {
                               setActiveManageRowId((prev) => (prev === user.id ? null : user.id))
                             }
                             disabled={rowBusy}
-                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-60"
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-60"
                           >
-                            {activeManageRowId === user.id ? "Hide" : "Manage"}
+                            {activeManageRowId === user.id ? "Close" : "Manage"}
                           </button>
                           {activeManageRowId === user.id ? (
                             <div
                               role="menu"
                               aria-orientation="vertical"
-                              className="neo-dropdown absolute right-full top-0 z-[60] mr-2 w-[min(100vw-2rem,18rem)] overflow-hidden p-2 shadow-lg"
+                              className="absolute right-0 top-full z-[60] mt-2 w-56 origin-top-right overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-150"
                             >
                               <div className="flex flex-col gap-1">
                                 <button
                                   type="button"
                                   onClick={() => openEditUser(user)}
                                   disabled={rowBusy}
-                                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-60"
+                                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                                 >
-                                  Edit
+                                  Edit Identity
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => openUserPermissions(user)}
                                   disabled={rowBusy}
-                                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-60"
+                                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                                 >
-                                  Permissions
+                                  Account Permissions
                                 </button>
                                 {user.role === "teacher" ? (
                                   <button
                                     type="button"
                                     onClick={() => void handleAssignClass(user)}
                                     disabled={rowBusy}
-                                    className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-left text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 disabled:pointer-events-none disabled:opacity-60"
+                                    className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-indigo-600 hover:bg-indigo-100 transition-colors"
                                   >
-                                    Assign Class
+                                    Class Assignment
                                   </button>
                                 ) : null}
+                                <div className="my-1 h-px bg-slate-100" />
                                 <button
                                   type="button"
                                   onClick={() => void handleToggleActive(user)}
                                   disabled={rowBusy}
-                                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-60"
+                                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors"
                                 >
-                                  {user.isActive ? "Deactivate" : "Activate"}
+                                  {user.isActive ? "Deactivate Account" : "Reactivate Account"}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => void handleAdminResetPassword(user)}
                                   disabled={rowBusy}
-                                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-[11px] font-bold text-amber-800 hover:bg-amber-100 disabled:pointer-events-none disabled:opacity-60"
+                                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-amber-600 hover:bg-amber-50 transition-colors"
                                 >
-                                  Reset Password
+                                  Force Password Reset
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => void handleDeleteUser(user)}
                                   disabled={rowBusy}
-                                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-left text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:pointer-events-none disabled:opacity-60"
+                                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors"
                                 >
-                                  Delete
+                                  Purge Record
                                 </button>
                               </div>
                             </div>
@@ -1092,6 +1110,18 @@ export function SettingsUsersRolesPanel() {
             </table>
           </div>
         </section>
+        {users.length < totalUsers && (
+          <div className="flex justify-center pt-2">
+            <button
+              type="button"
+              onClick={() => setOffset((prev) => prev + USERS_PAGE_SIZE)}
+              disabled={isLoadingUsers}
+              className="rounded-xl border border-slate-200 bg-white px-8 py-2.5 text-sm font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50"
+            >
+              {isLoadingUsers ? "Loading..." : "Load More Users"}
+            </button>
+          </div>
+        )}
         {status ? (
           <div className="rounded-xl border border-blue-100 bg-blue-50 px-5 py-4 text-sm font-bold text-blue-700">
             {status}

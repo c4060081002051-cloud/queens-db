@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BuseryPage, type BuseryRecord } from "./BuseryPage";
+import { BursaryPage, type BursaryRecord } from "./BursaryPage";
 import { DailyExpensesPage } from "./expenses/DailyExpensesPage";
 import { DailyLedgerPage } from "./ledger/DailyLedgerPage";
 import { FinanceOverviewPage } from "./overview/FinanceOverviewPage";
@@ -9,7 +9,7 @@ import { RecordStudentPaymentPage } from "./payments/RecordStudentPaymentPage";
 import { PayrollSummaryPage } from "./payroll/PayrollSummaryPage";
 import { AdminDailyReportsPage } from "./reports/AdminDailyReportsPage";
 import { DebtorsReportPage } from "./reports/DebtorsReportPage";
-import { AssignBurseryPage } from "./AssignBurseryPage";
+import { AssignBursaryPage } from "./AssignBursaryPage";
 
 export type FinanceSection =
   | "overview"
@@ -18,9 +18,9 @@ export type FinanceSection =
   | "assign_fees"
   | "record_payment"
   | "receipts"
-  | "bursery"
-  | "busery"
-  | "bursery_assignment"
+  | "expenses"
+  | "bursary"
+  | "bursary_assignment"
   | "staff_payment"
   | "finance_summary";
 
@@ -32,8 +32,8 @@ function hasFinancePermission(user: any, permissionKey: string): boolean {
 
 function requiredPermissionForSection(section: FinanceSection): string | null {
   if (section === "assign_fees") return "finance_assign_fees";
-  if (section === "record_payment" || section === "receipts" || section === "bursery") return "finance_record_payments";
-  if (section === "busery" || section === "bursery_assignment") return "finance_bursary";
+  if (section === "record_payment" || section === "receipts" || section === "expenses") return "finance_record_payments";
+  if (section === "bursary" || section === "bursary_assignment") return "finance_bursary";
   if (section === "staff_payment") return "finance_staff_pay";
   if (section === "finance_summary") return "finance_summaries";
   if (section === "daily_report" || section === "debtors_report") return "finance_reports";
@@ -47,9 +47,9 @@ const sectionTitle: Record<FinanceSection, string> = {
   assign_fees: "Assign Fees",
   record_payment: "Record Student Payment",
   receipts: "Receipts",
-  bursery: "Record expences",
-  busery: "Busery",
-  bursery_assignment: "Assign Student Bursary",
+  expenses: "Record Expenses",
+  bursary: "Bursary",
+  bursary_assignment: "Assign Student Bursary",
   staff_payment: "Payroll Summary",
   finance_summary: "Admin Daily Reports",
 };
@@ -64,7 +64,7 @@ export function FinanceSectionPage({
   user: any;
 }) {
   const [ledgerDate, setLedgerDate] = useState<string | undefined>(undefined);
-  const [selectedBuseryRecord, setSelectedBuseryRecord] = useState<BuseryRecord | null>(null);
+  const [selectedBursaryRecord, setSelectedBursaryRecord] = useState<BursaryRecord | null>(null);
 
   const navigateToLedger = (date: string) => {
     setLedgerDate(date);
@@ -78,8 +78,8 @@ export function FinanceSectionPage({
     { key: "daily_report", desc: "Track ledger entries for the selected day.", icon: "📚", color: "from-[#fdfcfb] to-[#f4f1ee]" },
     { key: "finance_summary", desc: "Run daily report submission and review flow.", icon: "📑", color: "from-[#f5fbf8] to-[#e8f5ed]" },
     { key: "staff_payment", desc: "View payroll totals and arrears by month.", icon: "👥", color: "from-[#f8f9ff] to-[#e8ebf9]" },
-    { key: "busery", desc: "Open the bursery expenses page.", icon: "🧾", color: "from-[#fff9f4] to-[#ffeadb]" },
-    { key: "bursery", desc: "Capture day expenses into the school ledger.", icon: "🛒", color: "from-[#fff9f4] to-[#ffeadb]" },
+    { key: "bursary", desc: "Open the bursary management page.", icon: "🎓", color: "from-[#fff9f4] to-[#ffeadb]" },
+    { key: "expenses", desc: "Capture operational expenses into the school ledger.", icon: "🛒", color: "from-[#fff9f4] to-[#ffeadb]" },
     { key: "debtors_report", desc: "Review student debtors and outstanding balances.", icon: "📉", color: "from-[#fff5f5] to-[#ffe8e8]" },
   ];
   const visibleCards = cards.filter((card) => {
@@ -94,18 +94,18 @@ export function FinanceSectionPage({
     hasFinancePermission(user, sectionRequiredPermission);
 
   const renderHeader = (title: string, subtitle?: string) => (
-    <header className="mb-6 flex flex-col gap-2 border-b border-[#ebe4d9]/80 pb-6 sm:flex-row sm:items-center sm:justify-between">
+    <header className="mb-8 flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-8">
       <div>
-        <h1 className="text-2xl font-black tracking-tight text-[#2d3436]">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-[#636e72]">{subtitle}</p>}
+        <h1 className="text-2xl font-black tracking-tight text-slate-800">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm font-medium text-slate-500">{subtitle}</p>}
       </div>
       {section !== "overview" && (
         <button
           onClick={() => onChangeSection("overview")}
-          className="flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-bold uppercase tracking-wider text-[#5a8faf] shadow-sm ring-1 ring-[#ebe4d9] transition hover:bg-[#f8fbff]"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-600 shadow-sm transition-all hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
           Back to Overview
         </button>
@@ -175,42 +175,42 @@ export function FinanceSectionPage({
     );
   }
 
-  if (section === "bursery") {
+  if (section === "expenses") {
     return (
       <div className="min-w-0 space-y-4">
-        {renderHeader(sectionTitle.bursery, "Log operational expenses into the system.")}
+        {renderHeader(sectionTitle.expenses, "Log operational expenses into the system.")}
         <DailyExpensesPage />
       </div>
     );
   }
 
-  if (section === "busery") {
+  if (section === "bursary") {
     return (
       <div className="min-w-0 space-y-4">
-        {renderHeader(sectionTitle.busery, "Track bursary awards and support records.")}
-        <BuseryPage 
+        {renderHeader(sectionTitle.bursary, "Track bursary awards and support records.")}
+        <BursaryPage 
           isAdmin={user?.role === "admin"} 
           onAssignClick={() => {
-            setSelectedBuseryRecord(null);
-            onChangeSection("bursery_assignment");
+            setSelectedBursaryRecord(null);
+            onChangeSection("bursary_assignment");
           }}
           onEditRow={(row) => {
-            setSelectedBuseryRecord(row);
-            onChangeSection("bursery_assignment");
+            setSelectedBursaryRecord(row);
+            onChangeSection("bursary_assignment");
           }}
         />
       </div>
     );
   }
 
-  if (section === "bursery_assignment") {
+  if (section === "bursary_assignment") {
     return (
       <div className="min-w-0 space-y-4">
-        {renderHeader(sectionTitle.bursery_assignment, "Assign percentage-based discounts to students.")}
-        <AssignBurseryPage
-          initialStudentId={selectedBuseryRecord?.id}
-          initialTerm={selectedBuseryRecord?.term}
-          initialPercentage={selectedBuseryRecord?.coverageLabel.replace("%", "")}
+        {renderHeader(sectionTitle.bursary_assignment, "Assign percentage-based discounts to students.")}
+        <AssignBursaryPage
+          initialStudentId={selectedBursaryRecord?.id}
+          initialTerm={selectedBursaryRecord?.term}
+          initialPercentage={selectedBursaryRecord?.coverageLabel.replace("%", "")}
         />
       </div>
     );
@@ -237,29 +237,47 @@ export function FinanceSectionPage({
 
   return (
     <div className="min-w-0 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <header className="border-b border-[#ebe4d9]/80 pb-6">
-        <h1 className="text-3xl font-black tracking-tight text-[#2d3436]">Finance Command Center</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#636e72]">
-          Monitor real-time cash flow, manage fee collections, and track school expenditures from a unified dashboard.
-        </p>
+      <header className="flex flex-col gap-2 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="flex items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-2xl text-indigo-600 shadow-inner ring-1 ring-indigo-100">
+            💳
+          </div>
+          <div>
+            <h1 className="text-2xl font-black tracking-tight text-slate-800">
+              Finance Command Center
+            </h1>
+            <p className="mt-1 text-sm font-medium text-slate-500">
+              Oversee school revenue, track student fee balances, and manage financial documentation.
+            </p>
+          </div>
+        </div>
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {visibleCards.map((card) => (
           <button
             key={card.key}
             type="button"
             onClick={() => onChangeSection(card.key)}
-            className={`group neo-card text-left p-5 transition-all hover:translate-y-[-2px] hover:shadow-lg bg-gradient-to-br ${card.color}`}
+            className="group relative flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
           >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-2xl" role="img" aria-label={card.key}>{card.icon}</span>
-              <svg className="h-5 w-5 text-[#5a8faf] opacity-0 group-hover:opacity-100 transition-opacity translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-2xl shadow-inner ring-1 ring-slate-100 transition-colors group-hover:bg-indigo-50 group-hover:ring-indigo-100">
+              <span role="img" aria-label={card.key}>
+                {card.icon}
+              </span>
+            </div>
+            <h2 className="text-base font-bold text-slate-800 transition-colors group-hover:text-indigo-600">
+              {sectionTitle[card.key]}
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">
+              {card.desc}
+            </p>
+            <div className="mt-4 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-indigo-600 opacity-0 transition-opacity group-hover:opacity-100">
+              Open Module
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
             </div>
-            <h2 className="text-base font-bold text-[#2d3436] group-hover:text-[#5a8faf] transition-colors">{sectionTitle[card.key]}</h2>
-            <p className="mt-1 text-xs text-[#636e72] leading-relaxed">{card.desc}</p>
           </button>
         ))}
       </section>

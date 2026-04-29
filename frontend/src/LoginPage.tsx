@@ -146,6 +146,13 @@ function SocialLinkedIn({ className }: { className?: string }) {
   );
 }
 
+const sliderImages = [
+  "/login-slide-1.jpg",
+  "/login-slide-2.jpg",
+  "/login-slide-3.jpg",
+  "/login-slide-4.jpg",
+];
+
 export function LoginPage({
   onLogin,
   loading,
@@ -176,13 +183,6 @@ export function LoginPage({
   }, [defaultRememberEmail]);
   const [shake, setShake] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
-
-  const sliderImages = [
-    "/login-slide-1.jpg",
-    "/login-slide-2.jpg",
-    "/login-slide-3.jpg",
-    "/login-slide-4.jpg",
-  ];
 
   useEffect(() => {
     const timer = setInterval(() => {

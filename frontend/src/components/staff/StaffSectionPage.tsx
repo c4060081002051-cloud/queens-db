@@ -144,8 +144,17 @@ function mapNonTeachingStaff(row: StaffMemberApiRow): NonTeachingStaffRecord {
   };
 }
 
+function categoryNameForAssignedClass(
+  assignedClass: string | undefined,
+  classOptions: Array<{ id: number; name: string; academicYear?: string | null; categoryName?: string | null }>,
+): string | undefined {
+  const className = assignedClass?.trim();
+  if (!className) return undefined;
+  return classOptions.find((row) => row.name.trim() === className)?.categoryName?.trim() || undefined;
+}
+
 const inputClassName =
-  "neo-inset-field w-full rounded-xl px-3 py-2 text-sm text-[#2d3436] placeholder:text-[#636e72]/70";
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 hover:border-slate-300";
 
 function FieldLabel({
   htmlFor,
@@ -157,15 +166,15 @@ function FieldLabel({
   children: ReactNode;
 }) {
   return (
-    <label htmlFor={htmlFor} className="mb-1 block text-xs font-semibold text-[#2d3436]">
+    <label htmlFor={htmlFor} className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500">
       {children}
-      {required ? <span className="text-[#c0392b]"> *</span> : null}
+      {required ? <span className="text-rose-500"> *</span> : null}
     </label>
   );
 }
 
 const staffActionsMenuItemClass =
-  "flex w-full items-center px-3 py-2 text-left text-xs font-semibold text-[#2d3436] transition hover:bg-[#eef6f9]";
+  "flex w-full items-center px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-indigo-600";
 
 function StaffTableRowActionsMenu({
   rowKey,
@@ -212,7 +221,7 @@ function StaffTableRowActionsMenu({
           aria-expanded={open}
           aria-haspopup="menu"
           onClick={() => onOpenMenuChange(open ? null : rowKey)}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#faf7f0] text-xl font-bold leading-none text-[#636e72] ring-1 ring-[#ebe4d9] transition hover:bg-white"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-xl font-bold leading-none text-slate-500 ring-1 ring-slate-200 shadow-sm transition hover:bg-slate-50 hover:text-indigo-600"
         >
           <span className="block translate-y-px" aria-hidden>
             ⋮
@@ -221,7 +230,7 @@ function StaffTableRowActionsMenu({
         {open ? (
           <div
             role="menu"
-            className="absolute right-0 top-full z-30 mt-1 min-w-[10rem] rounded-xl border border-[#ebe4d9] bg-[#fffcf7] py-1 shadow-[0_8px_24px_rgba(45,52,54,0.12)] ring-1 ring-black/5"
+            className="absolute right-0 top-full z-30 mt-1 min-w-[10rem] rounded-2xl border border-slate-200 bg-white py-1.5 shadow-lg"
           >
             <button
               type="button"
@@ -268,23 +277,30 @@ function TeachingStaffForm({
   onSave,
   classOptions,
   classOptionsLoading,
+  initialData,
 }: {
   onCancel: () => void;
   onSave: (staff: TeachingStaffRecord) => void;
   classOptions: Array<{ id: number; name: string; academicYear?: string | null }>;
   classOptionsLoading: boolean;
+  initialData?: TeachingStaffRecord | null;
 }) {
   const [submitted, setSubmitted] = useState(false);
   const [selectedSection, setSelectedSection] =
-    useState<Exclude<TeachingSection, "all">>("kindergarten");
+    useState<Exclude<TeachingSection, "all"> | "">(initialData?.section ?? "");
   const [staffPhotoFile, setStaffPhotoFile] = useState<File | null>(null);
 
+  useEffect(() => {
+    setSelectedSection(initialData?.section ?? "");
+    setStaffPhotoFile(null);
+  }, [initialData]);
+
   return (
-    <section className="neo-card p-4 sm:p-5">
-      <h2 className="text-sm font-bold uppercase tracking-wide text-[#4a3f8f]">
-        Teaching Staff Registration Form
+    <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-indigo-900">
+        {initialData ? "Edit Teaching Staff Registration" : "Teaching Staff Registration Form"}
       </h2>
-      <p className="mt-1 text-xs text-[#636e72]">
+      <p className="mt-1 text-xs text-slate-500">
         Fill in all required fields marked with an asterisk (*).
       </p>
 
@@ -299,7 +315,7 @@ function TeachingStaffForm({
           const role = ((form.get("staff-role") as string) ?? "").trim();
           const staffPhotoUrl = staffPhotoFile ? URL.createObjectURL(staffPhotoFile) : undefined;
           onSave({
-            id: Math.floor(Math.random() * 900000 + 100000),
+            id: initialData?.id ?? Math.floor(Math.random() * 900000 + 100000),
             name: fullName,
             section,
             assignedClass,
@@ -320,25 +336,25 @@ function TeachingStaffForm({
             emergencyContactPhone: ((form.get("staff-emergency-phone") as string) ?? "").trim(),
             refereeName: ((form.get("staff-referee-name") as string) ?? "").trim(),
             refereeContact: ((form.get("staff-referee-contact") as string) ?? "").trim(),
-            staffPhotoName: staffPhotoFile?.name,
-            staffPhotoUrl,
+            staffPhotoName: staffPhotoFile?.name ?? initialData?.staffPhotoName,
+            staffPhotoUrl: staffPhotoUrl ?? initialData?.staffPhotoUrl,
           });
           setSubmitted(true);
           e.currentTarget.reset();
-          setSelectedSection("kindergarten");
+          setSelectedSection(initialData?.section ?? "");
           setStaffPhotoFile(null);
         }}
       >
         <div>
-          <h3 className="text-sm font-bold text-[#4a3f8f]">1. Personal Identification</h3>
+          <h3 className="text-sm font-bold text-indigo-900">1. Personal Identification</h3>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="sm:col-span-2">
               <FieldLabel htmlFor="staff-full-name" required>Full Name (As per ID)</FieldLabel>
-              <input id="staff-full-name" name="staff-full-name" required className={inputClassName} />
+              <input id="staff-full-name" name="staff-full-name" required className={inputClassName} defaultValue={initialData?.name ?? ""} />
             </div>
             <div>
               <FieldLabel htmlFor="staff-gender" required>Gender</FieldLabel>
-              <select id="staff-gender" name="staff-gender" required className={inputClassName} defaultValue="">
+              <select id="staff-gender" name="staff-gender" required className={inputClassName} defaultValue={initialData?.gender ?? ""}>
                 <option value="" disabled>Select</option>
                 <option>Female</option>
                 <option>Male</option>
@@ -347,11 +363,11 @@ function TeachingStaffForm({
             </div>
             <div>
               <FieldLabel htmlFor="staff-dob" required>Date of Birth</FieldLabel>
-              <input id="staff-dob" name="staff-dob" type="date" required className={inputClassName} />
+              <input id="staff-dob" name="staff-dob" type="date" required className={inputClassName} defaultValue={initialData?.dateOfBirth ?? ""} />
             </div>
             <div>
               <FieldLabel htmlFor="staff-nationality" required>Nationality</FieldLabel>
-              <select id="staff-nationality" name="staff-nationality" required className={inputClassName} defaultValue="">
+              <select id="staff-nationality" name="staff-nationality" required className={inputClassName} defaultValue={initialData?.nationality ?? ""}>
                 <option value="" disabled>Select</option>
                 <option>Ugandan</option>
                 <option>Kenyan</option>
@@ -361,7 +377,7 @@ function TeachingStaffForm({
             </div>
             <div>
               <FieldLabel htmlFor="staff-marital-status">Marital Status</FieldLabel>
-              <select id="staff-marital-status" name="staff-marital-status" className={inputClassName} defaultValue="">
+              <select id="staff-marital-status" name="staff-marital-status" className={inputClassName} defaultValue={initialData?.maritalStatus ?? ""}>
                 <option value="" disabled>Select</option>
                 <option>Single</option>
                 <option>Married</option>
@@ -370,26 +386,26 @@ function TeachingStaffForm({
               </select>
             </div>
             <div className="sm:col-span-2">
-              <FieldLabel htmlFor="staff-nin">National ID Number (NIN)</FieldLabel>
-              <input id="staff-nin" name="staff-nin" placeholder="Optional" className={inputClassName} />
+              <FieldLabel htmlFor="staff-nin" required>National ID Number (NIN)</FieldLabel>
+              <input id="staff-nin" name="staff-nin" required  placeholder="Optional" className={inputClassName} defaultValue={initialData?.nationalId ?? ""} />
             </div>
           </div>
         </div>
 
         <div>
-          <h3 className="text-sm font-bold text-[#4a3f8f]">2. Contact Information</h3>
+          <h3 className="text-sm font-bold text-indigo-900">2. Contact Information</h3>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
               <FieldLabel htmlFor="staff-phone" required>Primary Phone Number</FieldLabel>
-              <input id="staff-phone" name="staff-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} />
+              <input id="staff-phone" name="staff-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} defaultValue={initialData?.phone ?? ""} />
             </div>
             <div>
               <FieldLabel htmlFor="staff-email">Email Address</FieldLabel>
-              <input id="staff-email" name="staff-email" type="email" placeholder="e.g. example@domain.com" className={inputClassName} />
+              <input id="staff-email" name="staff-email" type="email" placeholder="e.g. example@domain.com" className={inputClassName} defaultValue={initialData?.email ?? ""} />
             </div>
             <div className="sm:col-span-2">
               <FieldLabel htmlFor="staff-photo-upload">Staff Photo</FieldLabel>
-              <label className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#e8f2fa] to-[#cde8cf] px-4 py-2 text-xs font-semibold text-[#2d3436] shadow-sm">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors">
                 Upload photo
                 <input
                   id="staff-photo-upload"
@@ -402,33 +418,35 @@ function TeachingStaffForm({
               </label>
               {staffPhotoFile ? (
                 <p className="mt-1 text-xs text-[#636e72]">{staffPhotoFile.name}</p>
+              ) : initialData?.staffPhotoName ? (
+                <p className="mt-1 text-xs text-[#636e72]">Current: {initialData.staffPhotoName}</p>
               ) : null}
             </div>
             <div className="sm:col-span-2">
               <FieldLabel htmlFor="staff-address" required>Current Physical Address</FieldLabel>
-              <input id="staff-address" name="staff-address" required placeholder="Street address, city, district" className={inputClassName} />
+              <input id="staff-address" name="staff-address" required placeholder="Street address, city, district" className={inputClassName} defaultValue={initialData?.address ?? ""} />
             </div>
           </div>
         </div>
 
         <div>
-          <h3 className="text-sm font-bold text-[#4a3f8f]">3. Professional Background</h3>
+          <h3 className="text-sm font-bold text-indigo-900">3. Professional Background</h3>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <FieldLabel htmlFor="staff-role" required>Role / Applied Position</FieldLabel>
-              <input id="staff-role" name="staff-role" required placeholder="e.g. Senior Math Teacher" className={inputClassName} />
+              <input id="staff-role" name="staff-role" required placeholder="e.g. Senior Math Teacher" className={inputClassName} defaultValue={initialData?.subjects ?? ""} />
             </div>
             <div>
               <FieldLabel htmlFor="staff-qualification" required>Highest Qualification</FieldLabel>
-              <input id="staff-qualification" name="staff-qualification" required placeholder="e.g. Bachelor&apos;s in Education" className={inputClassName} />
+              <input id="staff-qualification" name="staff-qualification" required placeholder="e.g. Bachelor&apos;s in Education" className={inputClassName} defaultValue={initialData?.qualification ?? ""} />
             </div>
             <div>
               <FieldLabel htmlFor="staff-languages">Languages Spoken</FieldLabel>
-              <input id="staff-languages" name="staff-languages" placeholder="English, Kiswahili..." className={inputClassName} />
+              <input id="staff-languages" name="staff-languages" placeholder="English, Kiswahili..." className={inputClassName} defaultValue={initialData?.languages ?? ""} />
             </div>
             <div>
               <FieldLabel htmlFor="staff-joining-date" required>Date of Joining</FieldLabel>
-              <input id="staff-joining-date" name="staff-joining-date" type="date" required className={inputClassName} />
+              <input id="staff-joining-date" name="staff-joining-date" type="date" required className={inputClassName} defaultValue={initialData?.dateOfJoining ?? ""} />
             </div>
             <div className="sm:col-span-2 lg:col-span-2">
               <FieldLabel htmlFor="staff-experience">Previous Work Experience</FieldLabel>
@@ -438,13 +456,14 @@ function TeachingStaffForm({
                 rows={4}
                 placeholder="Summarize total years of experience, relevant past employment, and responsibilities."
                 className={inputClassName}
+                defaultValue={initialData?.experience ?? ""}
               />
             </div>
           </div>
         </div>
 
         <div>
-          <h3 className="text-sm font-bold text-[#4a3f8f]">4. Assign Class</h3>
+          <h3 className="text-sm font-bold text-indigo-900">4. Assign Class</h3>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
               <FieldLabel htmlFor="staff-teaching-section" required>Teaching Category</FieldLabel>
@@ -453,11 +472,14 @@ function TeachingStaffForm({
                 name="staff-teaching-section"
                 value={selectedSection}
                 onChange={(e) =>
-                  setSelectedSection(e.target.value as Exclude<TeachingSection, "all">)
+                  setSelectedSection(e.target.value as Exclude<TeachingSection, "all"> | "")
                 }
                 required
                 className={inputClassName}
               >
+                <option value="" disabled>
+                  Select Teaching category
+                </option>
                 <option value="kindergarten">Kindergarten</option>
                 <option value="lower_primary">Lower Primary</option>
                 <option value="upper_primary">Upper Primary</option>
@@ -470,7 +492,7 @@ function TeachingStaffForm({
                 name="staff-assigned-class"
                 required
                 className={inputClassName}
-                defaultValue=""
+                defaultValue={initialData?.assignedClass ?? ""}
               >
                 <option value="" disabled>Select class</option>
                 {classOptionsLoading ? (
@@ -488,44 +510,44 @@ function TeachingStaffForm({
         </div>
 
         <div>
-          <h3 className="text-sm font-bold text-[#4a3f8f]">5. Emergency Contact &amp; Reference</h3>
-          <div className="mt-3 grid gap-3 rounded-xl bg-[#eef4fa] p-3 sm:grid-cols-2 lg:grid-cols-3">
+          <h3 className="text-sm font-bold text-indigo-900">5. Emergency Contact &amp; Reference</h3>
+          <div className="mt-3 grid gap-3 rounded-2xl bg-indigo-50/50 border border-indigo-100 p-4 sm:grid-cols-2 lg:grid-cols-3">
             <div>
               <FieldLabel htmlFor="staff-emergency-name" required>Emergency Contact Name</FieldLabel>
-              <input id="staff-emergency-name" name="staff-emergency-name" required className={inputClassName} />
+              <input id="staff-emergency-name" name="staff-emergency-name" required className={inputClassName} defaultValue={initialData?.emergencyContactName ?? ""} />
             </div>
             <div>
               <FieldLabel htmlFor="staff-emergency-phone" required>Emergency Contact Phone</FieldLabel>
-              <input id="staff-emergency-phone" name="staff-emergency-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} />
+              <input id="staff-emergency-phone" name="staff-emergency-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} defaultValue={initialData?.emergencyContactPhone ?? ""} />
             </div>
             <div>
               <FieldLabel htmlFor="staff-referee-name" required>Professional Referee Name</FieldLabel>
-              <input id="staff-referee-name" name="staff-referee-name" required className={inputClassName} />
+              <input id="staff-referee-name" name="staff-referee-name" required className={inputClassName} defaultValue={initialData?.refereeName ?? ""} />
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
               <FieldLabel htmlFor="staff-referee-contact" required>Referee Contact Info</FieldLabel>
-              <input id="staff-referee-contact" name="staff-referee-contact" required placeholder="Phone or email" className={inputClassName} />
+              <input id="staff-referee-contact" name="staff-referee-contact" required placeholder="Phone or email" className={inputClassName} defaultValue={initialData?.refereeContact ?? ""} />
             </div>
           </div>
         </div>
 
         {submitted ? (
-          <p className="text-xs font-semibold text-[#4a6b4e]">
+          <p className="text-sm font-semibold text-emerald-600">
             Form submitted. (Demo mode: no backend save yet.)
           </p>
         ) : null}
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3 pt-4">
           <button
             type="submit"
-            className="rounded-full bg-gradient-to-br from-[#cde8cf] to-[#8fb892] px-5 py-2 text-xs font-bold text-[#2d3436] shadow-[3px_3px_6px_rgba(120,150,125,0.3),-2px_-2px_5px_rgba(255,255,255,0.85)] transition hover:brightness-105"
+            className="rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
           >
-            Save Staff
+            {initialData ? "Save Changes" : "Save Staff"}
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full bg-gradient-to-br from-[#faf7f0] to-[#ebe4d9] px-5 py-2 text-xs font-semibold text-[#2d3436] shadow-[3px_3px_6px_rgba(200,188,170,0.35),-2px_-2px_5px_rgba(255,255,255,0.85)] transition hover:text-[#5a8faf]"
+            className="rounded-xl border border-slate-200 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
           >
             Cancel
           </button>
@@ -538,19 +560,21 @@ function TeachingStaffForm({
 function NonTeachingStaffForm({
   onCancel,
   onSave,
+  initialData,
 }: {
   onCancel: () => void;
   onSave: (staff: NonTeachingStaffRecord) => void;
+  initialData?: NonTeachingStaffRecord | null;
 }) {
   const [submitted, setSubmitted] = useState(false);
   const [nationalIdPhotoFile, setNationalIdPhotoFile] = useState<File | null>(null);
 
   return (
-    <section className="neo-card p-4 sm:p-5">
-      <h2 className="text-sm font-bold uppercase tracking-wide text-[#4a3f8f]">
-        Non-Teaching Staff Registration Form
+    <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-indigo-900">
+        {initialData ? "Edit Non-Teaching Staff Registration" : "Non-Teaching Staff Registration Form"}
       </h2>
-      <p className="mt-1 text-xs text-[#636e72]">
+      <p className="mt-1 text-xs text-slate-500">
         Fill in all required fields marked with an asterisk (*).
       </p>
       <form
@@ -559,7 +583,7 @@ function NonTeachingStaffForm({
           e.preventDefault();
           const form = new FormData(e.currentTarget);
           onSave({
-            id: Math.floor(Math.random() * 900000 + 100000),
+            id: initialData?.id ?? Math.floor(Math.random() * 900000 + 100000),
             name: ((form.get("nonstaff-full-name") as string) ?? "").trim(),
             role: ((form.get("nonstaff-role") as string) ?? "").trim(),
             category: (form.get("nonstaff-category") as Exclude<NonTeachingCategory, "all">) ?? "administration",
@@ -569,10 +593,10 @@ function NonTeachingStaffForm({
             emergencyContactName: ((form.get("nonstaff-emergency-name") as string) ?? "").trim(),
             emergencyContactPhone: ((form.get("nonstaff-emergency-phone") as string) ?? "").trim(),
             nationalIdNumber: ((form.get("nonstaff-national-id-number") as string) ?? "").trim(),
-            nationalIdPhotoName: nationalIdPhotoFile?.name,
+            nationalIdPhotoName: nationalIdPhotoFile?.name ?? initialData?.nationalIdPhotoName,
             nationalIdPhotoUrl: nationalIdPhotoFile
               ? URL.createObjectURL(nationalIdPhotoFile)
-              : undefined,
+              : initialData?.nationalIdPhotoUrl,
           });
           setSubmitted(true);
           e.currentTarget.reset();
@@ -581,11 +605,11 @@ function NonTeachingStaffForm({
       >
         <div>
           <FieldLabel htmlFor="nonstaff-full-name" required>Full Name</FieldLabel>
-          <input id="nonstaff-full-name" name="nonstaff-full-name" required className={inputClassName} />
+          <input id="nonstaff-full-name" name="nonstaff-full-name" required className={inputClassName} defaultValue={initialData?.name ?? ""} />
         </div>
         <div>
           <FieldLabel htmlFor="nonstaff-category" required>Category</FieldLabel>
-          <select id="nonstaff-category" name="nonstaff-category" required className={inputClassName} defaultValue="">
+          <select id="nonstaff-category" name="nonstaff-category" required className={inputClassName} defaultValue={initialData?.category ?? ""}>
             <option value="" disabled>Select category</option>
             <option value="administration">Administration</option>
             <option value="finance">Finance</option>
@@ -596,66 +620,68 @@ function NonTeachingStaffForm({
         </div>
         <div>
           <FieldLabel htmlFor="nonstaff-role" required>Role</FieldLabel>
-          <input id="nonstaff-role" name="nonstaff-role" required className={inputClassName} />
+          <input id="nonstaff-role" name="nonstaff-role" required className={inputClassName} defaultValue={initialData?.role ?? ""} />
         </div>
         <div>
           <FieldLabel htmlFor="nonstaff-email">Email Address</FieldLabel>
-          <input id="nonstaff-email" name="nonstaff-email" type="email" className={inputClassName} />
+          <input id="nonstaff-email" name="nonstaff-email" type="email" className={inputClassName} defaultValue={initialData?.email ?? ""} />
         </div>
         <div>
           <FieldLabel htmlFor="nonstaff-phone" required>Primary Phone Number</FieldLabel>
-          <input id="nonstaff-phone" name="nonstaff-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} />
+          <input id="nonstaff-phone" name="nonstaff-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} defaultValue={initialData?.phone ?? ""} />
         </div>
         <div className="sm:col-span-2">
           <FieldLabel htmlFor="nonstaff-address" required>Current Physical Address</FieldLabel>
-          <input id="nonstaff-address" name="nonstaff-address" required className={inputClassName} />
+          <input id="nonstaff-address" name="nonstaff-address" required className={inputClassName} defaultValue={initialData?.address ?? ""} />
         </div>
         <div>
           <FieldLabel htmlFor="nonstaff-emergency-name" required>Emergency Contact Name</FieldLabel>
-          <input id="nonstaff-emergency-name" name="nonstaff-emergency-name" required className={inputClassName} />
+          <input id="nonstaff-emergency-name" name="nonstaff-emergency-name" required className={inputClassName} defaultValue={initialData?.emergencyContactName ?? ""} />
         </div>
         <div>
           <FieldLabel htmlFor="nonstaff-emergency-phone" required>Emergency Contact Phone</FieldLabel>
-          <input id="nonstaff-emergency-phone" name="nonstaff-emergency-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} />
+          <input id="nonstaff-emergency-phone" name="nonstaff-emergency-phone" type="tel" minLength={10} maxLength={13} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d+]/g, ''); }} required className={inputClassName} defaultValue={initialData?.emergencyContactPhone ?? ""} />
         </div>
         <div>
           <FieldLabel htmlFor="nonstaff-national-id-number" required>National ID Number</FieldLabel>
-          <input id="nonstaff-national-id-number" name="nonstaff-national-id-number" required className={inputClassName} />
+          <input id="nonstaff-national-id-number" name="nonstaff-national-id-number" required className={inputClassName} defaultValue={initialData?.nationalIdNumber ?? ""} />
         </div>
         <div>
           <FieldLabel htmlFor="nonstaff-national-id-photo" required>National ID Photo</FieldLabel>
-          <label className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#e8f2fa] to-[#cde8cf] px-4 py-2 text-xs font-semibold text-[#2d3436] shadow-sm">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors">
             Upload NID photo
             <input
               id="nonstaff-national-id-photo"
               name="nonstaff-national-id-photo"
               type="file"
               accept="image/*"
-              required
+              required={!initialData?.nationalIdPhotoName}
               className="hidden"
               onChange={(e) => setNationalIdPhotoFile(e.target.files?.[0] ?? null)}
             />
           </label>
           {nationalIdPhotoFile ? (
-            <p className="mt-1 text-xs text-[#636e72]">{nationalIdPhotoFile.name}</p>
+            <p className="mt-1 text-xs text-slate-500">{nationalIdPhotoFile.name}</p>
+          ) : initialData?.nationalIdPhotoName ? (
+            <p className="mt-1 text-xs text-slate-500">Current: {initialData.nationalIdPhotoName}</p>
           ) : null}
         </div>
         {submitted ? (
-          <p className="sm:col-span-2 text-xs font-semibold text-[#4a6b4e]">
+          <p className="sm:col-span-2 text-sm font-semibold text-emerald-600">
             Form submitted. (Demo mode: no backend save yet.)
           </p>
         ) : null}
-        <div className="sm:col-span-2 flex flex-wrap gap-2">
+        <div className="sm:col-span-2 flex flex-wrap gap-3 pt-4">
           <button
             type="submit"
-            className="rounded-full bg-gradient-to-br from-[#cde8cf] to-[#8fb892] px-5 py-2 text-xs font-bold text-[#2d3436] shadow-[3px_3px_6px_rgba(120,150,125,0.3),-2px_-2px_5px_rgba(255,255,255,0.85)] transition hover:brightness-105"
+            className="rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
           >
-            Save Non Staff
+            {initialData ? "Save Changes" : "Save Non Staff"}
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full bg-gradient-to-br from-[#faf7f0] to-[#ebe4d9] px-5 py-2 text-xs font-semibold text-[#2d3436] shadow-[3px_3px_6px_rgba(200,188,170,0.35),-2px_-2px_5px_rgba(255,255,255,0.85)] transition hover:text-[#5a8faf]"
+            className="rounded-xl border border-slate-200 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
           >
             Cancel
           </button>
@@ -686,6 +712,8 @@ export function StaffSectionPage({
     useState<TeachingStaffRecord | null>(null);
   const [selectedNonTeachingProfile, setSelectedNonTeachingProfile] =
     useState<NonTeachingStaffRecord | null>(null);
+  const [editingTeachingStaff, setEditingTeachingStaff] = useState<TeachingStaffRecord | null>(null);
+  const [editingNonTeachingStaff, setEditingNonTeachingStaff] = useState<NonTeachingStaffRecord | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{
     kind: "teaching" | "nonTeaching";
     item: TeachingStaffRecord | NonTeachingStaffRecord;
@@ -771,6 +799,7 @@ export function StaffSectionPage({
 
   async function createTeachingStaff(staff: TeachingStaffRecord) {
     setStaffError(null);
+    const derivedStaffCategory = categoryNameForAssignedClass(staff.assignedClass, classOptions);
     const created = await createStaffMember({
       staffType: "teaching",
       displayName: staff.name,
@@ -794,6 +823,7 @@ export function StaffSectionPage({
       staffPhotoName: staff.staffPhotoName,
       assignedClass: staff.assignedClass,
       teachingSection: staff.section,
+      staffCategory: derivedStaffCategory,
     });
     const next = mapTeachingStaff(created);
     setTeachingStaff((prev) => [next, ...prev]);
@@ -822,16 +852,61 @@ export function StaffSectionPage({
     setShowNonTeachingForm(false);
   }
 
-  async function renameTeachingStaff(id: number, name: string) {
-    await updateStaffMember(id, { displayName: name });
-    setTeachingStaff((prev) => prev.map((x) => (x.id === id ? { ...x, name } : x)));
-    setSelectedTeachingProfile((curr) => (curr && curr.id === id ? { ...curr, name } : curr));
+  async function updateTeachingStaff(staff: TeachingStaffRecord) {
+    setStaffError(null);
+    const derivedStaffCategory = categoryNameForAssignedClass(staff.assignedClass, classOptions);
+    const updated = await updateStaffMember(staff.id, {
+      displayName: staff.name,
+      email: staff.email,
+      staffRole: staff.subjects,
+      phone: staff.phone,
+      address: staff.address,
+      gender: staff.gender,
+      dateOfBirth: staff.dateOfBirth,
+      nationality: staff.nationality,
+      maritalStatus: staff.maritalStatus,
+      nationalId: staff.nationalId,
+      qualification: staff.qualification,
+      languages: staff.languages,
+      dateOfJoining: staff.dateOfJoining,
+      experience: staff.experience,
+      emergencyContactName: staff.emergencyContactName,
+      emergencyContactPhone: staff.emergencyContactPhone,
+      refereeName: staff.refereeName,
+      refereeContact: staff.refereeContact,
+      staffPhotoName: staff.staffPhotoName,
+      staffPhotoUrl: staff.staffPhotoUrl,
+      assignedClass: staff.assignedClass,
+      teachingSection: staff.section,
+      staffCategory: derivedStaffCategory,
+    });
+    const next = mapTeachingStaff(updated);
+    setTeachingStaff((prev) => prev.map((x) => (x.id === next.id ? next : x)));
+    setSelectedTeachingProfile(next);
+    setEditingTeachingStaff(null);
+    setShowTeachingForm(false);
   }
 
-  async function renameNonTeachingStaff(id: number, name: string) {
-    await updateStaffMember(id, { displayName: name });
-    setNonTeachingStaff((prev) => prev.map((x) => (x.id === id ? { ...x, name } : x)));
-    setSelectedNonTeachingProfile((curr) => (curr && curr.id === id ? { ...curr, name } : curr));
+  async function updateNonTeachingStaff(staff: NonTeachingStaffRecord) {
+    setStaffError(null);
+    const updated = await updateStaffMember(staff.id, {
+      displayName: staff.name,
+      email: staff.email,
+      staffRole: staff.role,
+      phone: staff.phone,
+      address: staff.address,
+      emergencyContactName: staff.emergencyContactName,
+      emergencyContactPhone: staff.emergencyContactPhone,
+      nationalId: staff.nationalIdNumber,
+      staffCategory: staff.category,
+      nationalIdPhotoName: staff.nationalIdPhotoName,
+      nationalIdPhotoUrl: staff.nationalIdPhotoUrl,
+    });
+    const next = mapNonTeachingStaff(updated);
+    setNonTeachingStaff((prev) => prev.map((x) => (x.id === next.id ? next : x)));
+    setSelectedNonTeachingProfile(next);
+    setEditingNonTeachingStaff(null);
+    setShowNonTeachingForm(false);
   }
 
   async function removeStaff(kind: "teaching" | "nonTeaching", id: number) {
@@ -885,9 +960,9 @@ export function StaffSectionPage({
           </div>
         </div>
       ) : null}
-      <header className="border-b border-[#ebe4d9]/80 pb-4">
-        <h1 className="text-xl font-bold tracking-tight text-[#2d3436]">{heading}</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#636e72]">{intro}</p>
+      <header className="border-b border-slate-200 pb-6">
+        <h1 className="text-3xl font-black tracking-tight text-slate-800">{heading}</h1>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">{intro}</p>
         <div className="mt-4">
           <button
             type="button"
@@ -895,12 +970,14 @@ export function StaffSectionPage({
               if (section === "teaching") {
                 setShowTeachingForm((v) => !v);
                 setShowNonTeachingForm(false);
+                setEditingTeachingStaff(null);
               } else {
                 setShowNonTeachingForm((v) => !v);
                 setShowTeachingForm(false);
+                setEditingNonTeachingStaff(null);
               }
             }}
-            className="rounded-full bg-gradient-to-br from-[#cde8cf] to-[#8fb892] px-4 py-2 text-xs font-bold text-[#2d3436] shadow-[3px_3px_6px_rgba(120,150,125,0.3),-2px_-2px_5px_rgba(255,255,255,0.85)] transition hover:brightness-105"
+            className="rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
           >
             {section === "teaching" ? "Add Staff" : "Add Non Staff"}
           </button>
@@ -908,7 +985,7 @@ export function StaffSectionPage({
       </header>
 
       {staffError ? (
-        <div className="neo-card border border-[#f7d1cd] bg-[#fff7f5] px-4 py-3 text-sm text-[#a9332a]">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 shadow-sm">
           {staffError}
         </div>
       ) : null}
@@ -916,21 +993,25 @@ export function StaffSectionPage({
         <>
           {showTeachingForm ? (
             <TeachingStaffForm
-              onCancel={() => setShowTeachingForm(false)}
+              onCancel={() => {
+                setShowTeachingForm(false);
+                setEditingTeachingStaff(null);
+              }}
               classOptions={classOptions}
               classOptionsLoading={classRoomsLoading}
+              initialData={editingTeachingStaff}
               onSave={(staff) => {
-                void createTeachingStaff(staff).catch((e) =>
+                void (editingTeachingStaff ? updateTeachingStaff(staff) : createTeachingStaff(staff)).catch((e) =>
                   setStaffError(e instanceof Error ? e.message : "Failed to save staff"),
                 );
               }}
             />
           ) : null}
           {showTeachingForm || selectedTeachingProfile ? null : (
-          <div className="neo-card max-w-md p-4">
+          <div className="flex flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm max-w-md">
             <label
               htmlFor="teaching-section-select"
-              className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#636e72]"
+              className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-500"
             >
               Teaching Section
             </label>
@@ -938,7 +1019,7 @@ export function StaffSectionPage({
               id="teaching-section-select"
               value={teachingSection}
               onChange={(e) => onChangeTeachingSection(e.target.value as TeachingSection)}
-              className="neo-inset-field w-full rounded-xl px-3 py-2 text-sm text-[#2d3436]"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 hover:border-slate-300"
             >
               <option value="all">All Teaching Staff</option>
               <option value="kindergarten">Kindergarten Teachers</option>
@@ -949,108 +1030,113 @@ export function StaffSectionPage({
           )}
 
           {showTeachingForm || selectedTeachingProfile ? null : (
-          <section className="neo-card overflow-visible">
-            <div className="border-b border-[#ebe4d9]/80 px-4 py-3 text-sm font-semibold text-[#2d3436]">
+          <section className="flex flex-col rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md overflow-hidden">
+            <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4 text-sm font-bold uppercase tracking-wider text-slate-800">
               {teachingSectionLabels[teachingSection]}
             </div>
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-[#ebe4d9]/80 bg-[#faf7f0]/80 text-xs uppercase tracking-wide text-[#636e72]">
-                <tr>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Subjects/Role</th>
-                  <th className="px-4 py-3">Class</th>
-                  <th className="px-4 py-3 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#ebe4d9]/70">
-                {staffLoading ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead className="border-b border-slate-100 bg-white text-[10px] font-bold uppercase tracking-wider text-slate-500">
                   <tr>
-                    <td className="px-4 py-4 text-sm text-[#636e72]" colSpan={4}>
-                      Loading staff...
-                    </td>
+                    <th className="px-6 py-3">Name</th>
+                    <th className="px-6 py-3">Subjects/Role</th>
+                    <th className="px-6 py-3">Class</th>
+                    <th className="px-6 py-3 text-center">Actions</th>
                   </tr>
-                ) : null}
-                {filteredTeachers.map((teacher) => (
-                  <tr key={teacher.id}>
-                    <td className="px-4 py-3 font-semibold text-[#2d3436]">{teacher.name}</td>
-                    <td className="px-4 py-3 text-xs text-[#636e72]">{teacher.subjects}</td>
-                    <td className="px-4 py-3 text-xs text-[#2d3436]">{teacher.assignedClass ?? "—"}</td>
-                    <StaffTableRowActionsMenu
-                      rowKey={`teaching:${teacher.id}`}
-                      openMenuKey={staffRowActionsMenuKey}
-                      onOpenMenuChange={setStaffRowActionsMenuKey}
-                      onProfile={() => setSelectedTeachingProfile(teacher)}
-                      onEdit={() => {
-                        const next = window.prompt("Edit teacher name", teacher.name);
-                        if (!next?.trim()) return;
-                        void renameTeachingStaff(teacher.id, next.trim()).catch((e) =>
-                          setStaffError(e instanceof Error ? e.message : "Failed to update staff"),
-                        );
-                      }}
-                      onDelete={() => setConfirmDelete({ kind: "teaching", item: teacher })}
-                    />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {staffLoading ? (
+                    <tr>
+                      <td className="px-6 py-6 text-center text-sm text-slate-500" colSpan={4}>
+                        Loading staff...
+                      </td>
+                    </tr>
+                  ) : null}
+                  {filteredTeachers.map((teacher) => (
+                    <tr key={teacher.id} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-6 py-4 font-semibold text-slate-800">{teacher.name}</td>
+                      <td className="px-6 py-4 text-xs text-slate-500">{teacher.subjects}</td>
+                      <td className="px-6 py-4 text-xs font-bold text-slate-600">{teacher.assignedClass ?? "—"}</td>
+                      <StaffTableRowActionsMenu
+                        rowKey={`teaching:${teacher.id}`}
+                        openMenuKey={staffRowActionsMenuKey}
+                        onOpenMenuChange={setStaffRowActionsMenuKey}
+                        onProfile={() => setSelectedTeachingProfile(teacher)}
+                        onEdit={() => {
+                          setEditingTeachingStaff(teacher);
+                          setSelectedTeachingProfile(null);
+                          setShowTeachingForm(true);
+                        }}
+                        onDelete={() => setConfirmDelete({ kind: "teaching", item: teacher })}
+                      />
+                    </tr>
+                  ))}
+                  {!staffLoading && filteredTeachers.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-12 text-center text-sm text-slate-500 italic">
+                        No teaching staff found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
           )}
           {showTeachingForm || !selectedTeachingProfile ? null : (
-            <section className="neo-card overflow-hidden border border-[#dce8dd] bg-gradient-to-br from-[#fffdf9] via-[#f7fbf8] to-[#eef6f2] p-0">
-              <div className="flex items-start justify-between gap-3">
-                <div className="w-full border-b border-[#e4eee5] px-4 py-3">
-                  <h3 className="text-sm font-bold uppercase tracking-wide text-[#2d3436]">Teaching Staff Profile Card</h3>
+            <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-0 shadow-sm transition-shadow hover:shadow-md overflow-hidden">
+              <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/50">
+                <div className="w-full px-6 py-4">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">Teaching Staff Profile Card</h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedTeachingProfile(null)}
-                  className="mr-3 mt-3 rounded-full bg-[#faf7f0] px-3 py-1 text-xs font-semibold text-[#636e72] ring-1 ring-[#ebe4d9] transition hover:bg-white"
+                  className="mr-6 mt-4 rounded-xl border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
                 >
                   Close
                 </button>
               </div>
-              <div className="px-4 pb-4 pt-3">
-              <div className="flex items-center gap-3 rounded-2xl bg-white/75 p-3 ring-1 ring-[#e5ede6]">
-                <img src={selectedTeachingProfile.staffPhotoUrl ?? "/school-badge.png"} alt="Staff profile" className="h-16 w-16 rounded-2xl object-cover ring-1 ring-[#d6e3d7]" />
+              <div className="px-6 pb-6 pt-5">
+              <div className="flex items-center gap-4 rounded-2xl border border-indigo-100 bg-indigo-50/30 p-4">
+                <img src={selectedTeachingProfile.staffPhotoUrl ?? "/school-badge.png"} alt="Staff profile" className="h-16 w-16 rounded-xl object-cover ring-1 ring-slate-200 shadow-sm" />
                 <div>
-                  <p className="text-base font-bold text-[#2d3436]">{selectedTeachingProfile.name}</p>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[#636e72]">
+                  <p className="text-lg font-bold text-slate-800">{selectedTeachingProfile.name}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     {teachingSectionLabels[selectedTeachingProfile.section]}
                   </p>
                 </div>
               </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Assigned Class:</span> {selectedTeachingProfile.assignedClass ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Role/Subjects:</span> {selectedTeachingProfile.subjects}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Phone:</span> {selectedTeachingProfile.phone ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Email:</span> {selectedTeachingProfile.email ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Gender:</span> {selectedTeachingProfile.gender ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Date of Birth:</span> {selectedTeachingProfile.dateOfBirth ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Nationality:</span> {selectedTeachingProfile.nationality ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Marital Status:</span> {selectedTeachingProfile.maritalStatus ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">National ID:</span> {selectedTeachingProfile.nationalId ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Qualification:</span> {selectedTeachingProfile.qualification ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Languages:</span> {selectedTeachingProfile.languages ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Date of Joining:</span> {selectedTeachingProfile.dateOfJoining ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Emergency Contact Name:</span> {selectedTeachingProfile.emergencyContactName ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Emergency Contact Phone:</span> {selectedTeachingProfile.emergencyContactPhone ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Referee Name:</span> {selectedTeachingProfile.refereeName ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Referee Contact:</span> {selectedTeachingProfile.refereeContact ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Staff Photo:</span> {selectedTeachingProfile.staffPhotoName ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2 sm:col-span-2"><span className="font-semibold text-[#636e72]">Address:</span> {selectedTeachingProfile.address ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2 sm:col-span-2"><span className="font-semibold text-[#636e72]">Experience:</span> {selectedTeachingProfile.experience ?? "—"}</p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Assigned Class</span>{selectedTeachingProfile.assignedClass ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Role/Subjects</span>{selectedTeachingProfile.subjects}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Phone</span>{selectedTeachingProfile.phone ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Email</span>{selectedTeachingProfile.email ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Gender</span>{selectedTeachingProfile.gender ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Date of Birth</span>{selectedTeachingProfile.dateOfBirth ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Nationality</span>{selectedTeachingProfile.nationality ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Marital Status</span>{selectedTeachingProfile.maritalStatus ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">National ID</span>{selectedTeachingProfile.nationalId ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Qualification</span>{selectedTeachingProfile.qualification ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Languages</span>{selectedTeachingProfile.languages ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Date of Joining</span>{selectedTeachingProfile.dateOfJoining ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Emergency Contact Name</span>{selectedTeachingProfile.emergencyContactName ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Emergency Contact Phone</span>{selectedTeachingProfile.emergencyContactPhone ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Referee Name</span>{selectedTeachingProfile.refereeName ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Referee Contact</span>{selectedTeachingProfile.refereeContact ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Staff Photo</span>{selectedTeachingProfile.staffPhotoName ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 sm:col-span-2"><span className="font-semibold text-slate-500 block mb-1">Address</span>{selectedTeachingProfile.address ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 sm:col-span-2"><span className="font-semibold text-slate-500 block mb-1">Experience</span>{selectedTeachingProfile.experience ?? "—"}</p>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2 border-t border-[#dde9df] pt-3">
+              <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-100 pt-5">
                 <button
                   type="button"
                   onClick={() => {
-                    const next = window.prompt("Edit staff name", selectedTeachingProfile.name);
-                    if (!next?.trim()) return;
-                    void renameTeachingStaff(selectedTeachingProfile.id, next.trim()).catch((e) =>
-                      setStaffError(e instanceof Error ? e.message : "Failed to update staff"),
-                    );
+                    setEditingTeachingStaff(selectedTeachingProfile);
+                    setSelectedTeachingProfile(null);
+                    setShowTeachingForm(true);
                   }}
-                  className="rounded-full bg-[#e8f2fa] px-4 py-1.5 text-xs font-semibold text-[#2d3436]"
+                  className="rounded-xl border border-slate-200 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-indigo-600"
                 >
                   Edit
                 </button>
@@ -1059,7 +1145,7 @@ export function StaffSectionPage({
                   onClick={() => {
                     setConfirmDelete({ kind: "teaching", item: selectedTeachingProfile });
                   }}
-                  className="rounded-full bg-[#fce8e5] px-4 py-1.5 text-xs font-semibold text-[#a9332a]"
+                  className="rounded-xl border border-rose-200 bg-rose-50 px-6 py-2.5 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-100"
                 >
                   Delete
                 </button>
@@ -1072,19 +1158,23 @@ export function StaffSectionPage({
         <>
           {showNonTeachingForm ? (
             <NonTeachingStaffForm
-              onCancel={() => setShowNonTeachingForm(false)}
+              onCancel={() => {
+                setShowNonTeachingForm(false);
+                setEditingNonTeachingStaff(null);
+              }}
+              initialData={editingNonTeachingStaff}
               onSave={(staff) => {
-                void createNonTeachingStaff(staff).catch((e) =>
+                void (editingNonTeachingStaff ? updateNonTeachingStaff(staff) : createNonTeachingStaff(staff)).catch((e) =>
                   setStaffError(e instanceof Error ? e.message : "Failed to save staff"),
                 );
               }}
             />
           ) : null}
           {showNonTeachingForm || selectedNonTeachingProfile ? null : (
-          <div className="neo-card max-w-md p-4">
+          <div className="flex flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm max-w-md">
             <label
               htmlFor="non-teaching-category-select"
-              className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#636e72]"
+              className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-500"
             >
               Non-Teaching Category
             </label>
@@ -1094,7 +1184,7 @@ export function StaffSectionPage({
               onChange={(e) =>
                 onChangeNonTeachingCategory(e.target.value as NonTeachingCategory)
               }
-              className="neo-inset-field w-full rounded-xl px-3 py-2 text-sm text-[#2d3436]"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 hover:border-slate-300"
             >
               <option value="all">All Non-Teaching Staff</option>
               <option value="administration">Administration Staff</option>
@@ -1106,98 +1196,103 @@ export function StaffSectionPage({
           </div>
           )}
           {showNonTeachingForm || selectedNonTeachingProfile ? null : (
-          <section className="neo-card overflow-visible">
-            <div className="border-b border-[#ebe4d9]/80 px-4 py-3 text-sm font-semibold text-[#2d3436]">
+          <section className="flex flex-col rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md overflow-hidden">
+            <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4 text-sm font-bold uppercase tracking-wider text-slate-800">
               {nonTeachingCategoryLabels[nonTeachingCategory]}
             </div>
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-[#ebe4d9]/80 bg-[#faf7f0]/80 text-xs uppercase tracking-wide text-[#636e72]">
-                <tr>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#ebe4d9]/70">
-                {staffLoading ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead className="border-b border-slate-100 bg-white text-[10px] font-bold uppercase tracking-wider text-slate-500">
                   <tr>
-                    <td className="px-4 py-4 text-sm text-[#636e72]" colSpan={4}>
-                      Loading staff...
-                    </td>
+                    <th className="px-6 py-3">Name</th>
+                    <th className="px-6 py-3">Role</th>
+                    <th className="px-6 py-3">Category</th>
+                    <th className="px-6 py-3 text-center">Actions</th>
                   </tr>
-                ) : null}
-                {filteredNonTeaching.map((member) => (
-                  <tr key={member.id}>
-                    <td className="px-4 py-3 font-semibold text-[#2d3436]">{member.name}</td>
-                    <td className="px-4 py-3 text-xs text-[#636e72]">{member.role}</td>
-                    <td className="px-4 py-3 text-xs text-[#2d3436]">{nonTeachingCategoryLabels[member.category]}</td>
-                    <StaffTableRowActionsMenu
-                      rowKey={`nonTeaching:${member.id}`}
-                      openMenuKey={staffRowActionsMenuKey}
-                      onOpenMenuChange={setStaffRowActionsMenuKey}
-                      onProfile={() => setSelectedNonTeachingProfile(member)}
-                      onEdit={() => {
-                        const next = window.prompt("Edit staff name", member.name);
-                        if (!next?.trim()) return;
-                        void renameNonTeachingStaff(member.id, next.trim()).catch((e) =>
-                          setStaffError(e instanceof Error ? e.message : "Failed to update staff"),
-                        );
-                      }}
-                      onDelete={() => setConfirmDelete({ kind: "nonTeaching", item: member })}
-                    />
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {staffLoading ? (
+                    <tr>
+                      <td className="px-6 py-6 text-center text-sm text-slate-500" colSpan={4}>
+                        Loading staff...
+                      </td>
+                    </tr>
+                  ) : null}
+                  {filteredNonTeaching.map((member) => (
+                    <tr key={member.id} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-6 py-4 font-semibold text-slate-800">{member.name}</td>
+                      <td className="px-6 py-4 text-xs text-slate-500">{member.role}</td>
+                      <td className="px-6 py-4 text-xs font-bold text-slate-600">{nonTeachingCategoryLabels[member.category]}</td>
+                      <StaffTableRowActionsMenu
+                        rowKey={`nonTeaching:${member.id}`}
+                        openMenuKey={staffRowActionsMenuKey}
+                        onOpenMenuChange={setStaffRowActionsMenuKey}
+                        onProfile={() => setSelectedNonTeachingProfile(member)}
+                        onEdit={() => {
+                          setEditingNonTeachingStaff(member);
+                          setSelectedNonTeachingProfile(null);
+                          setShowNonTeachingForm(true);
+                        }}
+                        onDelete={() => setConfirmDelete({ kind: "nonTeaching", item: member })}
+                      />
+                    </tr>
+                  ))}
+                  {!staffLoading && filteredNonTeaching.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-12 text-center text-sm text-slate-500 italic">
+                        No non-teaching staff found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
           )}
           {showNonTeachingForm || !selectedNonTeachingProfile ? null : (
-            <section className="neo-card overflow-hidden border border-[#dce8dd] bg-gradient-to-br from-[#fffdf9] via-[#f7fbf8] to-[#eef6f2] p-0">
-              <div className="flex items-start justify-between gap-3">
-                <div className="w-full border-b border-[#e4eee5] px-4 py-3">
-                  <h3 className="text-sm font-bold uppercase tracking-wide text-[#2d3436]">Non-Teaching Staff Profile Card</h3>
+            <section className="flex flex-col rounded-3xl border border-slate-200 bg-white p-0 shadow-sm transition-shadow hover:shadow-md overflow-hidden">
+              <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/50">
+                <div className="w-full px-6 py-4">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800">Non-Teaching Staff Profile Card</h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedNonTeachingProfile(null)}
-                  className="mr-3 mt-3 rounded-full bg-[#faf7f0] px-3 py-1 text-xs font-semibold text-[#636e72] ring-1 ring-[#ebe4d9] transition hover:bg-white"
+                  className="mr-6 mt-4 rounded-xl border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
                 >
                   Close
                 </button>
               </div>
-              <div className="px-4 pb-4 pt-3">
-              <div className="flex items-center gap-3 rounded-2xl bg-white/75 p-3 ring-1 ring-[#e5ede6]">
-                <img src={selectedNonTeachingProfile.nationalIdPhotoUrl ?? "/school-badge.png"} alt="Staff profile" className="h-16 w-16 rounded-2xl object-cover ring-1 ring-[#d6e3d7]" />
+              <div className="px-6 pb-6 pt-5">
+              <div className="flex items-center gap-4 rounded-2xl border border-indigo-100 bg-indigo-50/30 p-4">
+                <img src={selectedNonTeachingProfile.nationalIdPhotoUrl ?? "/school-badge.png"} alt="Staff profile" className="h-16 w-16 rounded-xl object-cover ring-1 ring-slate-200 shadow-sm" />
                 <div>
-                  <p className="text-base font-bold text-[#2d3436]">{selectedNonTeachingProfile.name}</p>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[#636e72]">
+                  <p className="text-lg font-bold text-slate-800">{selectedNonTeachingProfile.name}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     {nonTeachingCategoryLabels[selectedNonTeachingProfile.category]}
                   </p>
                 </div>
               </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Role:</span> {selectedNonTeachingProfile.role}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Category:</span> {nonTeachingCategoryLabels[selectedNonTeachingProfile.category]}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Email:</span> {selectedNonTeachingProfile.email ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Phone:</span> {selectedNonTeachingProfile.phone ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Emergency Contact Name:</span> {selectedNonTeachingProfile.emergencyContactName ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">Emergency Contact Phone:</span> {selectedNonTeachingProfile.emergencyContactPhone ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">National ID Number:</span> {selectedNonTeachingProfile.nationalIdNumber ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2"><span className="font-semibold text-[#636e72]">National ID Photo:</span> {selectedNonTeachingProfile.nationalIdPhotoName ?? "—"}</p>
-                <p className="rounded-xl bg-white/80 px-3 py-2 sm:col-span-2"><span className="font-semibold text-[#636e72]">Address:</span> {selectedNonTeachingProfile.address ?? "—"}</p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Role</span>{selectedNonTeachingProfile.role}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Category</span>{nonTeachingCategoryLabels[selectedNonTeachingProfile.category]}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Email</span>{selectedNonTeachingProfile.email ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Phone</span>{selectedNonTeachingProfile.phone ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Emergency Contact Name</span>{selectedNonTeachingProfile.emergencyContactName ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">Emergency Contact Phone</span>{selectedNonTeachingProfile.emergencyContactPhone ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">National ID Number</span>{selectedNonTeachingProfile.nationalIdNumber ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800"><span className="font-semibold text-slate-500 block mb-1">National ID Photo</span>{selectedNonTeachingProfile.nationalIdPhotoName ?? "—"}</p>
+                <p className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 sm:col-span-2"><span className="font-semibold text-slate-500 block mb-1">Address</span>{selectedNonTeachingProfile.address ?? "—"}</p>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2 border-t border-[#dde9df] pt-3">
+              <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-100 pt-5">
                 <button
                   type="button"
                   onClick={() => {
-                    const next = window.prompt("Edit staff name", selectedNonTeachingProfile.name);
-                    if (!next?.trim()) return;
-                    void renameNonTeachingStaff(selectedNonTeachingProfile.id, next.trim()).catch(
-                      (e) => setStaffError(e instanceof Error ? e.message : "Failed to update staff"),
-                    );
+                    setEditingNonTeachingStaff(selectedNonTeachingProfile);
+                    setSelectedNonTeachingProfile(null);
+                    setShowNonTeachingForm(true);
                   }}
-                  className="rounded-full bg-[#e8f2fa] px-4 py-1.5 text-xs font-semibold text-[#2d3436]"
+                  className="rounded-xl border border-slate-200 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-indigo-600"
                 >
                   Edit
                 </button>
@@ -1206,7 +1301,7 @@ export function StaffSectionPage({
                   onClick={() => {
                     setConfirmDelete({ kind: "nonTeaching", item: selectedNonTeachingProfile });
                   }}
-                  className="rounded-full bg-[#fce8e5] px-4 py-1.5 text-xs font-semibold text-[#a9332a]"
+                  className="rounded-xl border border-rose-200 bg-rose-50 px-6 py-2.5 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-100"
                 >
                   Delete
                 </button>

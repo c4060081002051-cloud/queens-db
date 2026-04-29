@@ -33,9 +33,9 @@ export function StudentsSectionPage({
     let cancelled = false;
     setOverviewLoading(true);
     void fetchStudents({ sortBy: "date", sortDir: "desc", limit: 500 })
-      .then((rows) => {
+      .then((data) => {
         if (!cancelled) {
-          setOverviewRows(rows);
+          setOverviewRows(data.items);
         }
       })
       .catch(() => {
@@ -140,14 +140,20 @@ export function StudentsSectionPage({
 
     return (
       <div className="min-w-0 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-        <header className="border-b border-[#ebe4d9]/80 pb-6">
-          <h1 className="text-3xl font-black tracking-tight text-[#2d3436]">
-            Student Command Center
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#636e72]">
-            Review enrolment, open student workflows quickly, and keep the learner
-            directory organized from one place.
-          </p>
+        <header className="flex flex-col gap-2 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-2xl text-indigo-600 shadow-inner ring-1 ring-indigo-100">
+              🏫
+            </div>
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-slate-800">
+                Student Command Center
+              </h1>
+              <p className="mt-1 text-sm font-medium text-slate-500">
+                Centralized hub for enrollment management, student profiles, and parent directory operations.
+              </p>
+            </div>
+          </div>
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -173,72 +179,65 @@ export function StudentsSectionPage({
           />
         </section>
 
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {cards.map((card) => (
             <button
               key={card.key}
               type="button"
               onClick={() => onChangeSection?.(card.key)}
-              className={`group neo-card bg-gradient-to-br p-5 text-left transition-all hover:translate-y-[-2px] hover:shadow-lg ${card.color}`}
+              className="group relative flex flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
             >
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-2xl" role="img" aria-label={card.title}>
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-2xl shadow-inner ring-1 ring-slate-100 transition-colors group-hover:bg-indigo-50 group-hover:ring-indigo-100">
+                <span role="img" aria-label={card.title}>
                   {card.icon}
                 </span>
-                <svg
-                  className="h-5 w-5 translate-x-1 text-[#5a8faf] opacity-0 transition-opacity group-hover:opacity-100"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M14 5l7 7m0 0l-7 7m7-7H3"
-                  />
-                </svg>
               </div>
-              <h2 className="text-base font-bold text-[#2d3436] transition-colors group-hover:text-[#5a8faf]">
+              <h2 className="text-base font-bold text-slate-800 transition-colors group-hover:text-indigo-600">
                 {card.title}
               </h2>
-              <p className="mt-1 text-xs leading-relaxed text-[#636e72]">
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">
                 {card.desc}
               </p>
+              <div className="mt-4 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-indigo-600 opacity-0 transition-opacity group-hover:opacity-100">
+                Open Module
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </div>
             </button>
           ))}
         </section>
 
         <section>
-          <div className="neo-card overflow-hidden p-0">
-            <div className="border-b border-[#ebe4d9]/80 bg-[#faf7f0]/40 px-5 py-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[#2d3436]">
-                Recent Admissions
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+            <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800">
+                Recent Student Admissions
               </h2>
-              <p className="mt-1 text-xs text-[#636e72]">
-                Newly added learners appear here for quick follow-up.
+              <p className="mt-0.5 text-xs font-medium text-slate-500">
+                Review and manage newly registered learner profiles.
               </p>
             </div>
             {overviewLoading ? (
               <div className="flex h-40 items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#5a8faf] border-t-transparent" />
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
               </div>
             ) : overviewStats.recentStudents.length === 0 ? (
-              <div className="px-5 py-10 text-sm text-[#636e72]">
-                No student records available yet.
+              <div className="px-6 py-12 text-center text-sm text-slate-500 italic">
+                No recent admissions records found.
               </div>
             ) : (
-              <div className="divide-y divide-[#ebe4d9]/70">
+              <div className="divide-y divide-slate-100">
                 {overviewStats.recentStudents.map((student) => (
                   <div
                     key={student.id}
-                    className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+                    className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-slate-50/50 group"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-[#2d3436]">
+                      <p className="truncate text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
                         {student.fullName}
                       </p>
-                      <p className="mt-1 text-xs text-[#636e72]">
+                      <p className="mt-0.5 text-xs font-medium text-slate-500">
                         {student.admissionNumber} · {student.className || "No class"} ·{" "}
                         {student.sectionName || "No section"}
                       </p>
@@ -246,16 +245,15 @@ export function StudentsSectionPage({
                     <button
                       type="button"
                       onClick={() => onChangeSection?.("profiles")}
-                      className="rounded-full bg-gradient-to-br from-[#faf7f0] to-[#ebe4d9] px-4 py-1.5 text-xs font-semibold text-[#2d3436] shadow-[3px_3px_6px_rgba(200,188,170,0.35),-2px_-2px_5px_rgba(255,255,255,0.85)] transition hover:text-[#5a8faf]"
+                      className="rounded-xl border border-slate-200 bg-white px-5 py-2 text-xs font-bold text-slate-600 shadow-sm transition-all hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-200"
                     >
-                      Open Profiles
+                      Open Full Profile
                     </button>
                   </div>
                 ))}
               </div>
             )}
           </div>
-
         </section>
 
       </div>
@@ -264,9 +262,9 @@ export function StudentsSectionPage({
 
   return (
     <div className="min-w-0 space-y-6">
-      <header className="border-b border-[#ebe4d9]/80 pb-4">
-        <h1 className="text-xl font-bold tracking-tight text-[#2d3436]">{t(titleKey)}</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#636e72]">{t(introKey)}</p>
+      <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-black tracking-tight text-slate-800">{t(titleKey)}</h1>
+        <p className="mt-1 text-sm font-medium text-slate-500">{t(introKey)}</p>
       </header>
 
       {section === "admissions" ? (
@@ -298,19 +296,22 @@ function StudentStatCard({
   tone: "blue" | "green" | "amber" | "rose";
 }) {
   const toneMap = {
-    blue: "from-[#e8f2fa] via-[#d4e8f5] to-[#c5dff0]",
-    green: "from-[#e8f4e9] via-[#d4ead6] to-[#c5e3c8]",
-    amber: "from-[#faf7f0] via-[#f3ead8] to-[#ead9b8]",
-    rose: "from-[#fce8e5] via-[#f7d1cd] to-[#efd5d2]",
+    blue: "bg-blue-50 text-blue-600 ring-blue-100",
+    green: "bg-emerald-50 text-emerald-600 ring-emerald-100",
+    amber: "bg-amber-50 text-amber-600 ring-amber-100",
+    rose: "bg-rose-50 text-rose-600 ring-rose-100",
   };
 
   return (
-    <div className={`neo-stat flex items-center gap-4 bg-gradient-to-br p-4 sm:p-5 ${toneMap[tone]}`}>
+    <div className="flex items-center gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+      <div className={`flex h-12 w-12 items-center justify-center rounded-2xl text-xl shadow-inner ring-1 ${toneMap[tone]}`}>
+        {tone === "blue" ? "👥" : tone === "green" ? "👨‍👩‍👧" : tone === "amber" ? "🏫" : "📝"}
+      </div>
       <div className="min-w-0">
-        <p className="text-2xl font-bold leading-tight tracking-tight text-[#2d3436]">
+        <p className="text-2xl font-black tracking-tight text-slate-800">
           {value}
         </p>
-        <p className="text-sm font-semibold text-[#636e72]">{label}</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
       </div>
     </div>
   );

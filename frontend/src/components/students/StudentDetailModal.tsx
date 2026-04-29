@@ -200,7 +200,7 @@ export function StudentDetailModal({
     setEmergencyContactPhone(s.emergencyContactPhone ?? "");
     setGuardianName(s.guardianName ?? "");
     setGuardianPhone(s.guardianPhone ?? "");
-    await Promise.resolve(onChanged());
+    await onChanged();
     return s;
   };
 
@@ -223,7 +223,7 @@ export function StudentDetailModal({
         classRoomId:
           cr != null && Number.isFinite(cr) && cr > 0 ? cr : null,
         nationality: nationality.trim() || null,
-        countryCode: cc ? cc : null,
+        countryCode: cc || null,
         district: dist || null,
         emergencyContactName: emergencyContactName.trim() || null,
         emergencyContactPhone: emergencyContactPhone.trim() || null,
@@ -246,7 +246,7 @@ export function StudentDetailModal({
     if (!window.confirm(t("students.modal.deleteConfirm"))) return;
     try {
       await deleteStudent(studentId);
-      await Promise.resolve(onChanged());
+      await onChanged();
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : t("students.modal.deleteFailed"));

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchStudent, fetchStudents, type StudentApiRow } from "../../api/students";
-import { assignBursery, revokeBursery } from "../../api/financeBursery";
+import { assignBursary, revokeBursary } from "../../api/financeBursary";
 import { fetchStudentStatement } from "../../api/financeStatements";
 import { formatCurrencyUGX } from "./shared/financeFormat";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -17,7 +17,7 @@ function toDateTimeLocalValue(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function AssignBurseryPage({
+export function AssignBursaryPage({
   initialStudentId,
   initialTerm,
   initialPercentage,
@@ -123,14 +123,14 @@ export function AssignBurseryPage({
       setStatusMsg({ type: "error", text: "Bursary start and end dates are required." });
       return;
     }
-    if (startsAt && endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+    if (new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
       setStatusMsg({ type: "error", text: "Bursary end time must be after start time." });
       return;
     }
     setStatusMsg(null);
     setSubmitting(true);
     try {
-      await assignBursery({
+      await assignBursary({
         studentId: selectedStudent.id,
         percentage: Number(percentage),
         term,
@@ -139,7 +139,7 @@ export function AssignBurseryPage({
       });
       setStatusMsg({
         type: "success",
-        text: `${t("finance.bursery.status.success")} ${percentage}% for ${term}.`,
+        text: `${t("finance.bursary.status.success")} ${percentage}% for ${term}.`,
       });
       
       // Refresh base fee display
@@ -159,11 +159,11 @@ export function AssignBurseryPage({
     setStatusMsg(null);
     setSubmitting(true);
     try {
-      await revokeBursery(selectedStudent.id, term);
+      await revokeBursary(selectedStudent.id, term);
       setPercentage("0");
       setStartsAt("");
       setEndsAt("");
-      setStatusMsg({ type: "success", text: t("finance.bursery.status.revoked") });
+      setStatusMsg({ type: "success", text: t("finance.bursary.status.revoked") });
       
       // Refresh base fee display
       const data = await fetchStudentStatement(selectedStudent.id, term);
@@ -184,10 +184,10 @@ export function AssignBurseryPage({
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
         <h1 style={{ color: "#0c2340", fontWeight: 800, fontSize: "1.75rem", margin: 0 }}>
-          {t("finance.bursery.assignTitle")}
+          {t("finance.bursary.assignTitle")}
         </h1>
         <p style={{ color: "#64748b", marginTop: 4 }}>
-          {t("finance.bursery.assignDesc")}
+          {t("finance.bursary.assignDesc")}
         </p>
       </div>
 
@@ -203,7 +203,7 @@ export function AssignBurseryPage({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 32 }}>
           <div style={{ position: "relative" }}>
             <label style={{ display: "block", fontWeight: 700, fontSize: "0.85rem", color: "#475569", marginBottom: 8 }}>
-              {t("finance.bursery.field.search")}
+              {t("finance.bursary.field.search")}
             </label>
             <div style={{ position: "relative" }}>
               <input
@@ -278,7 +278,7 @@ export function AssignBurseryPage({
 
           <div>
             <label style={{ display: "block", fontWeight: 700, fontSize: "0.85rem", color: "#475569", marginBottom: 8 }}>
-              {t("finance.bursery.field.term")}
+              {t("finance.bursary.field.term")}
             </label>
             <select
               value={term}
@@ -356,7 +356,7 @@ export function AssignBurseryPage({
           <div style={{ display: "grid", gap: 24 }}>
             <div style={{ marginBottom: 24 }}>
               <label style={{ display: "block", fontWeight: 700, fontSize: "0.85rem", color: "#475569", marginBottom: 12 }}>
-                {t("finance.bursery.field.percentage")}
+                {t("finance.bursary.field.percentage")}
               </label>
               <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
                 <input
@@ -459,7 +459,7 @@ export function AssignBurseryPage({
             }}>
               <div>
                 <p style={{ margin: 0, opacity: 0.8, fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase" }}>
-                  {t("finance.bursery.preview.title")}
+                  {t("finance.bursary.preview.title")}
                 </p>
                 <h3 style={{ margin: "4px 0 0", fontSize: "1.75rem", fontWeight: 900 }}>
                   {discountedPreview != null ? formatCurrencyUGX(discountedPreview) : "—"}
@@ -467,7 +467,7 @@ export function AssignBurseryPage({
               </div>
               <div style={{ textAlign: "right" }}>
                 <p style={{ margin: 0, opacity: 0.8, fontSize: "0.75rem" }}>
-                  {t("finance.bursery.preview.savings")}
+                  {t("finance.bursary.preview.savings")}
                 </p>
                 <p style={{ margin: 0, fontWeight: 800, color: "#10b981" }}>
                    -{expectedBase != null && discountedPreview != null ? formatCurrencyUGX(expectedBase - discountedPreview) : "—"}
@@ -508,7 +508,7 @@ export function AssignBurseryPage({
                   boxShadow: "0 4px 12px rgba(12,35,64,0.2)"
                 }}
               >
-                {submitting ? "Processing..." : t("finance.bursery.btn.apply")}
+                {submitting ? "Processing..." : t("finance.bursary.btn.apply")}
               </button>
               <button
                 disabled={submitting || Number(selectedStudent.bursaryPercentage || 0) === 0}
@@ -526,7 +526,7 @@ export function AssignBurseryPage({
                   opacity: (submitting || Number(selectedStudent.bursaryPercentage || 0) === 0) ? 0.5 : 1
                 }}
               >
-                {t("finance.bursery.btn.revoke")}
+                {t("finance.bursary.btn.revoke")}
               </button>
             </div>
           </div>

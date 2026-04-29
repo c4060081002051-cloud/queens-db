@@ -70,36 +70,36 @@ function TreasuryFlowChart({ transactions, net }: { transactions: FinanceDashboa
   const trendPct = Math.abs((netDelta / Math.max(earningsTotal, 1)) * 100);
 
   return (
-    <section className="neo-card flex h-full flex-col p-4 sm:p-5">
+    <section className="flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
       <div className="flex justify-between items-start mb-2">
         <div>
-          <h2 className="border-b border-[#ebe4d9] pb-2 text-sm font-semibold text-[#2d3436]">Treasury Flow</h2>
-          <p className="mt-2 text-2xl font-black text-[#2d3436] tracking-tight">{formatCurrencyUGX(net)}</p>
+          <h2 className="border-b border-slate-100 pb-2 text-sm font-semibold text-slate-800">Treasury Flow</h2>
+          <p className="mt-2 text-2xl font-black text-slate-800 tracking-tight">{formatCurrencyUGX(net)}</p>
           <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wide">
-            <span className="rounded-full bg-[#e8f4e9] px-2.5 py-1 text-[#3d7a46]">
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
               Earnings: {formatCurrencyUGX(earningsTotal)}
             </span>
-            <span className="rounded-full bg-[#fce8e5] px-2.5 py-1 text-[#b4463d]">
+            <span className="rounded-full bg-rose-50 px-2.5 py-1 text-rose-700">
               Expenditures: {formatCurrencyUGX(expenditureTotal)}
             </span>
           </div>
         </div>
-        <div className={`text-xs font-bold ${isUp ? "text-[#6a9570]" : "text-[#e67e22]"}`}>
+        <div className={`text-xs font-bold ${isUp ? "text-emerald-600" : "text-amber-600"}`}>
           {isUp ? "▲+" : "▼-"}
           {trendPct.toFixed(1)}%
         </div>
       </div>
 
-      <div className="neo-inset-field mt-4 flex min-h-[160px] flex-1 items-end justify-center rounded-2xl p-4 overflow-hidden relative">
+      <div className="mt-4 flex min-h-[160px] flex-1 items-end justify-center rounded-2xl border border-slate-100 bg-slate-50 p-4 overflow-hidden relative">
         <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full h-[180px] mt-auto">
           <defs>
             <linearGradient id="earnings-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#6a9570" stopOpacity="0.2" />
-              <stop offset="100%" stopColor="#6a9570" stopOpacity="0.02" />
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.2" />
+              <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
             </linearGradient>
             <linearGradient id="expenses-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#e67e22" stopOpacity="0.18" />
-              <stop offset="100%" stopColor="#e67e22" stopOpacity="0.02" />
+              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
             </linearGradient>
           </defs>
           <path d={earningsAreaPath} fill="url(#earnings-fill)" />
@@ -107,26 +107,26 @@ function TreasuryFlowChart({ transactions, net }: { transactions: FinanceDashboa
           <path
             d={earningsLinePath}
             fill="none"
-            stroke="#6a9570"
+            stroke="#10b981"
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="drop-shadow-[0_4px_4px_rgba(0,0,0,0.05)] transition-all duration-300"
+            className="drop-shadow-sm transition-all duration-300"
           />
           <path
             d={expenditureLinePath}
             fill="none"
-            stroke="#e67e22"
+            stroke="#f59e0b"
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="drop-shadow-[0_4px_4px_rgba(0,0,0,0.05)] transition-all duration-300"
+            className="drop-shadow-sm transition-all duration-300"
           />
           {earningsCoords.map(([x, y], i) => (
-            <circle key={`e-${i}`} cx={x} cy={y} r="3.5" fill="#faf7f0" stroke="#6a9570" strokeWidth="2" />
+            <circle key={`e-${i}`} cx={x} cy={y} r="3.5" fill="#ffffff" stroke="#10b981" strokeWidth="2" />
           ))}
           {expenditureCoords.map(([x, y], i) => (
-            <circle key={`x-${i}`} cx={x} cy={y} r="3.5" fill="#faf7f0" stroke="#e67e22" strokeWidth="2" />
+            <circle key={`x-${i}`} cx={x} cy={y} r="3.5" fill="#ffffff" stroke="#f59e0b" strokeWidth="2" />
           ))}
         </svg>
       </div>
@@ -163,23 +163,23 @@ export function AdminOverview({ dash, loading }: { dash: DashboardPayload | null
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
 
       {/* Header Area */}
-      <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#ebe4d9]/80 pb-6">
+      <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200 pb-6">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-[#2d3436]">
+          <h1 className="text-3xl font-black tracking-tight text-slate-800">
             Admin's Dashboard
           </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#636e72]">
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">
             Administrator's Oversight Terminal
           </p>
         </div>
 
-        <div className="flex shadow-[inset_2px_2px_6px_rgba(0,0,0,0.06),2px_2px_6px_rgba(255,255,255,0.85)] items-center gap-3 bg-gradient-to-br from-[#faf7f0] to-[#ebe4d9] rounded-xl px-5 py-3 border border-[#ebe4d9]">
-          <div className="w-2.5 h-2.5 rounded-full bg-[#6a9570] animate-pulse shadow-[0_0_8px_rgba(106,149,112,0.8)]"></div>
-          <div className="font-mono flex divide-x divide-[#ebe4d9]">
-            <span className="text-[#3b5998] font-bold tracking-widest pr-3 text-sm">
+        <div className="flex shadow-sm items-center gap-3 bg-white rounded-xl px-5 py-3 border border-slate-200">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
+          <div className="font-mono flex divide-x divide-slate-200">
+            <span className="text-indigo-600 font-bold tracking-widest pr-3 text-sm">
               {time.toLocaleTimeString('en-US', { hour12: false })}
             </span>
-            <span className="text-[#636e72] font-bold tracking-wider pl-3 text-sm">
+            <span className="text-slate-500 font-bold tracking-wider pl-3 text-sm">
               {time.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()}
             </span>
           </div>
@@ -191,29 +191,29 @@ export function AdminOverview({ dash, loading }: { dash: DashboardPayload | null
         <StatCard
           title="Total Students"
           value={String(s?.totalStudents ?? "—")}
-          className="bg-gradient-to-br from-[#e8f2fa] via-[#d4e8f5] to-[#c5dff0]"
-          iconTint="bg-white/40 text-[#2d3436]"
+          className="border-l-4 border-l-blue-500"
+          iconTint="bg-blue-50 text-blue-600"
           icon={<span className="text-xl">🎓</span>}
         />
         <StatCard
           title="Total Staff"
           value={String(s?.totalTeachers ?? "—")}
-          className="bg-gradient-to-br from-[#e8f4e9] via-[#d4ead6] to-[#c5e3c8]"
-          iconTint="bg-white/40 text-[#2d3436]"
+          className="border-l-4 border-l-emerald-500"
+          iconTint="bg-emerald-50 text-emerald-600"
           icon={<span className="text-xl">👨‍🏫</span>}
         />
         <StatCard
           title="Today's Income"
           value={formatCurrencyUGX(today?.feesReceived ?? 0)}
-          className="bg-gradient-to-br from-[#faf7f0] via-[#f3ead8] to-[#ead9b8]"
-          iconTint="bg-white/40 text-[#2d3436]"
+          className="border-l-4 border-l-indigo-500"
+          iconTint="bg-indigo-50 text-indigo-600"
           icon={<span className="text-xl">💰</span>}
         />
         <StatCard
           title="Today's Expenses"
           value={formatCurrencyUGX(today?.expenses ?? 0)}
-          className="bg-gradient-to-br from-[#fce8e5] via-[#f7d1cd] to-[#efd5d2]"
-          iconTint="bg-white/40 text-[#2d3436]"
+          className="border-l-4 border-l-rose-500"
+          iconTint="bg-rose-50 text-rose-600"
           icon={<span className="text-xl">🧾</span>}
         />
       </div>
@@ -226,24 +226,24 @@ export function AdminOverview({ dash, loading }: { dash: DashboardPayload | null
           <TreasuryFlowChart transactions={recentTransactions} net={fin?.month?.net ?? 0} />
 
           {/* Notifications Feed */}
-          <div className="neo-card p-5 min-h-[250px] flex flex-col flex-1">
-            <h3 className="border-b border-[#ebe4d9] pb-2 text-sm font-semibold text-[#2d3436] mb-4 uppercase tracking-wider">
-              Chart
+          <div className="flex min-h-[250px] flex-1 flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+            <h3 className="border-b border-slate-100 pb-2 text-sm font-semibold text-slate-800 mb-4 uppercase tracking-wider">
+              Feed
             </h3>
 
             <div className="flex-1 overflow-y-auto pr-2 space-y-3">
               {messages.map((m) => (
-                <div key={m.id} className={`p-4 rounded-2xl border transition-all ${m.read ? "bg-white/40 border-[#ebe4d9]/80" : "bg-gradient-to-br from-[#e8f2fa] to-[#d4e8f5] shadow-sm border-[#c5dff0] relative"}`}>
-                  {!m.read && <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-[#5a8faf] rounded-full animate-pulse shadow-[0_0_8px_rgba(90,143,175,0.8)]"></div>}
+                <div key={m.id} className={`p-4 rounded-2xl border transition-all ${m.read ? "bg-slate-50/50 border-slate-100" : "bg-indigo-50/50 shadow-sm border-indigo-100 relative"}`}>
+                  {!m.read && <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 bg-indigo-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.8)]"></div>}
                   <div className="flex justify-between items-start mb-1 gap-2">
-                    <h4 className={`text-sm font-bold ${m.read ? "text-[#636e72]" : "text-[#2d3436]"}`}>{m.title}</h4>
-                    <span className="text-[10px] text-[#636e72] font-mono tracking-wider whitespace-nowrap">{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <h4 className={`text-sm font-bold ${m.read ? "text-slate-500" : "text-slate-800"}`}>{m.title}</h4>
+                    <span className="text-[10px] text-slate-400 font-mono tracking-wider whitespace-nowrap">{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
-                  <p className="text-xs text-[#636e72] leading-relaxed">{m.body}</p>
+                  <p className="text-xs text-slate-500 leading-relaxed">{m.body}</p>
                 </div>
               ))}
               {messages.length === 0 && (
-                <div className="h-full flex items-center justify-center text-[#636e72] italic text-sm py-10">
+                <div className="h-full flex items-center justify-center text-slate-500 italic text-sm py-10">
                   No active secured messages.
                 </div>
               )}
@@ -255,33 +255,33 @@ export function AdminOverview({ dash, loading }: { dash: DashboardPayload | null
         <div className="flex flex-col gap-6">
 
           {/* Daily Ledger Status */}
-          <div className="neo-card p-5 bg-gradient-to-br from-[#faf7f0] to-[#f5f0e6]">
-            <h3 className="border-b border-[#ebe4d9] pb-2 text-sm font-semibold text-[#2d3436] mb-4 uppercase tracking-wider flex items-center gap-2">
-              <svg className="w-4 h-4 text-[#6a9570]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          <div className="flex flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+            <h3 className="border-b border-slate-100 pb-2 text-sm font-semibold text-slate-800 mb-4 uppercase tracking-wider flex items-center gap-2">
+              <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               Ledger View
             </h3>
 
             <div className="space-y-4">
-              <div className="flex justify-between items-end border-b border-[#ebe4d9]/50 pb-3">
-                <span className="text-xs font-bold tracking-widest text-[#636e72] uppercase">Closing Net</span>
-                <span className={`text-xl font-black ${today && today.net >= 0 ? "text-[#6a9570]" : "text-[#d9534f]"}`}>
+              <div className="flex justify-between items-end border-b border-slate-100 pb-3">
+                <span className="text-xs font-bold tracking-widest text-slate-500 uppercase">Closing Net</span>
+                <span className={`text-xl font-black ${today && today.net >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                   {formatCurrencyUGX(today?.net ?? 0)}
                 </span>
               </div>
 
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[#636e72] block mb-2">Vault Status</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2">Vault Status</span>
                 {today?.reportStatus === "verified_and_banked" ? (
-                  <div className="bg-gradient-to-br from-[#e8f4e9] to-[#c5e3c8] text-[#2d3436] text-xs font-bold px-3 py-2 rounded-xl border border-[#c5e3c8] shadow-sm flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#6a9570] shadow-[0_0_5px_currentColor]"></span> BANKED & SECURED
+                  <div className="bg-emerald-50 text-emerald-800 text-xs font-bold px-3 py-2 rounded-xl border border-emerald-200 shadow-sm flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_currentColor]"></span> BANKED & SECURED
                   </div>
                 ) : today?.reportStatus === "submitted_for_verification" ? (
-                  <div className="bg-gradient-to-br from-[#e8f2fa] to-[#c5dff0] text-[#2d3436] text-xs font-bold px-3 py-2 rounded-xl border border-[#c5dff0] shadow-sm flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#5a8faf] shadow-[0_0_5px_currentColor]"></span> AWAITING ADMIN REVIEW
+                  <div className="bg-indigo-50 text-indigo-800 text-xs font-bold px-3 py-2 rounded-xl border border-indigo-200 shadow-sm flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_5px_currentColor]"></span> AWAITING ADMIN REVIEW
                   </div>
                 ) : (
-                  <div className="bg-gradient-to-br from-[#faf7f0] to-[#ead9b8] text-[#2d3436] text-xs font-bold px-3 py-2 rounded-xl border border-[#ead9b8] shadow-sm flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#e67e22] shadow-[0_0_5px_currentColor]"></span> UNRESOLVED OPEN BALANCE
+                  <div className="bg-amber-50 text-amber-800 text-xs font-bold px-3 py-2 rounded-xl border border-amber-200 shadow-sm flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_5px_currentColor]"></span> UNRESOLVED OPEN BALANCE
                   </div>
                 )}
               </div>

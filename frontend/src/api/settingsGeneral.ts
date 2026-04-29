@@ -1,5 +1,5 @@
 import { apiUrl, authHeaders } from "./baseUrl";
-import { debugClientLog } from "./debugSessionLog";
+
 
 export async function fetchGeneralSettings(): Promise<Record<string, string>> {
   const requestUrl = apiUrl("/api/me/settings/general");
@@ -9,38 +9,12 @@ export async function fetchGeneralSettings(): Promise<Record<string, string>> {
   try {
     res = await fetch(requestUrl, { headers });
   } catch (netErr) {
-    // #region agent log
-    debugClientLog({
-      hypothesisId: "H2",
-      location: "settingsGeneral.ts:fetchGeneralSettings:network",
-      message: "fetch_settings_network_error",
-      data: {
-        requestUrl,
-        hasAuthHeader: Boolean(headers.Authorization),
-        errName: netErr instanceof Error ? netErr.name : "unknown",
-      },
-    });
-    // #endregion
     throw new Error(
       "Cannot reach the API. Start the backend (e.g. npm run dev:backend) and ensure MySQL is running.",
     );
   }
 
   const text = await res.text();
-  // #region agent log
-  debugClientLog({
-    hypothesisId: "H2",
-    location: "settingsGeneral.ts:fetchGeneralSettings:response",
-    message: "fetch_settings_http",
-    data: {
-      requestUrl,
-      status: res.status,
-      ok: res.ok,
-      hasAuthHeader: Boolean(headers.Authorization),
-      bodyPreviewLen: text.length,
-    },
-  });
-  // #endregion
   if (!res.ok) {
     let detail = text;
     try {
@@ -59,28 +33,12 @@ export async function fetchGeneralSettings(): Promise<Record<string, string>> {
   }
 
   try {
-    const parsed = JSON.parse(text) as Record<string, string>;
-    // #region agent log
-    debugClientLog({
-      hypothesisId: "H5",
-      location: "settingsGeneral.ts:fetchGeneralSettings:parsed",
-      message: "fetch_settings_json_ok",
-      data: { keysReturned: Object.keys(parsed).length },
-    });
-    // #endregion
-    return parsed;
+    return JSON.parse(text) as Record<string, string>;
   } catch {
-    // #region agent log
-    debugClientLog({
-      hypothesisId: "H5",
-      location: "settingsGeneral.ts:fetchGeneralSettings:parse_fail",
-      message: "fetch_settings_json_invalid",
-      data: { bodyPreviewLen: text.length },
-    });
-    // #endregion
     throw new Error("Invalid settings response from server.");
   }
 }
+
 
 export async function saveGeneralSettings(settings: Record<string, string>): Promise<{ message: string; settings: Record<string, string> }> {
   let res: Response;

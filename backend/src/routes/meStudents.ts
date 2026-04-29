@@ -26,6 +26,9 @@ import {
   StudentFeeAssignment,
   StudentFeeReceipt,
   StudentFeeStructure,
+  StudentFeePayment,
+  StudentAssessmentResult,
+  AttendanceRecord,
 } from "../models/index.js";
 
 function studentUploadDir(): string {
@@ -332,32 +335,48 @@ async function createStudentRecord(fields: {
       { transaction: t },
     );
 
-    const latestStructure = await StudentFeeStructure.findOne({
-      order: [["created_at", "DESC"]],
-      transaction: t,
-    });
-    const assignmentTerm = latestStructure?.term ?? "Term 1";
     const feeStatus = feeStatusForStudent(fields.boardingStatus, className);
-    const termStructures = await StudentFeeStructure.findAll({
-      where: { term: assignmentTerm },
-      order: [["created_at", "DESC"]],
+    const allStructures = await StudentFeeStructure.findAll({
+      order: [
+        ["term", "ASC"],
+        ["created_at", "DESC"],
+      ],
       transaction: t,
     });
-    const matchedStructure =
-      termStructures.find((row) => row.boardingStatus === feeStatus) ?? termStructures[0] ?? null;
-    const autoAmount = matchedStructure ? Number(matchedStructure.amountDueUgx) || 0 : 0;
-    const autoNotes = matchedStructure
-      ? `Auto-assigned on student creation (${matchedStructure.boardingStatus}).`
-      : "Auto-assigned on student creation. Update amount after configuring fee structure.";
+    const structuresByTerm = new Map<string, StudentFeeStructure[]>();
+    for (const row of allStructures) {
+      const list = structuresByTerm.get(row.term) ?? [];
+      list.push(row);
+      structuresByTerm.set(row.term, list);
+    }
 
-    await StudentFeeAssignment.findOrCreate({
-      where: { studentId: created.id, term: assignmentTerm },
-      defaults: {
-        amountDueUgx: autoAmount,
-        notes: autoNotes,
-      },
-      transaction: t,
-    });
+    if (structuresByTerm.size > 0) {
+      for (const [assignmentTerm, termStructures] of structuresByTerm.entries()) {
+        const matchedStructure =
+          termStructures.find((row) => row.boardingStatus === feeStatus) ?? termStructures[0] ?? null;
+        const autoAmount = matchedStructure ? Number(matchedStructure.amountDueUgx) || 0 : 0;
+        const autoNotes = matchedStructure
+          ? `Auto-assigned on student creation (${matchedStructure.boardingStatus}).`
+          : "Auto-assigned on student creation. Update amount after configuring fee structure.";
+        await StudentFeeAssignment.findOrCreate({
+          where: { studentId: created.id, term: assignmentTerm },
+          defaults: {
+            amountDueUgx: autoAmount,
+            notes: autoNotes,
+          },
+          transaction: t,
+        });
+      }
+    } else {
+      await StudentFeeAssignment.findOrCreate({
+        where: { studentId: created.id, term: "Term 1" },
+        defaults: {
+          amountDueUgx: 0,
+          notes: "Auto-assigned on student creation. Update amount after configuring fee structure.",
+        },
+        transaction: t,
+      });
+    }
 
     return created;
   });
@@ -977,6 +996,85 @@ export function createMeStudentsRouter() {
     }
   });
 
+  r.post("/students/bulk-json", async (req, res) => {
+    try {
+      const { items } = req.body as { items: any[] };
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: "items array is required" });
+      }
+
+      const results: { admissionNumber?: string; error?: string }[] = [];
+      let createdCount = 0;
+
+      // We process them one by one to use the existing createStudentRecord logic (which handles fee assignments etc)
+      // but we do it in one request to save network roundtrips.
+      for (const body of items) {
+        try {
+          const firstName = String(body.firstName || "").trim();
+          const lastName = String(body.lastName || "").trim();
+          const dob = body.dateOfBirth || null;
+
+          // Duplicate check
+          const existing = await Student.findOne({
+            where: {
+              firstName: { [Op.like]: firstName },
+              lastName: { [Op.like]: lastName },
+              ...(dob ? { dateOfBirth: dob } : {}),
+            },
+          });
+
+          if (existing) {
+            results.push({ error: `Student ${firstName} ${lastName} already exists (Admission: ${existing.admissionNumber})` });
+            continue;
+          }
+
+          const student = await createStudentRecord({
+            firstName: firstName.slice(0, 100),
+            middleName: body.middleName ? String(body.middleName).trim().slice(0, 100) : null,
+            lastName: lastName.slice(0, 100),
+            dateOfBirth: dob,
+            parentEmail: body.parentEmail || null,
+            gender: body.gender || null,
+            sectionName: body.sectionName || null,
+            classRoomId: parseOptionalId(body.classRoomId) ?? null,
+            nationality: body.nationality || null,
+            countryCode: normalizeCountryCode(body.countryCode) ?? null,
+            district: body.district || null,
+            registrationType: parseRegistrationType(body.registrationType) ?? "first",
+            lastClassAttended: null,
+            lastTermYear: null,
+            previousReportCardFilename: null,
+            previousGrades: null,
+            transferReason: parseTransferReason(body.transferReason) ?? null,
+            parentAliveStatus: parseParentAliveStatus(body.parentAliveStatus) ?? null,
+            parentFullName: body.parentFullName || null,
+            parentPhone: body.parentPhone || null,
+            parentAddress: body.parentAddress || null,
+            religion: body.religion || null,
+            specialNeeds: body.specialNeeds || null,
+            boardingStatus: parseBoardingStatus(body.boardingStatus) ?? null,
+            residenceAddress: body.residenceAddress || null,
+            medicalInfo: body.medicalInfo || null,
+            emergencyContactName: body.emergencyContactName || null,
+            emergencyContactPhone: body.emergencyContactPhone || null,
+            guardianName: body.guardianName || null,
+            guardianPhone: body.guardianPhone || null,
+          });
+          results.push({ admissionNumber: student.admissionNumber });
+          createdCount++;
+        } catch (e) {
+          results.push({ error: (e as Error)?.message || "Failed to create student" });
+        }
+      }
+
+
+      return res.status(201).json({ created: createdCount, results });
+    } catch (err) {
+      console.error(err);
+      return res.status(503).json({ error: "Database unavailable" });
+    }
+  });
+
   r.get("/students", async (req, res) => {
     try {
       const parsedQuery = validateWithSchema(studentListQuerySchema, req.query);
@@ -986,6 +1084,7 @@ export function createMeStudentsRouter() {
       const qRaw = parsedQuery.data.q ?? "";
       const sortKey = parsedQuery.data.sortBy;
       const sortDir = parsedQuery.data.sortDir === "asc" ? "ASC" : "DESC";
+      const offset = parsedQuery.data.offset;
       const limit = parsedQuery.data.limit;
 
       let order: unknown[];
@@ -1043,20 +1142,21 @@ export function createMeStudentsRouter() {
           or.push({ date_of_birth: isoDob });
         }
         if (or.length === 0) {
-          return res.json({ items: [] });
+          return res.json({ items: [], total: 0 });
         }
         where = { [Op.or]: or };
       }
 
-      const rows = await Student.findAll({
+      const { count, rows } = await Student.findAndCountAll({
         where,
         include: [{ model: ClassRoom, as: "classRoom", required: false }],
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         order: order as any,
         limit,
+        offset,
       });
 
-      return res.json({ items: rows.map(studentToApiRow) });
+      return res.json({ items: rows.map(studentToApiRow), total: count });
     } catch (err) {
       console.error(err);
       return res.status(503).json({ error: "Database unavailable" });
@@ -1591,6 +1691,14 @@ export function createMeStudentsRouter() {
         (row as unknown as { previousReportCardFilename?: string | null }).previousReportCardFilename ??
         null;
       await unlinkUploadedFile(reportUploadDir, prevReport);
+      
+      // Cascading deletes for related records
+      await StudentFeePayment.destroy({ where: { studentId: id } });
+      await StudentFeeReceipt.destroy({ where: { studentId: id } });
+      await StudentFeeAssignment.destroy({ where: { studentId: id } });
+      await StudentAssessmentResult.destroy({ where: { studentId: id } });
+      await AttendanceRecord.destroy({ where: { studentId: id } });
+
       await row.destroy();
       return res.status(204).end();
     } catch (err) {

@@ -239,6 +239,21 @@ function IconPromotion({ className }: { className?: string }) {
   );
 }
 
+function IconFileSpreadsheet({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="20" height="20" fill="none" viewBox="0 0 24 24" aria-hidden>
+      <path
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"
+      />
+      <path stroke="currentColor" strokeWidth="1.7" d="M14 2v6h6M8 13h8M8 17h8M8 9h2" />
+    </svg>
+  );
+}
+
 function IconSettings({ className }: { className?: string }) {
   return (
     <svg className={className} width="20" height="20" fill="none" viewBox="0 0 24 24" aria-hidden>
@@ -461,6 +476,11 @@ function buildNavGroups(
           label: "Promotion & Graduation",
           curriculumSection: "promotion_engine",
         },
+        {
+          icon: IconFileSpreadsheet,
+          label: "Learner's Reports",
+          curriculumSection: "learns_report",
+        },
       ],
     },
     {
@@ -527,6 +547,12 @@ function buildNavGroups(
           icon: IconLayers,
           label: t("nav.settings.classStructure"),
           settingsPanel: "class_structure",
+          requiredPermission: "settings_general",
+        },
+        {
+          icon: IconGradCap,
+          label: t("nav.settings.academicSettings"),
+          settingsPanel: "academic_settings",
           requiredPermission: "settings_general",
         },
         { icon: IconGrid, label: t("nav.settings.general"), settingsPanel: "general", requiredPermission: "settings_general" },

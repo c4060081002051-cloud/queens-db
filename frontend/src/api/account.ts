@@ -47,14 +47,13 @@ export async function fetchAccount(): Promise<AccountInfo> {
   return readJson<AccountInfo>(res);
 }
 
-export async function fetchManagedUsers(): Promise<ManagedUser[]> {
-  const res = await fetch(apiUrl("/api/me/users"), { headers: { ...authHeaders() } });
+export async function fetchManagedUsers(limit = 100, offset = 0): Promise<{ users: ManagedUser[]; total: number }> {
+  const res = await fetch(apiUrl(`/api/me/users?limit=${limit}&offset=${offset}`), { headers: { ...authHeaders() } });
   if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) {
     throw new Error(await errorMessageFromResponse(res));
   }
-  const data = await readJson<{ users: ManagedUser[] }>(res);
-  return data.users;
+  return readJson<{ users: ManagedUser[]; total: number }>(res);
 }
 
 export async function createManagedUser(body: {

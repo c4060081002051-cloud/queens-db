@@ -4,6 +4,7 @@ import {
   optionalPositiveInt,
   optionalTrimmed,
   requiredTrimmed,
+  ugandanPhoneOptional,
 } from "./common.js";
 
 export const studentSortBySchema = z.enum(["date", "id", "name", "class"]);
@@ -19,6 +20,12 @@ export const studentListQuerySchema = z.object({
     if (!Number.isFinite(n)) return 100;
     return Math.min(500, Math.max(1, Math.floor(n)));
   }, z.number().int().min(1).max(500)),
+  offset: z.preprocess((value: unknown) => {
+    if (value === undefined || value === null || value === "") return 0;
+    const n = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.floor(n));
+  }, z.number().int().min(0)).default(0),
 });
 
 const registrationTypeSchema = z.preprocess((value: unknown) => {
@@ -77,7 +84,7 @@ export const studentCreateBodySchema = z.object({
   transferReason: transferReasonSchema.optional(),
   parentAliveStatus: parentAliveStatusSchema.optional(),
   parentFullName: optionalTrimmed(120),
-  parentPhone: optionalTrimmed(32),
+  parentPhone: ugandanPhoneOptional(),
   parentAddress: optionalTrimmed(255),
   religion: optionalTrimmed(80),
   specialNeeds: optionalTrimmed(255),
@@ -85,9 +92,9 @@ export const studentCreateBodySchema = z.object({
   residenceAddress: optionalTrimmed(255),
   medicalInfo: optionalTrimmed(2000),
   emergencyContactName: optionalTrimmed(120),
-  emergencyContactPhone: optionalTrimmed(32),
+  emergencyContactPhone: ugandanPhoneOptional(),
   guardianName: optionalTrimmed(120),
-  guardianPhone: optionalTrimmed(32),
+  guardianPhone: ugandanPhoneOptional(),
 });
 
 export const studentUpdateBodySchema = z.object({
@@ -109,7 +116,7 @@ export const studentUpdateBodySchema = z.object({
   transferReason: transferReasonSchema.nullable().optional(),
   parentAliveStatus: parentAliveStatusSchema.nullable().optional(),
   parentFullName: nullableTrimmed(120),
-  parentPhone: nullableTrimmed(32),
+  parentPhone: ugandanPhoneOptional(),
   parentAddress: nullableTrimmed(255),
   religion: nullableTrimmed(80),
   specialNeeds: nullableTrimmed(255),
@@ -117,9 +124,9 @@ export const studentUpdateBodySchema = z.object({
   residenceAddress: nullableTrimmed(255),
   medicalInfo: nullableTrimmed(2000),
   emergencyContactName: nullableTrimmed(120),
-  emergencyContactPhone: nullableTrimmed(32),
+  emergencyContactPhone: ugandanPhoneOptional(),
   guardianName: nullableTrimmed(120),
-  guardianPhone: nullableTrimmed(32),
+  guardianPhone: ugandanPhoneOptional(),
 });
 
 export type StudentListQueryInput = z.input<typeof studentListQuerySchema>;

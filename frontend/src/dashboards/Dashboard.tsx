@@ -17,6 +17,7 @@ import { SettingsModesPanel } from "../components/settings/SettingsModesPanel";
 import { SettingsGeneralPanel } from "../components/settings/SettingsGeneralPanel";
 import { SettingsFeesStructurePanel } from "../components/settings/SettingsFeesStructurePanel";
 import { SettingsClassStructurePanel } from "../components/settings/SettingsClassStructurePanel";
+import { SettingsAcademicPanel } from "../components/settings/SettingsAcademicPanel";
 import { SettingsUsersRolesPanel } from "../components/settings/SettingsUsersRolesPanel";
 import { ExpensesAllPage } from "../components/expenses/ExpensesAllPage";
 import {
@@ -325,6 +326,7 @@ function canAccessSettingsPanel(
   if (panel === "modes") return hasPermission(role, permissions, "settings_modes");
   if (panel === "fees_structure") return hasPermission(role, permissions, "settings_fees_structure");
   if (panel === "class_structure") return hasPermission(role, permissions, "settings_general");
+  if (panel === "academic_settings") return hasPermission(role, permissions, "settings_general");
   if (panel === "backup") return hasPermission(role, permissions, "settings_backup");
   if (panel === "restore") return hasPermission(role, permissions, "settings_restore");
   if (panel) {
@@ -763,11 +765,13 @@ export function Dashboard({
         {settingsPanel === "modes" ? <SettingsModesPanel /> : null}
         {settingsPanel === "fees_structure" ? <SettingsFeesStructurePanel /> : null}
         {settingsPanel === "class_structure" ? <SettingsClassStructurePanel /> : null}
+        {settingsPanel === "academic_settings" ? <SettingsAcademicPanel /> : null}
         {settingsPanel === "users_roles" ? <SettingsUsersRolesPanel /> : null}
         {settingsPanel === "general" ||
         settingsPanel === "modes" ||
         settingsPanel === "fees_structure" ||
         settingsPanel === "class_structure" ||
+        settingsPanel === "academic_settings" ||
         settingsPanel === "users_roles" ? null : inboxScreen.screen !== "home" ? (
           inboxScreen.screen === "list" ? (
             <InboxListView

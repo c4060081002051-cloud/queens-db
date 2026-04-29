@@ -30,7 +30,7 @@ const registerSchema = z
   .object({
     name: z.string().trim().min(2, "Enter your full name").max(120),
     email: z.string().trim().email("Enter a valid email").max(255),
-    phoneNumber: z.string().trim().min(7, "Enter a valid phone number").max(32),
+    phoneNumber: z.string().trim().regex(/^(?:\+256|0|256)[1-9]\d{8}$/, "Must be a valid Ugandan phone number (e.g. 0772123456 or +256772123456)"),
     gender: z.string().trim().min(1, "Select gender").max(32),
     dateOfBirth: z.string().trim().min(4, "Select date of birth"),
     addressLine: z.string().trim().min(4, "Enter your address").max(255),

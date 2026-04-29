@@ -6,8 +6,8 @@ import {
   type CountryOption,
 } from "../../api/geo";
 import {
-  createStudent,
   fetchClassrooms,
+  bulkCreateStudentsJson,
   type ClassRoomOption,
   type CreateStudentBody,
 } from "../../api/students";
@@ -50,7 +50,7 @@ const headers: Array<{ key: keyof Row; label: string }> = [
   { key: "firstName", label: "First name" },
   { key: "middleName", label: "Middle name" },
   { key: "lastName", label: "Last name" },
-  { key: "dateOfBirth", label: "DOB (YYYY-MM-DD)" },
+  { key: "dateOfBirth", label: "DOB (DD/MM/YYYY)" },
   { key: "gender", label: "Gender" },
   { key: "classRoomId", label: "ClassRoom ID" },
   { key: "sectionName", label: "Section" },
@@ -163,6 +163,33 @@ function emptyRow(): Row {
   };
 }
 
+function normalizeFlexibleDate(val: string): string {
+  if (!val) return "";
+  const v = val.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v; // Already YYYY-MM-DD
+  const parts = v.split(/[-/.]/);
+  if (parts.length === 3) {
+    let d = parts[0];
+    let m = parts[1];
+    const y = parts[2];
+    if (y.length === 4) { // DD/MM/YYYY or D/M/YYYY
+      if (d.length === 1) d = "0" + d;
+      if (m.length === 1) m = "0" + m;
+      return `${y}-${m}-${d}`;
+    }
+  }
+  return v;
+}
+
+function normalizeBoardingStatus(val: string): string {
+  if (!val) return "";
+  const s = val.trim().toLowerCase();
+  if (s === "boarding") return "boarding";
+  if (s === "day" || s === "day_scholar" || s === "day_full" || s === "dayfull" || s === "full_day" || s === "fullday") return "day_full";
+  if (s === "day_half" || s === "dayhalf" || s === "half_day" || s === "halfday") return "day_half";
+  return val; // leave as is so validation flags it
+}
+
 function csvToRows(text: string): Row[] {
   const lines = text
     .split(/\r?\n/)
@@ -175,8 +202,10 @@ function csvToRows(text: string): Row[] {
     const vals = lines[i].split(",").map((v) => v.trim().replace(/^"|"$/g, ""));
     const r = emptyRow();
     cols.forEach((c, idx) => {
-      const v = vals[idx] ?? "";
+      let v = vals[idx] ?? "";
       if (c) {
+        if (c === "dateOfBirth") v = normalizeFlexibleDate(v);
+        if (c === "boardingStatus") v = normalizeBoardingStatus(v);
         (r as Record<string, string>)[c] = v;
       }
     });
@@ -195,8 +224,10 @@ function sheetToRows(rows2d: string[][]): Row[] {
     if (vals.every((v) => !v)) continue;
     const r = emptyRow();
     cols.forEach((c, idx) => {
-      const v = vals[idx] ?? "";
+      let v = vals[idx] ?? "";
       if (c) {
+        if (c === "dateOfBirth") v = normalizeFlexibleDate(v);
+        if (c === "boardingStatus") v = normalizeBoardingStatus(v);
         (r as Record<string, string>)[c] = v;
       }
     });
@@ -214,7 +245,10 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const template = useMemo(() => headers.map((h) => h.key).join(","), []);
+  const [isDragging, setIsDragging] = useState(false);
+  const [skipErrors, setSkipErrors] = useState(false);
+
+
   const religions = useMemo(
     () => [
       "Christian",
@@ -286,6 +320,20 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
     setRows(parsed);
     setError(parsed.length === 0 ? "No rows found in file." : null);
     setMessage(parsed.length > 0 ? `Loaded ${parsed.length} row(s). Review and save.` : null);
+    setSkipErrors(false);
+  }
+
+  function downloadTemplate() {
+    const csvContent = headers.map((h) => h.key).join(",") + "\n";
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "student_import_template.csv");
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   function updateCell(index: number, key: keyof Row, value: string) {
@@ -302,10 +350,16 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
 
   function validateRow(r: Row): string | null {
     for (const key of requiredKeys) {
-      if (!String(r[key] ?? "").trim()) return `${String(key)} is required`;
+      if (!String(r[key] ?? "").trim()) {
+        const displayKey = key === "boardingStatus" ? "Status (boardingStatus)" : String(key);
+        return `${displayKey} is required`;
+      }
+    }
+    if (r.boardingStatus && !["boarding", "day_full", "day_half"].includes(r.boardingStatus)) {
+      return "Status must be exactly 'boarding', 'day_full', or 'day_half'";
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(r.dateOfBirth.trim())) {
-      return "dateOfBirth must be YYYY-MM-DD";
+      return "dateOfBirth must be DD/MM/YYYY or YYYY-MM-DD";
     }
     if (
       (r.parentAliveStatus === "both" || r.parentAliveStatus === "one") &&
@@ -341,278 +395,423 @@ export function AdmissionImportTable({ onDone }: AdmissionImportTableProps) {
     setBusy(true);
     setError(null);
     setMessage(null);
-    let created = 0;
-    const assignedAdmissionNumbers: string[] = [];
-    const failures: string[] = [];
+
+    const itemsToUpload: CreateStudentBody[] = [];
+    const localFailures: string[] = [];
+
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      try {
-        const rowError = validateRow(r);
-        if (rowError) {
-          failures.push(`Row ${i + 1}: ${rowError}`);
-          continue;
-        }
-        const classRoomNum = classIdFromRow(r);
-        const body: CreateStudentBody = {
-          firstName: r.firstName.trim(),
-          middleName: r.middleName.trim() || undefined,
-          lastName: r.lastName.trim(),
-          dateOfBirth: r.dateOfBirth.trim() || undefined,
-          gender: r.gender.trim() || undefined,
-          classRoomId: classRoomNum,
-          sectionName: r.sectionName.trim() || undefined,
-          nationality: r.nationality.trim() || undefined,
-          countryCode: r.countryCode.trim() || undefined,
-          district: r.district.trim() || undefined,
-          religion: r.religion.trim() || undefined,
-          registrationType: r.registrationType,
-          parentAliveStatus: (r.parentAliveStatus || undefined) as
-            | "both"
-            | "one"
-            | "none"
-            | undefined,
-          parentFullName: r.parentFullName.trim() || undefined,
-          parentPhone: r.parentPhone.trim() || undefined,
-          parentEmail: r.parentEmail.trim() || undefined,
-          parentAddress: r.parentAddress.trim() || undefined,
-          guardianName: r.guardianName.trim() || undefined,
-          guardianPhone: r.guardianPhone.trim() || undefined,
-          emergencyContactName: r.emergencyContactName.trim() || undefined,
-          emergencyContactPhone: r.emergencyContactPhone.trim() || undefined,
-          boardingStatus: (r.boardingStatus || undefined) as
-            | "boarding"
-            | "day_half"
-            | "day_full"
-            | undefined,
-          specialNeeds: r.specialNeeds.trim() || undefined,
-          residenceAddress: r.residenceAddress.trim() || undefined,
-          medicalInfo: r.medicalInfo.trim() || undefined,
-        };
-        const createdStudent = await createStudent(body);
-        const admissionNumber = createdStudent.admissionNumber?.trim();
-        if (!admissionNumber) {
-          failures.push(`Row ${i + 1}: admission number was not assigned`);
-          continue;
-        }
-        assignedAdmissionNumbers.push(admissionNumber);
-        created += 1;
-      } catch (e) {
-        failures.push(`Row ${i + 1}: ${e instanceof Error ? e.message : "Failed"}`);
+      const rowError = validateRow(r);
+      if (rowError) {
+        localFailures.push(`Row ${i + 1}: ${rowError}`);
+        continue;
       }
+
+      const classRoomNum = classIdFromRow(r);
+      itemsToUpload.push({
+        firstName: r.firstName.trim(),
+        middleName: r.middleName.trim() || undefined,
+        lastName: r.lastName.trim(),
+        dateOfBirth: r.dateOfBirth.trim() || undefined,
+        parentEmail: r.parentEmail.trim() || undefined,
+        gender: r.gender.trim() || undefined,
+        classRoomId: classRoomNum,
+        sectionName: r.sectionName.trim() || undefined,
+        nationality: r.nationality.trim() || undefined,
+        countryCode: r.countryCode.trim() || undefined,
+        district: r.district.trim() || undefined,
+        religion: r.religion.trim() || undefined,
+        registrationType: r.registrationType,
+        parentAliveStatus: (r.parentAliveStatus || undefined) as any,
+        parentFullName: r.parentFullName.trim() || undefined,
+        parentPhone: r.parentPhone.trim() || undefined,
+        parentEmail: r.parentEmail.trim() || undefined,
+        parentAddress: r.parentAddress.trim() || undefined,
+        guardianName: r.guardianName.trim() || undefined,
+        guardianPhone: r.guardianPhone.trim() || undefined,
+        emergencyContactName: r.emergencyContactName.trim() || undefined,
+        emergencyContactPhone: r.emergencyContactPhone.trim() || undefined,
+        boardingStatus: (r.boardingStatus || undefined) as any,
+        specialNeeds: r.specialNeeds.trim() || undefined,
+        residenceAddress: r.residenceAddress.trim() || undefined,
+        medicalInfo: r.medicalInfo.trim() || undefined,
+      });
     }
-    setBusy(false);
-    const assignedPreview =
-      assignedAdmissionNumbers.length > 0
-        ? ` Admission numbers: ${assignedAdmissionNumbers.slice(0, 8).join(", ")}${
-            assignedAdmissionNumbers.length > 8 ? "..." : ""
-          }`
-        : "";
-    setMessage(`Saved ${created} row(s).${assignedPreview}`);
-    setError(failures.length > 0 ? failures.slice(0, 8).join("\n") : null);
-    if (created > 0) onDone();
+
+    if (itemsToUpload.length === 0) {
+      setBusy(false);
+      if (localFailures.length > 0) {
+        setError(localFailures.slice(0, 8).join("\n"));
+      }
+      return;
+    }
+
+    try {
+      const response = await bulkCreateStudentsJson(itemsToUpload);
+      const { created, results } = response;
+
+      const apiFailures: string[] = [];
+      const assignedAdmissionNumbers: string[] = [];
+
+      results.forEach((res, idx) => {
+        if (res.error) {
+          apiFailures.push(`Item ${idx + 1}: ${res.error}`);
+        } else if (res.admissionNumber) {
+          assignedAdmissionNumbers.push(res.admissionNumber);
+        }
+      });
+
+      const allFailures = [...localFailures, ...apiFailures];
+      const assignedPreview =
+        assignedAdmissionNumbers.length > 0
+          ? ` Admission numbers: ${assignedAdmissionNumbers.slice(0, 8).join(", ")}${
+              assignedAdmissionNumbers.length > 8 ? "..." : ""
+            }`
+          : "";
+
+      setMessage(`Import finished. Created: ${created} row(s).${assignedPreview}`);
+      if (allFailures.length > 0) {
+        setError(allFailures.slice(0, 8).join("\n"));
+      } else {
+        setError(null);
+        if (created > 0) onDone();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Bulk import failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
+
+  const validationErrors = useMemo(() => {
+    return rows.map((r) => validateRow(r));
+  }, [rows, rooms]);
+
+  const hasErrors = validationErrors.some((e) => e !== null);
+  const canSubmit = rows.length > 0 && !busy && (!hasErrors || skipErrors);
+  const errorCount = validationErrors.filter((e) => e !== null).length;
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#ebe4d9] bg-[#fffcf7] shadow-[6px_8px_24px_rgba(45,52,54,0.08)]">
-      <div className="border-b border-[#ebe4d9] bg-gradient-to-r from-[#f8f9f6] to-[#eef6f9] px-5 py-4">
-        <h2 className="text-base font-bold text-[#2d3436]">{t("students.import.title")}</h2>
+    <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-[#2d3436]">
+            {t("students.import.title")}
+          </h1>
+          <p className="mt-1 text-sm font-semibold text-[#636e72]">
+            Bulk import students via CSV or Excel spreadsheets.
+          </p>
+        </div>
+        <div>
+          <button
+            type="button"
+            onClick={downloadTemplate}
+            className="flex items-center gap-2 rounded-xl border-2 border-[#ebe4d9] bg-white px-5 py-2.5 text-sm font-bold text-[#2d3436] transition hover:bg-[#faf9f6]"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download Template
+          </button>
+        </div>
       </div>
-      <div className="space-y-3 p-5">
-        <p className="text-xs text-[#636e72]">{t("students.import.hint")}</p>
-        <p className="text-[11px] text-[#636e72]">
-          Template headers (for CSV/Excel first row): <code>{template}</code>
-        </p>
-        {message ? <p className="text-sm text-emerald-800">{message}</p> : null}
-        {error ? <pre className="whitespace-pre-wrap text-xs text-rose-800">{error}</pre> : null}
-        <div className="flex flex-wrap gap-2">
-          <label className="rounded-full bg-gradient-to-br from-[#5a8faf] to-[#3d6d8a] px-4 py-2 text-xs font-bold text-white">
-            {t("students.import.button")}
-            <input
-              type="file"
-              accept=".csv,text/csv,.xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void onImportFile(f);
-              }}
-            />
-          </label>
-          <button
-            type="button"
-            onClick={addRow}
-            className="rounded-full bg-gradient-to-br from-[#ebe4d9] to-[#d9d0c2] px-4 py-2 text-xs font-bold text-[#2d3436]"
+
+      <div className="neo-card p-6">
+        {rows.length === 0 ? (
+          <div
+            className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-12 transition-colors ${
+              isDragging
+                ? "border-[#3498db] bg-[#3498db]/5"
+                : "border-[#ebe4d9] bg-[#faf9f6] hover:border-[#b2bec3]"
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+            }}
+            onDrop={async (e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                await onImportFile(e.dataTransfer.files[0]);
+              }
+            }}
           >
-            {t("students.import.addRow")}
-          </button>
-          <button
-            type="button"
-            disabled={busy || rows.length === 0}
-            onClick={() => void saveAll()}
-            className="rounded-full bg-gradient-to-br from-[#6a9570] to-[#4a6b4e] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
-          >
-            {busy ? t("students.import.saving") : t("students.import.save")}
-          </button>
-        </div>
-        <div className="overflow-auto rounded-xl border border-[#ebe4d9]">
-          <table className="min-w-[1800px] text-xs">
-            <thead className="bg-[#f5f0e6] text-[#2d3436]">
-              <tr>
-                {headers.map((h) => (
-                  <th key={h.key} className="whitespace-nowrap border-b border-r border-[#ebe4d9] px-2 py-2 text-left">
-                    {h.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} className="odd:bg-white even:bg-[#fcfaf6]">
-                  {headers.map((h) => (
-                    <td key={h.key} className="border-b border-r border-[#ebe4d9] p-1">
-                      {h.key === "dateOfBirth" ? (
-                        <input
-                          type="date"
-                          value={r.dateOfBirth}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        />
-                      ) : h.key === "parentEmail" ? (
-                        <input
-                          type="email"
-                          value={r.parentEmail}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        />
-                      ) : h.key === "parentPhone" ||
-                        h.key === "guardianPhone" ||
-                        h.key === "emergencyContactPhone" ? (
-                        <input
-                          type="tel"
-                          minLength={10}
-                          maxLength={13}
-                          value={String(r[h.key] ?? "")}
-                          onChange={(e) => {
-                            const val = e.target.value.replace(/[^\d+]/g, '');
-                            updateCell(i, h.key, val);
-                          }}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        />
-                      ) : h.key === "gender" ? (
-                        <select
-                          value={r.gender}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        >
-                          <option value="">Select</option>
-                          <option value="Female">Female</option>
-                          <option value="Male">Male</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      ) : h.key === "boardingStatus" ? (
-                        <select
-                          value={r.boardingStatus}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        >
-                          <option value="">Select</option>
-                          <option value="day_half">Day - Half day</option>
-                          <option value="day_full">Day - Full day</option>
-                          <option value="boarding">Boarding</option>
-                        </select>
-                      ) : h.key === "parentAliveStatus" ? (
-                        <select
-                          value={r.parentAliveStatus}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        >
-                          <option value="">Select</option>
-                          <option value="both">Both</option>
-                          <option value="one">One</option>
-                          <option value="none">None</option>
-                        </select>
-                      ) : h.key === "registrationType" ? (
-                        <select
-                          value={r.registrationType}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        >
-                          <option value="first">First</option>
-                          <option value="continuing">Continuing</option>
-                        </select>
-                      ) : h.key === "religion" ? (
-                        <select
-                          value={r.religion}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        >
-                          <option value="">Select</option>
-                          {religions.map((v) => (
-                            <option key={v} value={v}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
-                      ) : h.key === "classRoomId" ? (
-                        <select
-                          value={r.classRoomId}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        >
-                          <option value="">Select</option>
-                          {sortedRooms.map((rm) => (
-                            <option key={rm.id} value={String(rm.id)}>
-                              {rm.name}
-                              {rm.academicYear ? ` (${rm.academicYear})` : ""}
-                            </option>
-                          ))}
-                        </select>
-                      ) : h.key === "countryCode" ? (
-                        <select
-                          value={r.countryCode}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        >
-                          <option value="">Select</option>
-                          {countries.map((c) => (
-                            <option key={c.code} value={c.code}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : h.key === "nationality" ? (
-                        <select
-                          value={r.nationality}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        >
-                          <option value="">Select</option>
-                          {nationalities.map((n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          value={String(r[h.key] ?? "")}
-                          onChange={(e) => updateCell(i, h.key, e.target.value)}
-                          className="w-full rounded border border-[#e0d8cc] bg-[#faf9f7] px-2 py-1 outline-none"
-                        />
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={headers.length} className="px-3 py-6 text-center text-[#636e72]">
-                    {t("students.import.empty")}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm text-[#636e72]">
+              <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+            </div>
+            <h3 className="mt-4 text-lg font-bold text-[#2d3436]">Drag and drop your file here</h3>
+            <p className="mt-2 text-sm font-medium text-[#636e72]">
+              Supported formats: .csv, .xlsx, .xls
+            </p>
+            <div className="mt-6">
+              <label className="cursor-pointer rounded-full bg-[#2d3436] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#636e72]">
+                Browse Files
+                <input
+                  type="file"
+                  accept=".csv,text/csv,.xlsx,.xls,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void onImportFile(f);
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-[#2d3436]">Review Import Data</h3>
+                <p className="text-sm font-medium text-[#636e72]">
+                  Found {rows.length} row(s).{" "}
+                  {errorCount > 0 ? (
+                    <span className="text-rose-600">
+                      {errorCount} row(s) have errors.
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600">All rows are valid.</span>
+                  )}
+                </p>
+              </div>
+              <div className="flex items-center gap-4">
+                {errorCount > 0 && (
+                  <label className="flex items-center gap-2 text-sm font-bold text-[#2d3436] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={skipErrors}
+                      onChange={(e) => setSkipErrors(e.target.checked)}
+                      className="h-4 w-4 rounded border-[#b2bec3] text-[#3498db] focus:ring-[#3498db]"
+                    />
+                    Skip {errorCount} erroneous row(s)
+                  </label>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setRows([])}
+                  className="rounded-full bg-white border-2 border-[#ebe4d9] px-6 py-2.5 text-sm font-bold text-[#2d3436] transition hover:bg-[#faf9f6]"
+                >
+                  Clear & Start Over
+                </button>
+                <button
+                  type="button"
+                  disabled={!canSubmit}
+                  onClick={() => void saveAll()}
+                  className="rounded-full bg-gradient-to-br from-[#3498db] to-[#2980b9] px-6 py-2.5 text-sm font-bold text-white shadow-lg transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {busy ? "Importing..." : "Complete Import"}
+                </button>
+              </div>
+            </div>
+
+            {message ? (
+              <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-100">
+                <p className="text-sm font-bold text-emerald-800">{message}</p>
+              </div>
+            ) : null}
+            {error ? (
+              <div className="rounded-xl bg-rose-50 p-4 border border-rose-100">
+                <pre className="whitespace-pre-wrap text-sm font-bold text-rose-800 font-sans">{error}</pre>
+              </div>
+            ) : null}
+
+            <div className="overflow-auto rounded-xl border border-[#ebe4d9] max-h-[60vh]">
+              <table className="min-w-[1800px] text-xs">
+                <thead className="sticky top-0 bg-[#f5f0e6] text-[#2d3436] z-10 shadow-sm">
+                  <tr>
+                    <th className="w-8 border-b border-r border-[#ebe4d9] px-2 py-3 text-center">#</th>
+                    <th className="w-8 border-b border-r border-[#ebe4d9] px-2 py-3 text-center">Stat</th>
+                    {headers.map((h) => (
+                      <th key={h.key} className="whitespace-nowrap border-b border-r border-[#ebe4d9] px-2 py-3 text-left font-black">
+                        {h.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => {
+                    const rowError = validationErrors[i];
+                    return (
+                      <tr key={i} className={`odd:bg-white even:bg-[#fcfaf6] ${rowError ? "bg-rose-50/50" : ""}`}>
+                        <td className="border-b border-r border-[#ebe4d9] p-1 text-center font-bold text-[#b2bec3]">
+                          {i + 1}
+                        </td>
+                        <td className="border-b border-r border-[#ebe4d9] p-1 text-center">
+                          {rowError ? (
+                            <div className="group relative flex justify-center">
+                              <svg className="h-4 w-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <div className="absolute left-1/2 bottom-full mb-2 -translate-x-1/2 hidden group-hover:block w-48 rounded bg-[#2d3436] p-2 text-[10px] text-white shadow-lg z-20">
+                                {rowError}
+                              </div>
+                            </div>
+                          ) : (
+                            <svg className="h-4 w-4 text-emerald-500 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </td>
+                        {headers.map((h) => (
+                          <td key={h.key} className="border-b border-r border-[#ebe4d9] p-1 relative">
+                            {h.key === "dateOfBirth" ? (
+                              <input
+                                type="date"
+                                value={r.dateOfBirth}
+                                onChange={(e) => updateCell(i, h.key, e.target.value)}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              />
+                            ) : h.key === "parentEmail" ? (
+                              <input
+                                type="email"
+                                value={r.parentEmail}
+                                onChange={(e) => updateCell(i, h.key, e.target.value)}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              />
+                            ) : h.key === "parentPhone" ||
+                              h.key === "guardianPhone" ||
+                              h.key === "emergencyContactPhone" ? (
+                              <input
+                                type="tel"
+                                minLength={10}
+                                maxLength={13}
+                                value={String(r[h.key] ?? "")}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/[^\d+]/g, '');
+                                  updateCell(i, h.key, val);
+                                }}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              />
+                            ) : h.key === "gender" ? (
+                              <select
+                                value={r.gender}
+                                onChange={(e) => updateCell(i, h.key, e.target.value)}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              >
+                                <option value="">Select</option>
+                                <option value="Female">Female</option>
+                                <option value="Male">Male</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            ) : h.key === "boardingStatus" ? (
+                              <select
+                                value={r.boardingStatus}
+                                onChange={(e) => updateCell(i, h.key, e.target.value)}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              >
+                                <option value="">Select</option>
+                                <option value="day_half">Day - Half day</option>
+                                <option value="day_full">Day - Full day</option>
+                                <option value="boarding">Boarding</option>
+                              </select>
+                            ) : h.key === "parentAliveStatus" ? (
+                              <select
+                                value={r.parentAliveStatus}
+                                onChange={(e) => updateCell(i, h.key, e.target.value)}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              >
+                                <option value="">Select</option>
+                                <option value="both">Both</option>
+                                <option value="one">One</option>
+                                <option value="none">None</option>
+                              </select>
+
+                            ) : h.key === "registrationType" ? (
+                              <select
+                                value={r.registrationType}
+                                onChange={(e) => updateCell(i, h.key, e.target.value)}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              >
+                                <option value="first">First</option>
+                                <option value="continuing">Continuing</option>
+                              </select>
+                            ) : h.key === "religion" ? (
+                              <select
+                                value={r.religion}
+                                onChange={(e) => updateCell(i, h.key, e.target.value)}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              >
+                                <option value="">Select</option>
+                                {religions.map((v) => (
+                                  <option key={v} value={v}>
+                                    {v}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : h.key === "classRoomId" ? (
+                              <select
+                                value={r.classRoomId}
+                                onChange={(e) => updateCell(i, h.key, e.target.value)}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              >
+                                <option value="">Select</option>
+                                {sortedRooms.map((rm) => (
+                                  <option key={rm.id} value={String(rm.id)}>
+                                    {rm.name}
+                                    {rm.academicYear ? ` (${rm.academicYear})` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : h.key === "countryCode" ? (
+                              <select
+                                value={r.countryCode}
+                                onChange={(e) => updateCell(i, h.key, e.target.value)}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              >
+                                <option value="">Select</option>
+                                {countries.map((c) => (
+                                  <option key={c.code} value={c.code}>
+                                    {c.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : h.key === "nationality" ? (
+                              <select
+                                value={r.nationality}
+                                onChange={(e) => updateCell(i, h.key, e.target.value)}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              >
+                                <option value="">Select</option>
+                                {nationalities.map((n) => (
+                                  <option key={n} value={n}>
+                                    {n}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                value={String(r[h.key] ?? "")}
+                                onChange={(e) => updateCell(i, h.key, e.target.value)}
+                                className={`w-full rounded border ${rowError?.includes(h.key) ? 'border-rose-400 bg-rose-50' : 'border-[#e0d8cc] bg-transparent'} px-2 py-1.5 outline-none focus:border-[#3498db]`}
+                              />
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="flex justify-end pt-4 border-t border-[#ebe4d9]">
+              <button
+                type="button"
+                onClick={addRow}
+                className="rounded-xl border-2 border-dashed border-[#ebe4d9] bg-white px-6 py-2.5 text-sm font-bold text-[#636e72] transition hover:border-[#b2bec3] hover:text-[#2d3436]"
+              >
+                + Add Empty Row
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

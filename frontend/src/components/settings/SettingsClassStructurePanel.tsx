@@ -202,7 +202,43 @@ export function SettingsClassStructurePanel() {
     setTeacherClassDrafts({});
     setTeacherSectionDrafts({});
     try {
+      // #region agent log
+      void fetch('http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': 'b215a2',
+        },
+        body: JSON.stringify({
+          sessionId: 'b215a2',
+          runId: 'pre_debug',
+          hypothesisId: 'H1_fetchStaffMembers',
+          location: 'SettingsClassStructurePanel.tsx:openAssignTeachers:start',
+          message: 'Opening assign-teachers modal; fetching teaching staff',
+          data: { teacherCategoryId: '' },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       const rows = await fetchStaffMembers("teaching");
+      // #region agent log
+      void fetch('http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': 'b215a2',
+        },
+        body: JSON.stringify({
+          sessionId: 'b215a2',
+          runId: 'pre_debug',
+          hypothesisId: 'H1_fetchStaffMembers',
+          location: 'SettingsClassStructurePanel.tsx:openAssignTeachers:fetched',
+          message: 'Fetched teaching staff rows',
+          data: { fetchedCount: rows.length, firstIds: rows.slice(0, 5).map((r) => r.id) },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       setStaffRows(rows);
     } catch (e) {
       setToast({
@@ -227,11 +263,69 @@ export function SettingsClassStructurePanel() {
   const categoryTeachers = useMemo(() => {
     if (!selectedCategoryName.trim()) return [];
     const needle = selectedCategoryName.trim().toLowerCase();
-    return staffRows.filter((row) => (row.staffCategory ?? "").trim().toLowerCase() === needle);
-  }, [staffRows, selectedCategoryName]);
+    const classNames = new Set(categoryClasses.map((room) => room.name.trim().toLowerCase()));
+    return staffRows.filter((row) => {
+      const savedCategory = (row.staffCategory ?? "").trim().toLowerCase();
+      if (savedCategory === needle) return true;
+      const assignedClass = (row.assignedClass ?? "").trim().toLowerCase();
+      return assignedClass ? classNames.has(assignedClass) : false;
+    });
+  }, [staffRows, selectedCategoryName, categoryClasses]);
+
+  // #region agent log
+  useEffect(() => {
+    if (!assignTeachersOpen) return;
+    // #region agent log
+    void fetch('http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': 'b215a2',
+      },
+      body: JSON.stringify({
+        sessionId: 'b215a2',
+        runId: 'pre_debug',
+        hypothesisId: 'H2_filterMismatch',
+        location: 'SettingsClassStructurePanel.tsx:assignTeachers:categoryTeachersEffect',
+        message: 'Computed categoryTeachers after filter logic',
+        data: {
+          teacherCategoryId,
+          selectedCategoryName,
+          staffRowsCount: staffRows.length,
+          categoryTeachersCount: categoryTeachers.length,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+  }, [assignTeachersOpen, teacherCategoryId, selectedCategoryName, staffRows.length, categoryTeachers.length]);
+  // #endregion
 
   async function linkTeacherToClass(teacher: StaffMemberApiRow) {
     const chosenClass = (teacherClassDrafts[teacher.id] ?? "").trim();
+    // #region agent log
+    void fetch('http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': 'b215a2',
+      },
+      body: JSON.stringify({
+        sessionId: 'b215a2',
+        runId: 'pre_debug',
+        hypothesisId: 'H3_chosenClassValidation',
+        location: 'SettingsClassStructurePanel.tsx:linkTeacherToClass:beforeUpdate',
+        message: 'Link teacher invoked; chosen class/section values',
+        data: {
+          teacherId: teacher.id,
+          chosenClass,
+          chosenSection: (teacherSectionDrafts[teacher.id] ?? "").trim(),
+          selectedCategoryName: selectedCategoryName || null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     if (!chosenClass) {
       setToast({ type: "error", text: "Select a class before linking teacher." });
       return;
@@ -242,10 +336,32 @@ export function SettingsClassStructurePanel() {
       const updated = await updateStaffMember(teacher.id, {
         assignedClass: chosenClass,
         teachingSection: chosenSection || undefined,
+        staffCategory: selectedCategoryName || undefined,
       });
       setStaffRows((prev) => prev.map((row) => (row.id === teacher.id ? updated : row)));
       setToast({ type: "success", text: `Linked ${updated.displayName} successfully.` });
     } catch (e) {
+      // #region agent log
+      void fetch('http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': 'b215a2',
+        },
+        body: JSON.stringify({
+          sessionId: 'b215a2',
+          runId: 'pre_debug',
+          hypothesisId: 'H4_backendUpdateFailure',
+          location: 'SettingsClassStructurePanel.tsx:linkTeacherToClass:catch',
+          message: 'Failed to link teacher (backend/updateStaffMember error)',
+          data: {
+            teacherId: teacher.id,
+            error: e instanceof Error ? e.message : String(e),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       setToast({
         type: "error",
         text: e instanceof Error ? e.message : "Failed to link teacher.",
@@ -695,6 +811,7 @@ export function SettingsClassStructurePanel() {
                       <p className="mt-1 text-[11px] text-slate-500">
                         Current: {teacher.assignedClass || "Unassigned"}
                         {teacher.teachingSection ? ` · ${teacher.teachingSection}` : ""}
+                        <span className="ml-2 font-semibold text-slate-400">ID: {teacher.id}</span>
                       </p>
 
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">

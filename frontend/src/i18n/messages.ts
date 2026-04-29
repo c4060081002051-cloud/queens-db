@@ -73,6 +73,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "nav.settings.modes": "Display & modes",
     "nav.settings.feesStructure": "Fees structure",
     "nav.settings.classStructure": "Class structure",
+    "nav.settings.academicSettings": "Academic settings",
 
     "settings.modes.title": "Display & modes",
     "settings.modes.subtitle": "Choose how the dashboard looks and how much space content uses.",
@@ -697,6 +698,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     "nav.settings.modes": "Mwonekano na hali",
     "nav.settings.feesStructure": "Muundo wa ada",
     "nav.settings.classStructure": "Muundo wa madarasa",
+    "nav.settings.academicSettings": "Mipangilio ya masomo",
 
     "settings.modes.title": "Mwonekano na hali",
     "settings.modes.subtitle": "Chagua mandhari na nafasi ya maudhui kwenye dashibodi.",

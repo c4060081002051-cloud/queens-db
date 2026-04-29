@@ -6,14 +6,14 @@ async function readJson<T>(res: Response): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-export async function assignBursery(body: {
+export async function assignBursary(body: {
   studentId: number;
   percentage: number;
   term: string;
   startsAt?: string | null;
   endsAt?: string | null;
 }): Promise<{ ok: boolean }> {
-  const res = await fetch(apiUrl("/api/me/finance/bursery"), {
+  const res = await fetch(apiUrl("/api/me/finance/bursary"), {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
@@ -26,8 +26,8 @@ export async function assignBursery(body: {
   return readJson<{ ok: boolean }>(res);
 }
 
-export async function revokeBursery(studentId: number, term: string): Promise<{ ok: boolean }> {
-  const res = await fetch(apiUrl(`/api/me/finance/bursery/${studentId}`), {
+export async function revokeBursary(studentId: number, term: string): Promise<{ ok: boolean }> {
+  const res = await fetch(apiUrl(`/api/me/finance/bursary/${studentId}`), {
     method: "DELETE",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ term }), // Term is needed to recalculate base fee

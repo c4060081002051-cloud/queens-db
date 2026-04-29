@@ -56,32 +56,6 @@ function describeUnparsedApiResponse(res: Response, emptyBody: boolean): string 
   return "The server returned a non-JSON response (often an HTML error page). Confirm the backend is running and that Vite proxies /api to it (see frontend/vite.config.ts).";
 }
 
-function debugLog(
-  runId: string,
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data: Record<string, unknown>,
-) {
-  // #region agent log
-  fetch("http://127.0.0.1:7413/ingest/299b84ae-e9b2-45ce-b53d-28789819d44d", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "97f58a",
-    },
-    body: JSON.stringify({
-      sessionId: "97f58a",
-      runId,
-      hypothesisId,
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-}
 
 export default function App() {
   const [email, setEmail] = useState(() => localStorage.getItem(REMEMBER_KEY) ?? "");
@@ -166,11 +140,6 @@ export default function App() {
     async (opts: { rememberEmail: boolean }) => {
       setError(null);
       const trimmed = email.trim();
-      debugLog("initial", "H1", "frontend/src/App.tsx:login:start", "login_attempt_started", {
-        rememberEmail: opts.rememberEmail,
-        emailLength: trimmed.length,
-        hasPassword: Boolean(password),
-      });
       if (!trimmed) {
         setError("Please enter your email address.");
         return;
@@ -195,13 +164,7 @@ export default function App() {
             rememberMe: opts.rememberEmail,
           }),
         });
-        debugLog("initial", "H2", "frontend/src/App.tsx:login:response", "login_response_received", {
-          status: res.status,
-          ok: res.ok,
-          redirected: res.redirected,
-          contentType: res.headers.get("content-type") ?? null,
-          responseUrl: res.url,
-        });
+
         const parsed = await readJsonBody<{
           token?: string;
           requiresTwoFactor?: boolean;
@@ -209,10 +172,7 @@ export default function App() {
           error?: string;
         }>(res);
         if (!parsed.ok) {
-          debugLog("initial", "H3", "frontend/src/App.tsx:login:parse-failed", "login_response_parse_failed", {
-            status: res.status,
-            emptyBody: parsed.emptyBody,
-          });
+
           if (res.status === 401) {
             setError("Invalid email or password.");
             return;
@@ -222,11 +182,7 @@ export default function App() {
         }
         const data = parsed.data;
         if (!res.ok) {
-          debugLog("initial", "H4", "frontend/src/App.tsx:login:not-ok", "login_json_error_response", {
-            status: res.status,
-            hasErrorField: Boolean(data.error),
-            requiresTwoFactor: Boolean(data.requiresTwoFactor),
-          });
+
           if (res.status === 503 && data.error === "Database unavailable") {
             setError(
               "The service is temporarily unavailable. Please try again later.",
@@ -253,10 +209,7 @@ export default function App() {
           setError("Sign-in failed. Please try again.");
           return;
         }
-        debugLog("initial", "H5", "frontend/src/App.tsx:login:success", "login_success_token_received", {
-          rememberEmail: opts.rememberEmail,
-          hasToken: Boolean(data.token),
-        });
+
         localStorage.setItem("token", data.token);
         if (opts.rememberEmail) {
           localStorage.setItem(REMEMBER_KEY, trimmed);
@@ -267,11 +220,7 @@ export default function App() {
         setPending2FA(null);
         setLoginBanner(null);
       } catch (err) {
-        debugLog("initial", "H2", "frontend/src/App.tsx:login:catch", "login_fetch_threw", {
-          errorName: err instanceof Error ? err.name : "unknown",
-          errorMessage:
-            err instanceof Error ? err.message : "non_error_thrown",
-        });
+
         setError(
           "We couldn’t connect to the server. Check your internet connection and try again.",
         );

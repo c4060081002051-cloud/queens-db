@@ -20,6 +20,24 @@ function ymd(d = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+function normalizeStudentBoardingStatus(v: unknown): "day_half" | "day_full" | "boarding" | null {
+  if (v === "day_half" || v === "day_full" || v === "boarding") return v;
+  return null;
+}
+
+function isP7Class(className: string | null | undefined): boolean {
+  const s = (className ?? "").trim().toLowerCase();
+  return s.includes("p7") || s.includes("primary seven");
+}
+
+function toFeeStructureStatus(
+  boardingStatus: "day_half" | "day_full" | "boarding" | null,
+  className: string | null | undefined,
+): "day_half" | "day_full" | "day_full_p7" | "boarding" | null {
+  if (boardingStatus === "day_full" && isP7Class(className)) return "day_full_p7";
+  return boardingStatus;
+}
+
 type ReportStatus = "not_submitted" | "submitted" | "admin_review" | "closed";
 
 async function appendAudit(reportId: number, actorUserId: number | null, action: string, note?: string | null) {
@@ -473,63 +491,90 @@ export function createMeFinanceReportsRouter() {
 
   r.get("/finance/reports/debtors", async (req, res) => {
     try {
-      const term = typeof req.query.term === "string" ? req.query.term.trim() : "2026 Term 1";
-      
-      // 1. Fetch Students
+      const requestedTerm = typeof req.query.term === "string" ? req.query.term.trim() : "";
+
       const students = await Student.findAll({
         include: [{ model: ClassRoom, as: "classRoom", required: false }],
         order: [["admission_number", "ASC"]],
       });
 
-      // 2. Fetch Assignments for this term
-      const assignments = await StudentFeeAssignment.findAll({ where: { term } });
-      const assignMap = new Map<number, number>();
-      for (const a of assignments) {
-        assignMap.set(a.studentId, Number(a.amountDueUgx) || 0);
-      }
+      const assignmentWhere = requestedTerm ? { term: requestedTerm } : undefined;
+      const structureWhere = requestedTerm ? { term: requestedTerm } : undefined;
+      const paymentWhere = requestedTerm ? { term: requestedTerm } : undefined;
 
-      // 3. Fetch default Fee Structures for this term
-      const structures = await StudentFeeStructure.findAll({ where: { term } });
-      const structMap = new Map<string, number>();
-      for (const s of structures) {
-        structMap.set(s.boardingStatus, Number(s.amountDueUgx) || 0);
-      }
-
-      // 4. Fetch Payments for this term
+      const assignments = await StudentFeeAssignment.findAll({ where: assignmentWhere });
+      const structures = await StudentFeeStructure.findAll({ where: structureWhere });
       const payments = await StudentFeePayment.findAll({
-        attributes: ["studentId", [fn("SUM", col("amount_paid_ugx")), "totalPaid"]],
-        where: { term },
-        group: ["student_id"],
+        attributes: ["studentId", "term", [fn("SUM", col("amount_paid_ugx")), "totalPaid"]],
+        where: paymentWhere,
+        group: ["student_id", "term"],
       });
-      const paidMap = new Map<number, number>();
-      for (const p of payments) {
-        paidMap.set(p.studentId, Number(p.get("totalPaid")) || 0);
+
+      const assignmentMap = new Map<string, number>();
+      for (const a of assignments) {
+        assignmentMap.set(`${a.studentId}::${a.term}`, Number(a.amountDueUgx) || 0);
       }
 
-      // 5. Calculate balances
-      const debtors = students.map((s) => {
-        const assigned = assignMap.get(s.id);
-        const totalDue = assigned ?? structMap.get(s.boardingStatus ?? "day_half") ?? 0;
-        const totalPaid = paidMap.get(s.id) ?? 0;
-        const balance = totalDue - totalPaid;
+      const structureMap = new Map<string, number>();
+      for (const s of structures) {
+        structureMap.set(`${s.term}::${s.boardingStatus}`, Number(s.amountDueUgx) || 0);
+      }
 
-        const cr = s.get("classRoom") as ClassRoom | null;
+      const paidMap = new Map<string, number>();
+      for (const p of payments) {
+        paidMap.set(`${p.studentId}::${p.term}`, Number(p.get("totalPaid")) || 0);
+      }
 
-        return {
-          id: s.id,
-          admissionNumber: s.admissionNumber,
-          fullName: `${s.firstName} ${s.lastName}`.trim(),
-          className: cr?.name ?? "—",
-          totalFees: totalDue,
-          totalPaid: totalPaid,
-          balance: balance,
-        };
-      }).filter(d => d.balance > 0);
+      const terms = requestedTerm
+        ? [requestedTerm]
+        : Array.from(
+            new Set<string>([
+              ...assignments.map((x) => x.term),
+              ...structures.map((x) => x.term),
+              ...payments.map((x) => x.term),
+            ]),
+          );
+      if (terms.length === 0) terms.push("Term 1");
+
+      const debtors = students
+        .map((s) => {
+          const cr = s.get("classRoom") as ClassRoom | null;
+          const className = cr?.name ?? null;
+          const boarding = normalizeStudentBoardingStatus(s.boardingStatus);
+          const status = toFeeStructureStatus(boarding, className);
+          const bursaryPct = Math.max(0, Number(s.bursaryPercentage) || 0);
+
+          let totalDue = 0;
+          let totalPaid = 0;
+          for (const term of terms) {
+            const assignmentDue = assignmentMap.get(`${s.id}::${term}`);
+            const defaultDue =
+              status != null ? (structureMap.get(`${term}::${status}`) ?? 0) : 0;
+            const dueForTerm =
+              assignmentDue != null
+                ? assignmentDue
+                : Math.max(0, Math.round(defaultDue * (1 - bursaryPct / 100)));
+            const paidForTerm = paidMap.get(`${s.id}::${term}`) ?? 0;
+            totalDue += dueForTerm;
+            totalPaid += paidForTerm;
+          }
+          const balance = totalDue - totalPaid;
+          return {
+            id: s.id,
+            admissionNumber: s.admissionNumber,
+            fullName: `${s.firstName} ${s.lastName}`.trim(),
+            className: className ?? "—",
+            totalFees: totalDue,
+            totalPaid,
+            balance,
+          };
+        })
+        .filter((d) => d.balance > 0);
 
       const totalOutstanding = debtors.reduce((acc, d) => acc + d.balance, 0);
 
       return res.json({
-        term,
+        term: requestedTerm || "All Terms",
         totalOutstanding,
         items: debtors,
       });
